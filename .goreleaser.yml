@@ -6,14 +6,14 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
-    main: ./cmd/gotemplate/main.go
+    main: ./cmd/ado-asana-sync/main.go
     mod_timestamp: "{{ .CommitTimestamp }}"
     goos:
       - linux
       - windows
       - darwin
     ldflags:
-      - -s -w -X github.com/danstis/gotemplate/internal/version.Version={{.Version}}
+      - -s -w -X github.com/danstis/ado-asana-sync/internal/version.Version={{.Version}}
     binary: example
 archives:
   - replacements:
