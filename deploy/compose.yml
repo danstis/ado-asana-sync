@@ -1,0 +1,39 @@
+# with new docker compose 2.x
+# docker compose up -d --build --remove-orphans
+version: '3'
+name: replicator
+services:
+  collector:
+    image: otel/opentelemetry-collector:0.56.0 # https://opentelemetry.io/docs/collector/getting-started/
+    command: [ "--config=/config/collector/config.yml" ]
+    volumes:
+      - ./collector:/config/collector
+    environment:
+      - EXPORTER_LIGHTSTEP_TOKEN=${EXPORTER_LIGHTSTEP_TOKEN}
+      - EXPORTER_HONEYCOMB_TEAM=${EXPORTER_HONEYCOMB_TEAM}
+      - EXPORTER_UPTRACE_DSN=${EXPORTER_UPTRACE_DSN}
+    ports:
+      # - "1888:1888" # pprof extension
+      # - "8888:8888"   # Prometheus metrics exposed by the collector
+      # - "8889:8889"   # Prometheus exporter metrics
+      # - "13133:13133" # health_check extension
+      - "14317:4317" # OTLP gRPC receiver
+      - "14318:4318" # OTLP http receiver
+      - "55679:55679" # zpages extension
+
+  bot:
+    build:
+      context: ../
+      dockerfile: cmd/ado-asana-sync/dockerfile
+      args:
+        - BUILD=${VERSION}
+    restart: "no" #on-failure
+    environment:
+      - "OTEL_EXPORTER_OTLP_ENDPOINT=collector:4318"
+      - "OTEL_EXPORTER_OTLP_ENDPOINT_TYPE=http" # http or grpc
+      - "OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME}"
+      - "OTEL_HEALTH_URL=http://collector:13133"
+      - "ADO_PAT=${ADO_PAT}"
+      - "ADO_URL=${ADO_URL}"
+    depends_on:
+      - collector

@@ -1,0 +1,22 @@
+FROM golang:1.19.3-alpine AS builder
+
+RUN apk add --no-cache git
+
+ARG BUILD=0.0.0-development
+
+WORKDIR /github.com/danstis/ado-asana-sync/
+COPY ../go.mod .
+COPY ../go.sum .
+RUN go mod download
+COPY . .
+RUN mkdir /app
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w -X 'github.com/danstis/ado-asana-sync/internal/version.Version=$BUILD'" -o /app/ado-asana-sync ./cmd/ado-asana-sync
+
+FROM alpine:3
+RUN apk --no-cache add ca-certificates
+WORKDIR /app
+COPY --from=builder /app/* ./
+COPY --from=builder /usr/local/go/lib/time/zoneinfo.zip /
+ENV TZ=Australia/Brisbane \
+    ZONEINFO=/zoneinfo.zip
+CMD [ "./ado-asana-sync" ]

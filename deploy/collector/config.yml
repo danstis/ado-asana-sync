@@ -1,0 +1,53 @@
+# https://opentelemetry.io/docs/collector/configuration/
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+  batch:
+
+exporters:
+  otlp/lightstep:
+    endpoint: ingest.lightstep.com:443
+    headers:
+      "lightstep-access-token": "${EXPORTER_LIGHTSTEP_TOKEN}"
+  otlp/honeycomb:
+    endpoint: "api.honeycomb.io:443"
+    headers:
+      "x-honeycomb-team": "${EXPORTER_HONEYCOMB_TEAM}"
+  otlp/uptrace:
+    endpoint: "otlp.uptrace.dev:4317"
+    headers:
+      "uptrace-dsn": "${EXPORTER_UPTRACE_DSN}"
+  logging:
+    # loglevel: debug
+
+extensions:
+  health_check:
+  pprof:
+  zpages:
+    endpoint: "0.0.0.0:55679"
+
+service:
+  extensions: [health_check, zpages, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/lightstep, otlp/honeycomb, otlp/uptrace, logging]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/lightstep, otlp/honeycomb, otlp/uptrace]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/lightstep, otlp/honeycomb, otlp/uptrace, logging]
+  # telemetry:
+  #   logs:
+  #     level: "debug"
