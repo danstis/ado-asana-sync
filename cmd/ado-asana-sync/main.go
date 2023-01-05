@@ -18,9 +18,9 @@ import (
 )
 
 type app struct {
-	adoClient *ado.ADO
-	logger    *otelzap.SugaredLogger
-	shutdown  func(ctx context.Context) error
+	ado      *ado.ADO
+	logger   *otelzap.SugaredLogger
+	shutdown func(ctx context.Context) error
 }
 
 // Main entry point for the app.
@@ -45,7 +45,12 @@ func main() {
 		a.logger.Ctx(ctx).Fatalw("failed to create ADO client", "error", err)
 	}
 
-	spew.Dump(a.adoClient)
+	pjs, err := a.ado.GetProjects(ctx)
+	if err != nil {
+		a.logger.Ctx(ctx).Fatalw("failed to list ADO clients", "error", err)
+	}
+
+	spew.Dump(pjs)
 
 	span.End()
 	WaitForInterrupt()
@@ -86,6 +91,6 @@ func (a *app) setupAdoClient(ctx context.Context) error {
 	adoURL := os.Getenv("ADO_URL")
 
 	var err error
-	a.adoClient, err = ado.NewClient(ctx, adoPAT, adoURL)
+	a.ado, err = ado.NewClient(ctx, adoPAT, adoURL)
 	return err
 }
