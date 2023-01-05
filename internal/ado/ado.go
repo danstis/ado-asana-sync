@@ -6,6 +6,8 @@ import (
 
 	"github.com/microsoft/azure-devops-go-api/azuredevops"
 	"github.com/microsoft/azure-devops-go-api/azuredevops/core"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type ADO struct {
@@ -19,11 +21,18 @@ type ADO struct {
 }
 
 func NewClient(ctx context.Context, pat, url string) (*ADO, error) {
+	_, span := otel.Tracer("").Start(ctx, "ado.NewClient")
+	defer span.End()
 	cc, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	connection := azuredevops.NewPatConnection(url, pat)
+	span.AddEvent("creating ADO connection")
+	span.SetAttributes(
+		attribute.String("ADO URL", url),
+		attribute.String("DEBUG", pat),
+	)
+	cn := azuredevops.NewPatConnection(url, pat)
 
-	clt, err := core.NewClient(cc, connection)
+	clt, err := core.NewClient(cc, cn)
 	if err != nil {
 		return nil, err
 	}
