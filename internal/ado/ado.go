@@ -43,6 +43,8 @@ func NewClient(ctx context.Context, pat, url string) (*ADO, error) {
 }
 
 func (ado *ADO) GetProjects(ctx context.Context) ([]string, error) {
+	_, span := otel.Tracer("").Start(ctx, "ado.GetProjects")
+	defer span.End()
 	var projects []string
 	// Get first page of projects.
 	resp, err := ado.Client.GetProjects(ctx, core.GetProjectsArgs{})
