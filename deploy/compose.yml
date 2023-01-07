@@ -35,5 +35,6 @@ services:
       - "OTEL_HEALTH_URL=http://collector:13133"
       - "ADO_PAT=${ADO_PAT}"
       - "ADO_URL=${ADO_URL}"
+      - "ASANA_TOKEN=${ASANA_TOKEN}"
     depends_on:
       - collector
