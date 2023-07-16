@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "ado-asana-sync"
+version = "0.1.0"
+description = ""
+authors = ["Dan Anstis <dan@bsod.co.nz>"]
+readme = "README.md"
+packages = [{include = "ado_asana_sync"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
