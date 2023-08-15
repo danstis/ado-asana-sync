@@ -103,8 +103,6 @@ def get_asana_project(workspace_gid, name) -> str:
     except ApiException as e:
         print("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
-if __name__ == "__main__":
-    main()
 def get_asana_task(asana_project, task_name):
     """
     Returns the task gid for the named Asana task in the given project.
@@ -125,3 +123,6 @@ def get_asana_task(asana_project, task_name):
                 return t.gid
     except ApiException as e:
         print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+
+if __name__ == "__main__":
+    main()
