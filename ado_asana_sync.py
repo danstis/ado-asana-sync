@@ -103,7 +103,7 @@ def get_asana_project(workspace_gid, name) -> str:
     except ApiException as e:
         print("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
-def get_asana_task(asana_project, task_name):
+def get_asana_task(asana_project, task_name) -> Union[asana.models.task.Task, None]:
     """
     Returns the entire task object for the named Asana task in the given project.
 
