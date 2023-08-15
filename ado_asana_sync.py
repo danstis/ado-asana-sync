@@ -3,6 +3,7 @@ import os
 import asana
 from asana.rest import ApiException
 from azure.devops.connection import Connection
+from azure.devops.v7_0.work.models import TeamContext
 from msrest.authentication import BasicAuthentication
 
 ADO_PAT = os.environ.get('ADO_PAT')
@@ -13,6 +14,7 @@ ASANA_TOKEN = os.environ.get('ASANA_TOKEN')
 ado_credentials = BasicAuthentication('', ADO_PAT)
 ado_connection = Connection(base_url=ADO_URL, creds=ado_credentials)
 ado_client = ado_connection.clients.get_core_client()
+ado_work_client = ado_connection.clients.get_work_client()
 # connect Asana
 asana_config = asana.Configuration()
 asana_config.access_token = ASANA_TOKEN
@@ -29,11 +31,11 @@ def sync_project(project):
 
     # Get the ADO project by name
     ado_project = ado_client.get_project(project["adoProjectName"])
-    # print(ap)
+    # print(ado_project)
 
     # Get the ADO team by name within the ADO project
     ado_team = ado_client.get_team(project["adoProjectName"], project["adoTeamName"])
-    # print(at)
+    # print(ado_team)
 
     # Get the Asana workspace ID by name
     asana_workspace_id = get_asana_workspace(project["asanaWorkspaceName"])
@@ -44,10 +46,12 @@ def sync_project(project):
     # print(asana_project)
 
     # Get the backlog items for the ADO project and team
-    # TODO: https://github.com/microsoft/azure-devops-python-samples/blob/main/src/samples/work_item_tracking.py
+    ado_items = ado_work_client.get_backlog_level_work_items(TeamContext(team_id=ado_team.id, project_id=ado_project.id), "Microsoft.RequirementCategory")
+    print(ado_items.work_items)
 
     # Loop through each backlog item
         # Get the corresponding Asana task by name
+        asana_task = get_asana_task(asana_project, ado_items.work_items[0].name)
         # TODO: https://github.com/asana/python-asana
         # The Asana task does not exist, create it
         # The Asana task exists, update it

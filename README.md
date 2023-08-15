@@ -10,3 +10,16 @@ Projects should follow the folder structure from this standard project layout: [
 ## Commit message style
 
 This repo uses [Conventional Commits](https://www.conventionalcommits.org/) to ensure the build numbering is generated correctly
+
+## Reference
+
+### ADO
+
+- [azure-devops PyPi](https://pypi.org/project/azure-devops/)
+- [azure-devops GitHub](https://github.com/microsoft/azure-devops-python-api)
+- [azure-devops samples](https://github.com/microsoft/azure-devops-python-samples/blob/main/src/samples/work_item_tracking.py)
+
+### Asana
+
+- [Asana PyPi](https://pypi.org/project/asana/)
+- [Asana GitHub](https://github.com/asana/python-asana)
