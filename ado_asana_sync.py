@@ -47,14 +47,18 @@ def sync_project(project):
 
     # Get the backlog items for the ADO project and team
     ado_items = ado_work_client.get_backlog_level_work_items(TeamContext(team_id=ado_team.id, project_id=ado_project.id), "Microsoft.RequirementCategory")
-    print(ado_items.work_items)
+    # print(ado_items)
 
     # Loop through each backlog item
+    for wi in ado_items.work_items:
         # Get the corresponding Asana task by name
-        asana_task = get_asana_task(asana_project, ado_items.work_items[0].name)
-        # TODO: https://github.com/asana/python-asana
-        # The Asana task does not exist, create it
-        # The Asana task exists, update it
+        asana_task = get_asana_task(asana_project, wi.name) #TODO: Get the work item name from the backlog item.
+        if asana_task == None:
+            # The Asana task does not exist, create it
+            print(f'creating task {wi.name}')
+        else:
+            # The Asana task exists, update it
+            print(f'updating task {wi.name}')
 
 
 
@@ -103,7 +107,7 @@ def get_asana_project(workspace_gid, name) -> str:
     except ApiException as e:
         print("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
-def get_asana_task(asana_project, task_name) -> Union[asana.models.task.Task, None]:
+def get_asana_task(asana_project, task_name) -> object:
     """
     Returns the entire task object for the named Asana task in the given project.
 
@@ -123,6 +127,7 @@ def get_asana_task(asana_project, task_name) -> Union[asana.models.task.Task, No
                 return t
     except ApiException as e:
         print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+
 
 if __name__ == "__main__":
     main()

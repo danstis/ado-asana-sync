@@ -30,22 +30,23 @@
         }
       },
       "extensions": [
-        "Codeium.codeium",
-        "dakara.transformer",
-        "EditorConfig.EditorConfig",
-        "GitHub.copilot",
-        "GitHub.vscode-pull-request-github",
-        "Gruntfuggly.todo-tree",
-        "hbenl.vscode-test-explorer",
-        "ms-azuretools.vscode-docker",
-        "ms-vscode.makefile-tools",
-        "sourcegraph.cody-ai",
-        "streetsidesoftware.code-spell-checker",
-        "mhutchie.git-graph",
-        "github.vscode-github-actions",
-        "eamodio.gitlens",
-        "SonarSource.sonarlint-vscode"
-      ]
+		"Codeium.codeium",
+		"dakara.transformer",
+		"EditorConfig.EditorConfig",
+		"GitHub.copilot",
+		"GitHub.vscode-pull-request-github",
+		"Gruntfuggly.todo-tree",
+		"hbenl.vscode-test-explorer",
+		"ms-azuretools.vscode-docker",
+		"ms-vscode.makefile-tools",
+		"sourcegraph.cody-ai",
+		"streetsidesoftware.code-spell-checker",
+		"mhutchie.git-graph",
+		"github.vscode-github-actions",
+		"eamodio.gitlens",
+		"SonarSource.sonarlint-vscode",
+		"ms-python.black-formatter"
+	]
     }
   }
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
