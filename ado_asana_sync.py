@@ -105,3 +105,23 @@ def get_asana_project(workspace_gid, name) -> str:
 
 if __name__ == "__main__":
     main()
+def get_asana_task(asana_project, task_name):
+    """
+    Returns the task gid for the named Asana task in the given project.
+
+    :param asana_project: The gid of the Asana project.
+    :type asana_project: str
+    :param task_name: The name of the Asana task.
+    :type task_name: str
+    :return: Task gid or None if no task is found.
+    :rtype: str or None
+    """
+    api_instance = asana.TasksApi(asana_client)
+    try:
+        # Get all tasks in the project
+        api_response = api_instance.get_tasks_in_project(asana_project, completed=False)
+        for t in api_response.data:
+            if t.name == task_name:
+                return t.gid
+    except ApiException as e:
+        print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
