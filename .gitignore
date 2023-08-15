@@ -102,3 +102,4 @@ venv.bak/
 
 # Other
 *.ignore*
+projects.json
