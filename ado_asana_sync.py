@@ -1,17 +1,17 @@
+import asana
 import json
 import os
-import asana
 from asana.rest import ApiException
 from azure.devops.connection import Connection
 from azure.devops.v7_0.work.models import TeamContext
 from msrest.authentication import BasicAuthentication
 
-ADO_PAT = os.environ.get('ADO_PAT')
-ADO_URL = os.environ.get('ADO_URL')
-ASANA_TOKEN = os.environ.get('ASANA_TOKEN')
+ADO_PAT = os.environ.get("ADO_PAT")
+ADO_URL = os.environ.get("ADO_URL")
+ASANA_TOKEN = os.environ.get("ASANA_TOKEN")
 
 # connect ADO
-ado_credentials = BasicAuthentication('', ADO_PAT)
+ado_credentials = BasicAuthentication("", ADO_PAT)
 ado_connection = Connection(base_url=ADO_URL, creds=ado_credentials)
 ado_client = ado_connection.clients.get_core_client()
 ado_work_client = ado_connection.clients.get_work_client()
@@ -20,14 +20,18 @@ asana_config = asana.Configuration()
 asana_config.access_token = ASANA_TOKEN
 asana_client = asana.ApiClient(asana_config)
 
+
 def main():
     p = read_projects()
     for i in p:
         sync_project(i)
 
+
 def sync_project(project):
     # Log the item being synced
-    print(f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}')
+    print(
+        f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
+    )
 
     # Get the ADO project by name
     ado_project = ado_client.get_project(project["adoProjectName"])
@@ -46,32 +50,44 @@ def sync_project(project):
     # print(asana_project)
 
     # Get the backlog items for the ADO project and team
-    ado_items = ado_work_client.get_backlog_level_work_items(TeamContext(team_id=ado_team.id, project_id=ado_project.id), "Microsoft.RequirementCategory")
+    ado_items = ado_work_client.get_backlog_level_work_items(
+        TeamContext(team_id=ado_team.id, project_id=ado_project.id),
+        "Microsoft.RequirementCategory",
+    )
     # print(ado_items)
 
     # Loop through each backlog item
     for wi in ado_items.work_items:
         # Get the corresponding Asana task by name
-        asana_task = get_asana_task(asana_project, wi.name) #TODO: Get the work item name from the backlog item.
+        asana_task = get_asana_task(
+            asana_project, wi.name
+        )  # TODO: Get the work item name from the backlog item.
         if asana_task == None:
             # The Asana task does not exist, create it
-            print(f'creating task {wi.name}')
+            print(f"creating task {wi.name}")
         else:
             # The Asana task exists, update it
-            print(f'updating task {wi.name}')
+            print(f"updating task {wi.name}")
 
 
+def read_projects() -> list:
+    """Read projects from JSON file and return as list."""
+    projects = []
 
-def read_projects() -> object:
-    """
-    Reads the contents of the 'projects.json' file and returns a list of projects.
+    with open("projects.json") as f:
+        data = json.load(f)
 
-    :return: Projects as an object.
-    :rtype: object
-    """
-    with open('projects.json', 'r') as f:
-        projects = json.load(f)
-    return projects
+    for project in data:
+        projects.append(
+            {
+                "adoProjectName": project["adoProjectName"],
+                "adoTeamName": project["adoTeamName"],
+                "asanaWorkspaceName": project["asanaWorkspaceName"],
+                "asanaProjectName": project["asanaProjectName"],
+            }
+        )
+        return projects
+
 
 def get_asana_workspace(name) -> str:
     """
@@ -90,6 +106,7 @@ def get_asana_workspace(name) -> str:
     except ApiException as e:
         print("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
 
+
 def get_asana_project(workspace_gid, name) -> str:
     """
     Returns the project gid for the named Asana project.
@@ -100,12 +117,15 @@ def get_asana_project(workspace_gid, name) -> str:
     api_instance = asana.ProjectsApi(asana_client)
     try:
         # Get all projects
-        api_response = api_instance.get_projects(workspace=workspace_gid, archived=False)
+        api_response = api_instance.get_projects(
+            workspace=workspace_gid, archived=False
+        )
         for p in api_response.data:
             if p.name == name:
                 return p.gid
     except ApiException as e:
         print("Exception when calling ProjectsApi->get_projects: %s\n" % e)
+
 
 def get_asana_task(asana_project, task_name) -> object:
     """

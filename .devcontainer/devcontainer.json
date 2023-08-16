@@ -5,10 +5,12 @@
   // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
   "image": "mcr.microsoft.com/devcontainers/python:0-3.10",
   "features": {
+    // https://containers.dev/features
     "ghcr.io/devcontainers-contrib/features/black:2": {},
     "ghcr.io/devcontainers-contrib/features/poetry:2": {},
     "ghcr.io/devcontainers-contrib/features/pylint:2": {},
     "ghcr.io/devcontainers/features/docker-in-docker": {},
+    "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/danstis/devcontainers-features/gitversion:1.0.0": {
       "version": "5.11.1"
     }
@@ -19,6 +21,9 @@
   // "forwardPorts": [],
   // Use 'postCreateCommand' to run commands after the container is created.
   "postCreateCommand": ".devcontainer/postCreate.sh",
+  "remoteEnv": {
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}"
+  },
   // Configure tool-specific properties.
   "customizations": {
     // Configure properties specific to VS Code.
@@ -30,23 +35,23 @@
         }
       },
       "extensions": [
-		"Codeium.codeium",
-		"dakara.transformer",
-		"EditorConfig.EditorConfig",
-		"GitHub.copilot",
-		"GitHub.vscode-pull-request-github",
-		"Gruntfuggly.todo-tree",
-		"hbenl.vscode-test-explorer",
-		"ms-azuretools.vscode-docker",
-		"ms-vscode.makefile-tools",
-		"sourcegraph.cody-ai",
-		"streetsidesoftware.code-spell-checker",
-		"mhutchie.git-graph",
-		"github.vscode-github-actions",
-		"eamodio.gitlens",
-		"SonarSource.sonarlint-vscode",
-		"ms-python.black-formatter"
-	]
+        "Codeium.codeium",
+        "dakara.transformer",
+        "EditorConfig.EditorConfig",
+        "GitHub.copilot",
+        "GitHub.vscode-pull-request-github",
+        "Gruntfuggly.todo-tree",
+        "hbenl.vscode-test-explorer",
+        "ms-azuretools.vscode-docker",
+        "ms-vscode.makefile-tools",
+        "sourcegraph.cody-ai",
+        "streetsidesoftware.code-spell-checker",
+        "mhutchie.git-graph",
+        "github.vscode-github-actions",
+        "eamodio.gitlens",
+        "SonarSource.sonarlint-vscode",
+        "ms-python.black-formatter"
+      ]
     }
   }
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
