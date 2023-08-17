@@ -14,6 +14,7 @@
     "ghcr.io/devcontainers-contrib/features/poetry:2": {},
     "ghcr.io/devcontainers-contrib/features/pylint:2": {},
     "ghcr.io/devcontainers/features/docker-in-docker": {},
+    "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/danstis/devcontainers-features/gitversion:1.0.0": {
       "version": "5.11.1"
     }
