@@ -164,11 +164,11 @@ def get_asana_task(asana_project, task_name) -> object:
         print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
 
 
-def create_asana_task(task):
+def create_asana_task(task: "work_item"):
     print(f"creating task {task}")
 
 
-def update_asana_task(task):
+def update_asana_task(task: "work_item"):
     print(f"updating task {task}")
 
 
@@ -200,6 +200,9 @@ class work_item:
         self.due_date = due_date
         self.created_date = created_date
         self.updated_date = updated_date
+
+    def __str__(self) -> str:
+        return f"{self.type} {self.ado_id}: {self.title}"
 
 
 if __name__ == "__main__":
