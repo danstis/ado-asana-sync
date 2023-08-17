@@ -67,7 +67,7 @@ def sync_project(project):
         current_work_item = work_item(
             ado_id=ado_task.id,
             title=ado_task.fields["System.Title"],
-            description=ado_task.fields["System.Description"],
+            description=ado_task.fields.get("System.Description"),
             status=ado_task.fields["System.State"],
             type=ado_task.fields["System.WorkItemType"],
             created_date=ado_task.fields["System.CreatedDate"],
@@ -82,20 +82,11 @@ def sync_project(project):
             create_asana_task(
                 asana_client,
                 asana_project,
-                work_item(
-                    ado_id=ado_task.id,
-                    title=ado_task.fields["System.Title"],
-                    description=ado_task.fields["System.Description"],
-                    status=ado_task.fields["System.State"],
-                    type=ado_task.fields["System.WorkItemType"],
-                    created_date=ado_task.fields["System.CreatedDate"],
-                    priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
-                    url=ado_task.url,
-                ),
+                current_work_item,
             )
         else:
             # The Asana task exists, update it
-            print(f"updating task {ado_task.fields['System.Title']}")
+            print(f"updating task {current_work_item.asana_title()}")
 
 
 def read_projects() -> list:
