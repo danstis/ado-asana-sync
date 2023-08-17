@@ -13,8 +13,9 @@ ASANA_TOKEN = os.environ.get("ASANA_TOKEN")
 # connect ADO
 ado_credentials = BasicAuthentication("", ADO_PAT)
 ado_connection = Connection(base_url=ADO_URL, creds=ado_credentials)
-ado_client = ado_connection.clients.get_core_client()
+ado_core_client = ado_connection.clients.get_core_client()
 ado_work_client = ado_connection.clients.get_work_client()
+ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
 # connect Asana
 asana_config = asana.Configuration()
 asana_config.access_token = ASANA_TOKEN
@@ -34,11 +35,13 @@ def sync_project(project):
     )
 
     # Get the ADO project by name
-    ado_project = ado_client.get_project(project["adoProjectName"])
+    ado_project = ado_core_client.get_project(project["adoProjectName"])
     # print(ado_project)
 
     # Get the ADO team by name within the ADO project
-    ado_team = ado_client.get_team(project["adoProjectName"], project["adoTeamName"])
+    ado_team = ado_core_client.get_team(
+        project["adoProjectName"], project["adoTeamName"]
+    )
     # print(ado_team)
 
     # Get the Asana workspace ID by name
@@ -58,16 +61,28 @@ def sync_project(project):
 
     # Loop through each backlog item
     for wi in ado_items.work_items:
+        # Get the work item from the ID
+        ado_task = ado_wit_client.get_work_item(wi.target.id)
         # Get the corresponding Asana task by name
-        asana_task = get_asana_task(
-            asana_project, wi.name
-        )  # TODO: Get the work item name from the backlog item.
+        asana_task = get_asana_task(asana_project, ado_task.fields["System.Title"])
         if asana_task == None:
             # The Asana task does not exist, create it
-            print(f"creating task {wi.name}")
+            print(f"creating task {ado_task.fields['System.Title']}")
+            create_asana_task(
+                work_item(
+                    ado_id=ado_task.id,
+                    title=ado_task.fields["System.Title"],
+                    description=ado_task.fields["System.Description"],
+                    status=ado_task.fields["System.State"],
+                    type=ado_task.fields["System.WorkItemType"],
+                    created_date=ado_task.fields["System.CreatedDate"],
+                    priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
+                    url=ado_task.url,
+                )
+            )
         else:
             # The Asana task exists, update it
-            print(f"updating task {wi.name}")
+            print(f"updating task {ado_task.fields['System.Title']}")
 
 
 def read_projects() -> list:
@@ -141,12 +156,50 @@ def get_asana_task(asana_project, task_name) -> object:
     api_instance = asana.TasksApi(asana_client)
     try:
         # Get all tasks in the project
-        api_response = api_instance.get_tasks_in_project(asana_project, completed=False)
+        api_response = api_instance.get_tasks(project=asana_project)
         for t in api_response.data:
             if t.name == task_name:
                 return t
     except ApiException as e:
         print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+
+
+def create_asana_task(task):
+    print(f"creating task {task}")
+
+
+def update_asana_task(task):
+    print(f"updating task {task}")
+
+
+# Models
+class work_item:
+    # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
+    def __init__(
+        self,
+        ado_id,
+        title,
+        type,
+        status,
+        description,
+        url=None,
+        assigned_to=None,
+        priority=None,
+        due_date=None,
+        created_date=None,
+        updated_date=None,
+    ) -> None:
+        self.ado_id = ado_id
+        self.title = title
+        self.type = type
+        self.status = status
+        self.description = description
+        self.url = url
+        self.assigned_to = assigned_to
+        self.priority = priority
+        self.due_date = due_date
+        self.created_date = created_date
+        self.updated_date = updated_date
 
 
 if __name__ == "__main__":

@@ -1,5 +1,9 @@
 {
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "sonarlint.connectedMode.project": {
+    "connectionId": "SonarLint",
+    "projectKey": "danstis_ado-asana-sync"
   }
 }
