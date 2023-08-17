@@ -5,6 +5,7 @@ from asana.rest import ApiException
 from azure.devops.connection import Connection
 from azure.devops.v7_0.work.models import TeamContext
 from msrest.authentication import BasicAuthentication
+from pprint import pprint
 
 ADO_PAT = os.environ.get("ADO_PAT")
 ADO_URL = os.environ.get("ADO_URL")
@@ -36,39 +37,51 @@ def sync_project(project):
 
     # Get the ADO project by name
     ado_project = ado_core_client.get_project(project["adoProjectName"])
-    # print(ado_project)
+    # pprint(ado_project)
 
     # Get the ADO team by name within the ADO project
     ado_team = ado_core_client.get_team(
         project["adoProjectName"], project["adoTeamName"]
     )
-    # print(ado_team)
+    # pprint(ado_team)
 
     # Get the Asana workspace ID by name
     asana_workspace_id = get_asana_workspace(project["asanaWorkspaceName"])
-    # print(asana_workspace_id)
+    # pprint(asana_workspace_id)
 
     # Get the Asana project by name within the Asana workspace
     asana_project = get_asana_project(asana_workspace_id, project["asanaProjectName"])
-    # print(asana_project)
+    # pprint(asana_project)
 
     # Get the backlog items for the ADO project and team
     ado_items = ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
     )
-    # print(ado_items)
+    # pprint(ado_items)
 
     # Loop through each backlog item
     for wi in ado_items.work_items:
         # Get the work item from the ID
         ado_task = ado_wit_client.get_work_item(wi.target.id)
+        current_work_item = work_item(
+            ado_id=ado_task.id,
+            title=ado_task.fields["System.Title"],
+            description=ado_task.fields["System.Description"],
+            status=ado_task.fields["System.State"],
+            type=ado_task.fields["System.WorkItemType"],
+            created_date=ado_task.fields["System.CreatedDate"],
+            priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
+            url=ado_task.url,
+        )
         # Get the corresponding Asana task by name
-        asana_task = get_asana_task(asana_project, ado_task.fields["System.Title"])
+        asana_task = get_asana_task(asana_project, current_work_item.asana_title())
         if asana_task == None:
             # The Asana task does not exist, create it
-            print(f"creating task {ado_task.fields['System.Title']}")
+            print(f"creating task {current_work_item.asana_title()}")
             create_asana_task(
+                asana_client,
+                asana_project,
                 work_item(
                     ado_id=ado_task.id,
                     title=ado_task.fields["System.Title"],
@@ -78,7 +91,7 @@ def sync_project(project):
                     created_date=ado_task.fields["System.CreatedDate"],
                     priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
                     url=ado_task.url,
-                )
+                ),
             )
         else:
             # The Asana task exists, update it
@@ -164,8 +177,23 @@ def get_asana_task(asana_project, task_name) -> object:
         print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
 
 
-def create_asana_task(task: "work_item"):
-    print(f"creating task {task}")
+def create_asana_task(asana_client, asana_project: "str", task: "work_item"):
+    api_instance = asana.TasksApi(asana_client)
+    body = asana.TasksBody(
+        {
+            "name": task.asana_title(),
+            "due_on": task.due_date,
+            # "notes": task.asana_notes(),
+            "html_notes": task.asana_notes(),
+            "projects": [asana_project],
+        }
+    )
+    try:
+        # Create a task
+        api_response = api_instance.create_task(body)
+        pprint(api_response)
+    except ApiException as e:
+        print("Exception when calling TasksApi->create_task: %s\n" % e)
 
 
 def update_asana_task(task: "work_item"):
@@ -202,7 +230,31 @@ class work_item:
         self.updated_date = updated_date
 
     def __str__(self) -> str:
+        """
+        Return a string representation of the object.
+
+        :return: The string representation of the object.
+        :rtype: str
+        """
+        return self.asana_title()
+
+    def asana_title(self) -> str:
+        """
+        Generate the title of an Asana object.
+
+        Returns:
+            str: The formatted title of the Asana object.
+        """
         return f"{self.type} {self.ado_id}: {self.title}"
+
+    def asana_notes(self) -> str:
+        """
+        Generate the notes of an Asana object.
+
+        Returns:
+            str: The formatted notes of the Asana object.
+        """
+        return f'<body><a href="{self.url}">{self.type} {self.ado_id}</a>: {self.title}</body>'
 
 
 if __name__ == "__main__":
