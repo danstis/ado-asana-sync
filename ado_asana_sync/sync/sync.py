@@ -1,6 +1,6 @@
-import asana
-import json
 import os
+import json
+import asana
 from asana.rest import ApiException
 from azure.devops.connection import Connection
 from azure.devops.v7_0.work.models import TeamContext
@@ -21,12 +21,6 @@ ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
 asana_config = asana.Configuration()
 asana_config.access_token = ASANA_TOKEN
 asana_client = asana.ApiClient(asana_config)
-
-
-def main():
-    p = read_projects()
-    for i in p:
-        sync_project(i)
 
 
 def sync_project(project):
@@ -93,9 +87,7 @@ def read_projects() -> list:
     """Read projects from JSON file and return as list."""
     projects = []
 
-    with open(
-        os.path.join(os.path.dirname(__file__), "..", "data", "projects.json")
-    ) as f:
+    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
         data = json.load(f)
 
     for project in data:
@@ -273,7 +265,3 @@ class work_item:
             str: The formatted notes of the Asana object.
         """
         return f'<a href="{self.url}">{self.type} {self.ado_id}</a>: {self.title}'
-
-
-if __name__ == "__main__":
-    main()

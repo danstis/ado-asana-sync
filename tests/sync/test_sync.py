@@ -1,5 +1,5 @@
 import unittest
-from ado_asana_sync.sync import work_item
+from ado_asana_sync.sync.sync import work_item
 
 
 class TestWorkItem(unittest.TestCase):
