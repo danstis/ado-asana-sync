@@ -103,6 +103,7 @@ venv.bak/
 # CI output files
 /.mypy_cache
 /bandit.out
+/coverage.xml
 /flake8.out
 /mypy.out
 /pylint.out
