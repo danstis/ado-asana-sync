@@ -93,7 +93,7 @@ def read_projects() -> list:
     """Read projects from JSON file and return as list."""
     projects = []
 
-    with open("/workspace/projects.json") as f:
+    with open(os.path.join(os.path.dirname(__file__), "..", "projects.json")) as f:
         data = json.load(f)
 
     for project in data:
