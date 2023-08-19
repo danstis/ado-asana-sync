@@ -1,4 +1,4 @@
-name: Build Test and Release
+name: Test and Lint
 
 on:
   push:
@@ -13,6 +13,30 @@ env:
   PYTHON_VERSION: "3.10"
 
 jobs:
+  version:
+    name: Generate version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      FullSemVer: ${{ steps.gitversion.outputs.FullSemVer }}
+      PreReleaseTag: ${{ steps.gitversion.outputs.PreReleaseTag }}
+    steps:
+      - uses: actions/checkout@v3.5.3
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v0.10.2
+        with:
+          versionSpec: "5.x"
+      - name: Use GitVersion
+        id: gitversion # step id used as reference for output values
+        uses: gittools/actions/gitversion/execute@v0.10.2
+      - name: Create annotation for build error
+        run: |
+          echo "::notice::FullSemVer ${{ steps.gitversion.outputs.FullSemVer }}"
+          echo "::notice::PreReleaseTag ${{ steps.gitversion.outputs.PreReleaseTag }}"
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -38,7 +62,7 @@ jobs:
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [version, test]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -71,6 +95,9 @@ jobs:
           name: test-output
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
+        with:
+          args: >
+            -Dsonar.projectVersion=${{ needs.version.outputs.FullSemVer }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
