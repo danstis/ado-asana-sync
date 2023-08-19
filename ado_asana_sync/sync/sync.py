@@ -141,7 +141,28 @@ def get_asana_task(a: app, asana_project, task_name) -> object:
     api_instance = asana.TasksApi(a.asana_client)
     try:
         # Get all tasks in the project
-        api_response = api_instance.get_tasks(project=asana_project)
+        opt_fields = [
+            "assignee_section",
+            "due_at",
+            "name",
+            "completed_at",
+            "tags",
+            "dependents",
+            "projects",
+            "completed",
+            "permalink_url",
+            "parent",
+            "assignee",
+            "assignee_status",
+            "num_subtasks",
+            "modified_at",
+            "workspace",
+            "due_on",
+        ]
+        api_response = api_instance.get_tasks(
+            project=asana_project,
+            opt_fields=opt_fields,
+        )
         for t in api_response.data:
             if t.name == task_name:
                 return t
