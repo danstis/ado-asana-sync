@@ -6,9 +6,8 @@ on:
       - main
   workflow_dispatch:
 
-env: # https://github.com/marketplace/actions/create-github-discussion#obtaining-the-repository-id-and-category-id
-  discussion_repo_id: R_kgDOIjbHCA
-  discussion_category_id: DIC_kwDOIjbHCM4CS5lM
+# Add repo secrets (DISCUSSION_REPO_ID & DISCUSSION_CATEGORY_ID)
+# https://github.com/marketplace/actions/create-github-discussion#obtaining-the-repository-id-and-category-id
 
 jobs:
   version:
@@ -33,6 +32,7 @@ jobs:
         run: |
           echo "::notice::FullSemVer ${{ steps.gitversion.outputs.FullSemVer }}"
       - name: Bump version and push tag # https://github.com/marketplace/actions/github-tag
+        continue-on-error: true
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.1
         with:
@@ -71,5 +71,5 @@ jobs:
           title: Releaese v${{ needs.version.outputs.FullSemVer }}
           body: |
             ${{ steps.gen_note.outputs.summary }}
-          repository-id: ${{ env.discussion_repo_id }}
-          category-id: ${{ env.discussion_category_id }}
+          repository-id: ${{ secrets.DISCUSSION_REPO_ID }}
+          category-id: ${{ secrets.DISCUSSION_CATEGORY_ID }}
