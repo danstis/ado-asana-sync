@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.10'
+  PYTHON_VERSION: "3.10"
 
 jobs:
   build:
@@ -21,8 +21,8 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          cache: "pip"
+          cache-dependency-path: "**/requirements*.txt"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -36,8 +36,8 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          cache: "pip"
+          cache-dependency-path: "**/requirements*.txt"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -45,7 +45,6 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Test with pytest
         run: pytest
-
 
   lint:
     name: Lint
@@ -55,8 +54,8 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          cache: "pip"
+          cache-dependency-path: "**/requirements*.txt"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -75,34 +74,34 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          cache: "pip"
+          cache-dependency-path: "**/requirements*.txt"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest pylint
+          pip install flake8 pytest pylint bandit mypy
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Lint with flake8
         run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          # exit-zero treats all errors as warnings
+          flake8 . --count --exit-zero --max-complexity=10 --statistics | tee flake8.out
       - name: Lint with Pylint
         run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          pylint --output-format=parseable --recursive=true . | tee pylint.out
+      - name: Security lint with bandit
+        run: |
+          bandit -r . | tee bandit.out
+      - name: Static type check with mypy
+        run: |
+          mypy . | tee mypy.out
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
 #TODO: Links: https://docs.sonarcloud.io/enriching/external-analyzer-reports/ && https://docs.sonarcloud.io/enriching/test-coverage/overview/
 # TODO: Remove other steps and run linting and testing with coverage in the sonar job
