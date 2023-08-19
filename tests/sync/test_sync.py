@@ -1,5 +1,6 @@
 import unittest
-from ado_asana_sync import work_item
+from ado_asana_sync.sync import work_item
+
 
 class TestWorkItem(unittest.TestCase):
     def test_asana_notes_link(self):
@@ -10,14 +11,17 @@ class TestWorkItem(unittest.TestCase):
             type="Test Type",
             status="Test Status",
             description="Test Description",
-            url="http://testurl.com"
+            url="https://testurl.com",
         )
-        
+
         # Call the asana_notes_link method
         result = item.asana_notes_link()
-        
+
         # Assert that the output is as expected
-        self.assertEqual(result, '<a href="http://testurl.com">Test Type 123</a>: Test Title')
+        self.assertEqual(
+            result, '<a href="http://testurl.com">Test Type 123</a>: Test Title'
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
