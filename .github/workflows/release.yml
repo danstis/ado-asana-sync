@@ -57,6 +57,8 @@ jobs:
       - name: Release Changelog Builder
         uses: mikepenz/release-changelog-builder-action@v4 # https://github.com/marketplace/actions/release-changelog-builder
         id: gen_note
+        with:
+          configuration: ".changelog.json"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release

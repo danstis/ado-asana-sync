@@ -1,0 +1,30 @@
+{
+  "categories": [
+    {
+      "title": "## 🚀 Features",
+      "labels": ["feature"]
+    },
+    {
+      "title": "## 🐛 Fixes",
+      "labels": ["bug"]
+    },
+    {
+      "key": "dependencies",
+      "title": "## ⬆️ dependencies",
+      "labels": ["dependencies"]
+    }
+  ],
+  "template": "${{CHANGELOG}}\n\n<details>\n<summary>Uncategorized</summary>\n\n${{UNCATEGORIZED}}\n</details>",
+  "pr_template": "- ${{TITLE}}\n   - PR: #${{NUMBER}}",
+  "empty_template": "- no changes",
+  "transformers": [
+    {
+      "pattern": "[\\-\\*] (\\[(...|build|chore|ci|doc|docs|none|perf|refactor|skip|test)\\])( )?(.+?)\n(.+?[\\-\\*] )(.+)",
+      "target": "- $4\n  - $6"
+    }
+  ],
+  "trim_values": false,
+  "max_tags_to_fetch": 200,
+  "max_pull_requests": 200,
+  "max_back_track_time_days": 365
+}
