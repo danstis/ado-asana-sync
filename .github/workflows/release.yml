@@ -46,13 +46,19 @@ jobs:
       - uses: actions/checkout@v3.5.3
         with:
           fetch-depth: 0
-      - name: Generate release notes
-        uses: yuk1ty/conventional-release-note@v1.1.1 # https://github.com/marketplace/actions/conventional-release-note
+      # - name: Generate release notes
+      #   uses: yuk1ty/conventional-release-note@v1.1.1 # https://github.com/marketplace/actions/conventional-release-note
+      #   id: gen_note
+      #   with:
+      #     kind: default
+      #     tag-pattern: v*
+      #     current-tag: v${{ needs.version.outputs.FullSemVer }}
+      ##${{ steps.gen_note.outputs.summary }}
+      - name: Release Changelog Builder
+        uses: mikepenz/release-changelog-builder-action@v4 # https://github.com/marketplace/actions/release-changelog-builder
         id: gen_note
-        with:
-          kind: default
-          tag-pattern: v*
-          current-tag: v${{ needs.version.outputs.FullSemVer }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
         uses: actions/create-release@v1
         env:
@@ -60,7 +66,7 @@ jobs:
         with:
           tag_name: v${{ needs.version.outputs.FullSemVer }}
           release_name: v${{ needs.version.outputs.FullSemVer }}
-          body: ${{ steps.gen_note.outputs.summary }}
+          body: ${{ steps.gen_note.outputs.changelog }}
       - name: Create a new GitHub Discussion
         id: create-discussion
         uses: abirismyname/create-discussion@v1.x # https://github.com/marketplace/actions/create-github-discussion
@@ -69,6 +75,7 @@ jobs:
         with:
           title: Releaese v${{ needs.version.outputs.FullSemVer }}
           body: |
-            ${{ steps.gen_note.outputs.summary }}
+            [Release](https://github.com/danstis/ado-asana-sync/releases/tag/v${{ needs.version.outputs.FullSemVer }})
+            ${{ steps.gen_note.outputs.changelog }}
           repository-id: ${{ secrets.DISCUSSION_REPO_ID }}
           category-id: ${{ secrets.DISCUSSION_CATEGORY_ID }}
