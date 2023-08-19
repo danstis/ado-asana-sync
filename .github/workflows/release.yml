@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+env: # https://github.com/marketplace/actions/create-github-discussion#obtaining-the-repository-id-and-category-id
+  discussion_repo_id: R_kgDOIjbHCA
+  discussion_category_id: DIC_kwDOIjbHCM4CS5lM
+
 jobs:
   version:
     name: Generate version and tag
@@ -44,7 +48,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Generate release notes
-        uses: yuk1ty/conventional-release-note@v1.1.1 #https://github.com/marketplace/actions/conventional-release-note
+        uses: yuk1ty/conventional-release-note@v1.1.1 # https://github.com/marketplace/actions/conventional-release-note
         id: gen_note
         with:
           kind: default
@@ -58,3 +62,14 @@ jobs:
           tag_name: v${{ needs.version.outputs.FullSemVer }}
           release_name: v${{ needs.version.outputs.FullSemVer }}
           body: ${{ steps.gen_note.outputs.summary }}
+      - name: Create a new GitHub Discussion
+        id: create-discussion
+        uses: abirismyname/create-discussion@v1.x # https://github.com/marketplace/actions/create-github-discussion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          title: Releaese v${{ needs.version.outputs.FullSemVer }}
+          body: |
+            ${{ steps.gen_note.outputs.summary }}
+          repository-id: ${{ env.discussion_repo_id }}
+          category-id: ${{ env.discussion_category_id }}
