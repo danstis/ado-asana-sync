@@ -2,53 +2,39 @@ import os
 import json
 import asana
 from asana.rest import ApiException
-from azure.devops.connection import Connection
 from azure.devops.v7_0.work.models import TeamContext
-from msrest.authentication import BasicAuthentication
 from pprint import pprint
-
-ADO_PAT = os.environ.get("ADO_PAT")
-ADO_URL = os.environ.get("ADO_URL")
-ASANA_TOKEN = os.environ.get("ASANA_TOKEN")
-
-# connect ADO
-ado_credentials = BasicAuthentication("", ADO_PAT)
-ado_connection = Connection(base_url=ADO_URL, creds=ado_credentials)
-ado_core_client = ado_connection.clients.get_core_client()
-ado_work_client = ado_connection.clients.get_work_client()
-ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
-# connect Asana
-asana_config = asana.Configuration()
-asana_config.access_token = ASANA_TOKEN
-asana_client = asana.ApiClient(asana_config)
+from ado_asana_sync.sync.app import app
 
 
-def sync_project(project):
+def sync_project(a: app, project):
     # Log the item being synced
     print(
         f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
     )
 
     # Get the ADO project by name
-    ado_project = ado_core_client.get_project(project["adoProjectName"])
+    ado_project = a.ado_core_client.get_project(project["adoProjectName"])
     # pprint(ado_project)
 
     # Get the ADO team by name within the ADO project
-    ado_team = ado_core_client.get_team(
+    ado_team = a.ado_core_client.get_team(
         project["adoProjectName"], project["adoTeamName"]
     )
     # pprint(ado_team)
 
     # Get the Asana workspace ID by name
-    asana_workspace_id = get_asana_workspace(project["asanaWorkspaceName"])
+    asana_workspace_id = get_asana_workspace(a, project["asanaWorkspaceName"])
     # pprint(asana_workspace_id)
 
     # Get the Asana project by name within the Asana workspace
-    asana_project = get_asana_project(asana_workspace_id, project["asanaProjectName"])
+    asana_project = get_asana_project(
+        a, asana_workspace_id, project["asanaProjectName"]
+    )
     # pprint(asana_project)
 
     # Get the backlog items for the ADO project and team
-    ado_items = ado_work_client.get_backlog_level_work_items(
+    ado_items = a.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
     )
@@ -57,7 +43,7 @@ def sync_project(project):
     # Loop through each backlog item
     for wi in ado_items.work_items:
         # Get the work item from the ID
-        ado_task = ado_wit_client.get_work_item(wi.target.id)
+        ado_task = a.ado_wit_client.get_work_item(wi.target.id)
         current_work_item = work_item(
             ado_id=ado_task.id,
             title=ado_task.fields["System.Title"],
@@ -69,18 +55,19 @@ def sync_project(project):
             url=ado_task.url,
         )
         # Get the corresponding Asana task by name
-        asana_task = get_asana_task(asana_project, current_work_item.asana_title())
+        asana_task = get_asana_task(a, asana_project, current_work_item.asana_title())
         if asana_task == None:
             # The Asana task does not exist, create it
             print(f"creating task {current_work_item.asana_title()}")
             create_asana_task(
+                a,
                 asana_project,
                 current_work_item,
             )
         else:
             # The Asana task exists, update it
             print(f"updating task {current_work_item.asana_title()}")
-            update_asana_task(asana_task.gid, current_work_item)
+            update_asana_task(a, asana_task.gid, current_work_item)
 
 
 def read_projects() -> list:
@@ -102,14 +89,14 @@ def read_projects() -> list:
         return projects
 
 
-def get_asana_workspace(name) -> str:
+def get_asana_workspace(a: app, name) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
 
     :return: Workspace gid.
     :rtype: str
     """
-    api_instance = asana.WorkspacesApi(asana_client)
+    api_instance = asana.WorkspacesApi(a.asana_client)
     try:
         # Get all workspaces
         api_response = api_instance.get_workspaces()
@@ -120,14 +107,14 @@ def get_asana_workspace(name) -> str:
         print("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
 
 
-def get_asana_project(workspace_gid, name) -> str:
+def get_asana_project(a: app, workspace_gid, name) -> str:
     """
     Returns the project gid for the named Asana project.
 
     :return: Project gid.
     :rtype: str
     """
-    api_instance = asana.ProjectsApi(asana_client)
+    api_instance = asana.ProjectsApi(a.asana_client)
     try:
         # Get all projects
         api_response = api_instance.get_projects(
@@ -140,7 +127,7 @@ def get_asana_project(workspace_gid, name) -> str:
         print("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
 
-def get_asana_task(asana_project, task_name) -> object:
+def get_asana_task(a: app, asana_project, task_name) -> object:
     """
     Returns the entire task object for the named Asana task in the given project.
 
@@ -151,7 +138,7 @@ def get_asana_task(asana_project, task_name) -> object:
     :return: Task object or None if no task is found.
     :rtype: object or None
     """
-    api_instance = asana.TasksApi(asana_client)
+    api_instance = asana.TasksApi(a.asana_client)
     try:
         # Get all tasks in the project
         api_response = api_instance.get_tasks(project=asana_project)
@@ -162,7 +149,7 @@ def get_asana_task(asana_project, task_name) -> object:
         print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
 
 
-def create_asana_task(asana_project: "str", task: "work_item"):
+def create_asana_task(a: app, asana_project: "str", task: "work_item"):
     """
     Create an Asana task in the specified project.
 
@@ -177,7 +164,7 @@ def create_asana_task(asana_project: "str", task: "work_item"):
         ApiException: If an error occurs while creating the task.
 
     """
-    tasks_api_instance = asana.TasksApi(asana_client)
+    tasks_api_instance = asana.TasksApi(a.asana_client)
     body = asana.TasksBody(
         {
             "name": task.asana_title(),
@@ -193,8 +180,8 @@ def create_asana_task(asana_project: "str", task: "work_item"):
         print("Exception when calling TasksApi->create_task: %s\n" % e)
 
 
-def update_asana_task(asana_task_id: "str", task: "work_item"):
-    tasks_api_instance = asana.TasksApi(asana_client)
+def update_asana_task(a: app, asana_task_id: "str", task: "work_item"):
+    tasks_api_instance = asana.TasksApi(a.asana_client)
     body = asana.TasksBody(
         {
             "name": task.asana_title(),

@@ -6,5 +6,10 @@
     "connectionId": "SonarLint",
     "projectKey": "danstis_ado-asana-sync"
   },
-  "python.analysis.typeCheckingMode": "off"
+  "python.analysis.typeCheckingMode": "off",
+  "cSpell.words": [
+    "msrest",
+    "rtype",
+    "VSTS"
+  ]
 }
