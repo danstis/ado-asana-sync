@@ -56,7 +56,7 @@ jobs:
       - name: Lint with flake8
         run: |
           # exit-zero treats all errors as warnings
-          flake8 . --count --exit-zero --max-complexity=10 --statistics | tee flake8.out
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics | tee flake8.out
       - name: Lint with Pylint
         run: |
           pylint --output-format=parseable --recursive=true . | tee pylint.out
