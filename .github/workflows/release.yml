@@ -44,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Generate release notes
-        uses: yuk1ty/conventional-release-note@v1.1.1
+        uses: yuk1ty/conventional-release-note@v1.1.1 #https://github.com/marketplace/actions/conventional-release-note
         id: gen_note
         with:
           kind: default
