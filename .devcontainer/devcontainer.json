@@ -11,8 +11,14 @@
   "features": {
     // https://containers.dev/features
     "ghcr.io/devcontainers-contrib/features/black:2": {},
+    "ghcr.io/devcontainers-contrib/features/pipx-package:1": {},
     "ghcr.io/devcontainers-contrib/features/poetry:2": {},
     "ghcr.io/devcontainers-contrib/features/pylint:2": {},
+    "ghcr.io/devcontainers-contrib/features/mypy:2": {},
+    "ghcr.io/devcontainers-contrib/features/bandit:2": {},
+    "ghcr.io/devcontainers-contrib/features/flake8:2": {},
+    "ghcr.io/devcontainers-contrib/features/coverage-py:2": {},
+    "ghcr.io/devcontainers-contrib/features/tox:2": {},
     "ghcr.io/devcontainers/features/docker-in-docker": {},
     "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/danstis/devcontainers-features/gitversion:1.0.0": {
@@ -24,7 +30,7 @@
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   // "forwardPorts": [],
   // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": ".devcontainer/postCreate.sh",
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
   "remoteEnv": {
     "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}"
   },
@@ -39,23 +45,24 @@
         }
       },
       "extensions": [
-        "Codeium.codeium",
-        "dakara.transformer",
-        "EditorConfig.EditorConfig",
-        "GitHub.copilot",
-        "GitHub.vscode-pull-request-github",
-        "Gruntfuggly.todo-tree",
-        "hbenl.vscode-test-explorer",
-        "ms-azuretools.vscode-docker",
-        "ms-vscode.makefile-tools",
-        "sourcegraph.cody-ai",
-        "streetsidesoftware.code-spell-checker",
-        "mhutchie.git-graph",
-        "github.vscode-github-actions",
-        "eamodio.gitlens",
-        "SonarSource.sonarlint-vscode",
-        "ms-python.black-formatter"
-      ]
+		"Codeium.codeium",
+		"dakara.transformer",
+		"EditorConfig.EditorConfig",
+		"GitHub.copilot",
+		"GitHub.vscode-pull-request-github",
+		"Gruntfuggly.todo-tree",
+		"hbenl.vscode-test-explorer",
+		"ms-azuretools.vscode-docker",
+		"ms-vscode.makefile-tools",
+		"sourcegraph.cody-ai",
+		"streetsidesoftware.code-spell-checker",
+		"mhutchie.git-graph",
+		"github.vscode-github-actions",
+		"eamodio.gitlens",
+		"SonarSource.sonarlint-vscode",
+		"ms-python.black-formatter",
+		"Codium.codium"
+	]
     }
   }
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
