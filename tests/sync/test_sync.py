@@ -7,7 +7,7 @@ class TestWorkItem(unittest.TestCase):
         self.test_item = work_item(
             ado_id=123,
             title="Test Title",
-            type="User Story",
+            item_type="User Story",
             status="Test Status",
             description="Test Description",
             url="https://testurl.example",
