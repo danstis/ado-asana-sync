@@ -96,16 +96,16 @@ jobs:
       - name: Lint with flake8
         run: |
           # exit-zero treats all errors as warnings
-          poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics | tee flake8.out
+          poetry run flake8 ado_asana_sync --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics | tee flake8.out
       - name: Lint with Pylint
         run: |
-          poetry run pylint --output-format=parseable --recursive=true . | tee pylint.out
+          poetry run pylint --output-format=parseable --recursive=true ado_asana_sync | tee pylint.out
       - name: Security lint with bandit
         run: |
-          poetry run bandit -r . | tee bandit.out
+          poetry run bandit -r ado_asana_sync | tee bandit.out
       - name: Static type check with mypy
         run: |
-          poetry run mypy . | tee mypy.out
+          poetry run mypy ado_asana_sync | tee mypy.out
       - uses: actions/download-artifact@v3
         with:
           name: test-output
