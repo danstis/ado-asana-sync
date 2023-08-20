@@ -218,6 +218,33 @@ def update_asana_task(a: app, asana_task_id: "str", task: "work_item"):
         print("Exception when calling TasksApi->update_task: %s\n" % e)
 
 
+def get_asana_users(a: app, asana_workspace_gid: str) -> list(asana.UserResponse):
+    """
+    Retrieves a list of Asana users in a specific workspace.
+
+    Args:
+        a (app): An instance of the `app` class that provides the Asana API client.
+        asana_workspace_gid (str): The ID of the Asana workspace to retrieve users from.
+
+    Returns:
+        list(asana.UserResponse): A list of `asana.UserResponse` objects representing the Asana users in the specified workspace.
+    """
+    users_api_instance = asana.UsersApi(a.api_client)
+    opt_fields = [
+        "email",
+        "name",
+    ]
+
+    try:
+        api_response = users_api_instance.get_users(
+            workspace=asana_workspace_gid,
+            opt_fields=opt_fields,
+        )
+        return api_response.data
+    except ApiException as e:
+        print("Exception when calling UsersApi->get_users: %s\n" % e)
+
+
 # Models
 class work_item:
     # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
