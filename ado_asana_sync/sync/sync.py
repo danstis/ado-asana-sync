@@ -1,10 +1,67 @@
 import os
 import json
 import asana
+from asana import UserResponse
 from asana.rest import ApiException
 from azure.devops.v7_0.work.models import TeamContext
 from pprint import pprint
 from ado_asana_sync.sync.app import app
+
+
+class work_item:
+    # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
+    def __init__(
+        self,
+        ado_id,
+        title,
+        item_type,
+        status,
+        description,
+        url=None,
+        assigned_to=None,
+        priority=None,
+        due_date=None,
+        created_date=None,
+        updated_date=None,
+    ) -> None:
+        self.ado_id = ado_id
+        self.title = title
+        self.item_type = item_type
+        self.status = status
+        self.description = description
+        self.url = url
+        self.assigned_to = assigned_to
+        self.priority = priority
+        self.due_date = due_date
+        self.created_date = created_date
+        self.updated_date = updated_date
+
+    def __str__(self) -> str:
+        """
+        Return a string representation of the object.
+
+        :return: The string representation of the object.
+        :rtype: str
+        """
+        return self.asana_title()
+
+    def asana_title(self) -> str:
+        """
+        Generate the title of an Asana object.
+
+        Returns:
+            str: The formatted title of the Asana object.
+        """
+        return f"{self.type} {self.ado_id}: {self.title}"
+
+    def asana_notes_link(self) -> str:
+        """
+        Generate the notes of an Asana object.
+
+        Returns:
+            str: The formatted notes of the Asana object.
+        """
+        return f'<a href="{self.url}">{self.type} {self.ado_id}</a>: {self.title}'
 
 
 def read_projects() -> list:
@@ -68,7 +125,7 @@ def sync_project(a: app, project):
             title=ado_task.fields["System.Title"],
             description=ado_task.fields.get("System.Description"),
             status=ado_task.fields["System.State"],
-            type=ado_task.fields["System.WorkItemType"],
+            item_type=ado_task.fields["System.WorkItemType"],
             created_date=ado_task.fields["System.CreatedDate"],
             priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
             url=ado_task.url,
@@ -224,7 +281,7 @@ def update_asana_task(a: app, asana_task_id: str, task: work_item):
         print("Exception when calling TasksApi->update_task: %s\n" % e)
 
 
-def get_asana_users(a: app, asana_workspace_gid: str) -> list(asana.UserResponse):
+def get_asana_users(a: app, asana_workspace_gid: str) -> list[UserResponse]:
     """
     Retrieves a list of Asana users in a specific workspace.
 
@@ -249,60 +306,3 @@ def get_asana_users(a: app, asana_workspace_gid: str) -> list(asana.UserResponse
         return api_response.data
     except ApiException as e:
         print("Exception when calling UsersApi->get_users: %s\n" % e)
-
-
-# Models
-class work_item:
-    # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
-    def __init__(
-        self,
-        ado_id,
-        title,
-        type,
-        status,
-        description,
-        url=None,
-        assigned_to=None,
-        priority=None,
-        due_date=None,
-        created_date=None,
-        updated_date=None,
-    ) -> None:
-        self.ado_id = ado_id
-        self.title = title
-        self.type = type
-        self.status = status
-        self.description = description
-        self.url = url
-        self.assigned_to = assigned_to
-        self.priority = priority
-        self.due_date = due_date
-        self.created_date = created_date
-        self.updated_date = updated_date
-
-    def __str__(self) -> str:
-        """
-        Return a string representation of the object.
-
-        :return: The string representation of the object.
-        :rtype: str
-        """
-        return self.asana_title()
-
-    def asana_title(self) -> str:
-        """
-        Generate the title of an Asana object.
-
-        Returns:
-            str: The formatted title of the Asana object.
-        """
-        return f"{self.type} {self.ado_id}: {self.title}"
-
-    def asana_notes_link(self) -> str:
-        """
-        Generate the notes of an Asana object.
-
-        Returns:
-            str: The formatted notes of the Asana object.
-        """
-        return f'<a href="{self.url}">{self.type} {self.ado_id}</a>: {self.title}'
