@@ -1,10 +1,11 @@
 import os
 import json
+import logging
 import asana
 from asana import UserResponse
 from asana.rest import ApiException
 from azure.devops.v7_0.work.models import TeamContext
-from pprint import pprint
+from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from ado_asana_sync.sync.app import app
 
 
@@ -87,41 +88,51 @@ def read_projects() -> list:
 
 def sync_project(a: app, project):
     # Log the item being synced
-    print(
+    logging.info(
         f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
     )
 
     # Get the ADO project by name
     ado_project = a.ado_core_client.get_project(project["adoProjectName"])
-    # pprint(ado_project)
 
     # Get the ADO team by name within the ADO project
     ado_team = a.ado_core_client.get_team(
         project["adoProjectName"], project["adoTeamName"]
     )
-    # pprint(ado_team)
 
     # Get the Asana workspace ID by name
     asana_workspace_id = get_asana_workspace(a, project["asanaWorkspaceName"])
-    # pprint(asana_workspace_id)
+
+    # Get all Asana users in the workspace, this will enable user matching.
+    asana_users = get_asana_users(a, asana_workspace_id)
 
     # Get the Asana project by name within the Asana workspace
     asana_project = get_asana_project(
         a, asana_workspace_id, project["asanaProjectName"]
     )
-    # pprint(asana_project)
 
     # Get the backlog items for the ADO project and team
     ado_items = a.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
     )
-    # pprint(ado_items)
 
     # Loop through each backlog item
     for wi in ado_items.work_items:
         # Get the work item from the ID
         ado_task = a.ado_wit_client.get_work_item(wi.target.id)
+
+        # Skip this item if is not assigned, or the assignee does not match an Asana user.
+        ado_assigned_email = get_task_user_email(ado_task)
+        if ado_assigned_email == None:
+            logging.info(
+                f"skipping item as it is not assigned {ado_task.fields['System.Title']}"
+            )
+            continue
+        asana_matched_user = matching_user(asana_users, ado_assigned_email)
+        if asana_matched_user == None:
+            continue
+
         current_work_item = work_item(
             ado_id=ado_task.id,
             title=ado_task.fields["System.Title"],
@@ -131,12 +142,14 @@ def sync_project(a: app, project):
             created_date=ado_task.fields["System.CreatedDate"],
             priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
             url=ado_task.url,
+            assigned_to=asana_matched_user.gid,
         )
+
         # Get the corresponding Asana task by name
         asana_task = get_asana_task(a, asana_project, current_work_item.asana_title)
         if asana_task == None:
             # The Asana task does not exist, create it
-            print(f"creating task {current_work_item.asana_title}")
+            logging.info(f"creating task {current_work_item.asana_title}")
             create_asana_task(
                 a,
                 asana_project,
@@ -144,8 +157,45 @@ def sync_project(a: app, project):
             )
         else:
             # The Asana task exists, update it
-            print(f"updating task {current_work_item.asana_title}")
-            update_asana_task(a, asana_task.gid, current_work_item)
+            logging.info(f"updating task {current_work_item.asana_title}")
+            update_asana_task(
+                a,
+                asana_task.gid,
+                current_work_item,
+            )
+
+
+def get_task_user_email(task: WorkItem) -> str:
+    """
+    Return the email address of the user assigned to the Azure DevOps work item.
+    If no user is assigned, then return None.
+
+    Args:
+        task (WorkItem): The Azure DevOps work item object.
+
+    Returns:
+        str: The email address of the user assigned to the work item. If no user is assigned, it returns None.
+    """
+    assigned_user = task.fields.get("System.AssignedTo", None)
+    return assigned_user.get("uniqueName", None) if assigned_user else None
+
+
+def matching_user(user_list: list[UserResponse], email: str) -> UserResponse | None:
+    """
+    Check if a given email exists in a list of user objects.
+
+    Args:
+        user_list (list[UserResponse]): A list of UserResponse objects representing users.
+        email (str): A string representing the email to search for.
+
+    Returns:
+        UserResponse: The matching asana user.
+        None: If no matching user is found.
+    """
+    for user in user_list:
+        if user.email == email:
+            return user
+    return None
 
 
 def get_asana_workspace(a: app, name) -> str:
@@ -163,7 +213,7 @@ def get_asana_workspace(a: app, name) -> str:
             if w.name == name:
                 return w.gid
     except ApiException as e:
-        print("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
+        logging.error("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
 
 
 def get_asana_project(a: app, workspace_gid, name) -> str:
@@ -183,7 +233,7 @@ def get_asana_project(a: app, workspace_gid, name) -> str:
             if p.name == name:
                 return p.gid
     except ApiException as e:
-        print("Exception when calling ProjectsApi->get_projects: %s\n" % e)
+        logging.error("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
 
 def get_asana_task(a: app, asana_project, task_name) -> object:
@@ -226,7 +276,7 @@ def get_asana_task(a: app, asana_project, task_name) -> object:
             if t.name == task_name:
                 return t
     except ApiException as e:
-        print("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+        logging.error("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
 
 
 def create_asana_task(a: app, asana_project: "str", task: "work_item"):
@@ -248,12 +298,13 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
             "due_on": task.due_date,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "projects": [asana_project],
+            "assignee": task.assigned_to,
         }
     )
     try:
         tasks_api_instance.create_task(body)
     except ApiException as e:
-        print("Exception when calling TasksApi->create_task: %s\n" % e)
+        logging.error("Exception when calling TasksApi->create_task: %s\n" % e)
 
 
 def update_asana_task(a: app, asana_task_id: str, task: work_item):
@@ -274,13 +325,14 @@ def update_asana_task(a: app, asana_task_id: str, task: work_item):
             "name": task.asana_title,
             "due_on": task.due_date,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
+            "assignee": task.assigned_to,
         }
     )
 
     try:
         tasks_api_instance.update_task(body, asana_task_id)
     except ApiException as e:
-        print("Exception when calling TasksApi->update_task: %s\n" % e)
+        logging.error("Exception when calling TasksApi->update_task: %s\n" % e)
 
 
 def get_asana_users(a: app, asana_workspace_gid: str) -> list[UserResponse]:
@@ -294,7 +346,7 @@ def get_asana_users(a: app, asana_workspace_gid: str) -> list[UserResponse]:
     Returns:
         list(asana.UserResponse): A list of `asana.UserResponse` objects representing the Asana users in the specified workspace.
     """
-    users_api_instance = asana.UsersApi(a.api_client)
+    users_api_instance = asana.UsersApi(a.asana_client)
     opt_fields = [
         "email",
         "name",
@@ -307,4 +359,4 @@ def get_asana_users(a: app, asana_workspace_gid: str) -> list[UserResponse]:
         )
         return api_response.data
     except ApiException as e:
-        print("Exception when calling UsersApi->get_users: %s\n" % e)
+        logging.error("Exception when calling UsersApi->get_users: %s\n" % e)
