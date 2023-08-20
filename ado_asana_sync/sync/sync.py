@@ -43,8 +43,9 @@ class work_item:
         :return: The string representation of the object.
         :rtype: str
         """
-        return self.asana_title()
+        return self.asana_title
 
+    @property
     def asana_title(self) -> str:
         """
         Generate the title of an Asana object.
@@ -52,8 +53,9 @@ class work_item:
         Returns:
             str: The formatted title of the Asana object.
         """
-        return f"{self.type} {self.ado_id}: {self.title}"
+        return f"{self.item_type} {self.ado_id}: {self.title}"
 
+    @property
     def asana_notes_link(self) -> str:
         """
         Generate the notes of an Asana object.
@@ -61,7 +63,7 @@ class work_item:
         Returns:
             str: The formatted notes of the Asana object.
         """
-        return f'<a href="{self.url}">{self.type} {self.ado_id}</a>: {self.title}'
+        return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {self.title}'
 
 
 def read_projects() -> list:
@@ -131,10 +133,10 @@ def sync_project(a: app, project):
             url=ado_task.url,
         )
         # Get the corresponding Asana task by name
-        asana_task = get_asana_task(a, asana_project, current_work_item.asana_title())
+        asana_task = get_asana_task(a, asana_project, current_work_item.asana_title)
         if asana_task == None:
             # The Asana task does not exist, create it
-            print(f"creating task {current_work_item.asana_title()}")
+            print(f"creating task {current_work_item.asana_title}")
             create_asana_task(
                 a,
                 asana_project,
@@ -142,7 +144,7 @@ def sync_project(a: app, project):
             )
         else:
             # The Asana task exists, update it
-            print(f"updating task {current_work_item.asana_title()}")
+            print(f"updating task {current_work_item.asana_title}")
             update_asana_task(a, asana_task.gid, current_work_item)
 
 
@@ -242,9 +244,9 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
     tasks_api_instance = asana.TasksApi(a.asana_client)
     body = asana.TasksBody(
         {
-            "name": task.asana_title(),
+            "name": task.asana_title,
             "due_on": task.due_date,
-            "html_notes": f"<body>{task.asana_notes_link()}</body>",
+            "html_notes": f"<body>{task.asana_notes_link}</body>",
             "projects": [asana_project],
         }
     )
@@ -269,9 +271,9 @@ def update_asana_task(a: app, asana_task_id: str, task: work_item):
     tasks_api_instance = asana.TasksApi(a.asana_client)
     body = asana.TasksBody(
         {
-            "name": task.asana_title(),
+            "name": task.asana_title,
             "due_on": task.due_date,
-            "html_notes": f"<body>{task.asana_notes_link()}</body>",
+            "html_notes": f"<body>{task.asana_notes_link}</body>",
         }
     )
 
