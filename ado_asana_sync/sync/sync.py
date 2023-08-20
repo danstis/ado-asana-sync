@@ -7,6 +7,25 @@ from pprint import pprint
 from ado_asana_sync.sync.app import app
 
 
+def read_projects() -> list:
+    """Read projects from JSON file and return as list."""
+    projects = []
+
+    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
+        data = json.load(f)
+
+    for project in data:
+        projects.append(
+            {
+                "adoProjectName": project["adoProjectName"],
+                "adoTeamName": project["adoTeamName"],
+                "asanaWorkspaceName": project["asanaWorkspaceName"],
+                "asanaProjectName": project["asanaProjectName"],
+            }
+        )
+        return projects
+
+
 def sync_project(a: app, project):
     # Log the item being synced
     print(
@@ -68,25 +87,6 @@ def sync_project(a: app, project):
             # The Asana task exists, update it
             print(f"updating task {current_work_item.asana_title()}")
             update_asana_task(a, asana_task.gid, current_work_item)
-
-
-def read_projects() -> list:
-    """Read projects from JSON file and return as list."""
-    projects = []
-
-    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
-        data = json.load(f)
-
-    for project in data:
-        projects.append(
-            {
-                "adoProjectName": project["adoProjectName"],
-                "adoTeamName": project["adoTeamName"],
-                "asanaWorkspaceName": project["asanaWorkspaceName"],
-                "asanaProjectName": project["asanaProjectName"],
-            }
-        )
-        return projects
 
 
 def get_asana_workspace(a: app, name) -> str:
