@@ -175,15 +175,12 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
     Create an Asana task in the specified project.
 
     Args:
+        a (app): An instance of the 'app' class that provides the connection to ADO and Asana.
         asana_project (str): The name of the Asana project to create the task in.
-        task (work_item): The work item object containing the details of the task.
+        task (work_item): An instance of the 'work_item' class that contains the details of the task to be created.
 
     Returns:
         None
-
-    Raises:
-        ApiException: If an error occurs while creating the task.
-
     """
     tasks_api_instance = asana.TasksApi(a.asana_client)
     body = asana.TasksBody(
@@ -195,13 +192,23 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
         }
     )
     try:
-        api_response = tasks_api_instance.create_task(body)
-        # pprint(api_response)
+        tasks_api_instance.create_task(body)
     except ApiException as e:
         print("Exception when calling TasksApi->create_task: %s\n" % e)
 
 
-def update_asana_task(a: app, asana_task_id: "str", task: "work_item"):
+def update_asana_task(a: app, asana_task_id: str, task: work_item):
+    """
+    Update an Asana task with the provided task details.
+
+    Args:
+        a (app): An instance of the app class that provides the connection to ADO and Asana.
+        asana_task_id (str): The ID of the Asana task to be updated.
+        task (work_item): An instance of the work_item class that contains the details of the task to be updated.
+
+    Returns:
+        None: The function does not return any value. The Asana task is updated with the provided details.
+    """
     tasks_api_instance = asana.TasksApi(a.asana_client)
     body = asana.TasksBody(
         {
@@ -212,8 +219,7 @@ def update_asana_task(a: app, asana_task_id: "str", task: "work_item"):
     )
 
     try:
-        api_response = tasks_api_instance.update_task(body, asana_task_id)
-        # pprint(api_response)
+        tasks_api_instance.update_task(body, asana_task_id)
     except ApiException as e:
         print("Exception when calling TasksApi->update_task: %s\n" % e)
 
