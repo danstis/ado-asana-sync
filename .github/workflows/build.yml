@@ -61,7 +61,7 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root
       - name: Test with pytest
-        run: tox
+        run: poetry run tox
       - uses: actions/upload-artifact@v3
         with:
           name: test-output
