@@ -23,7 +23,7 @@ def read_projects() -> list:
                 "asanaProjectName": project["asanaProjectName"],
             }
         )
-        return projects
+    return projects
 
 
 def sync_project(a: app, project):
