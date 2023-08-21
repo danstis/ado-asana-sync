@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: "3.10"
+
 # Add repo secrets (DISCUSSION_REPO_ID & DISCUSSION_CATEGORY_ID)
 # https://github.com/marketplace/actions/create-github-discussion#obtaining-the-repository-id-and-category-id
 
@@ -17,6 +20,7 @@ jobs:
       contents: write
     outputs:
       FullSemVer: ${{ steps.gitversion.outputs.FullSemVer }}
+      MajorMinorPatch: ${{ steps.gitversion.outputs.MajorMinorPatch }} #TODO: Update to use valid python versions
     steps:
       - uses: actions/checkout@v3.5.3
         with:
@@ -31,6 +35,7 @@ jobs:
       - name: Create annotation for build error
         run: |
           echo "::notice::FullSemVer ${{ steps.gitversion.outputs.FullSemVer }}"
+          echo "::notice::MajorMinorPatch ${{ steps.gitversion.outputs.MajorMinorPatch }}"
       - name: Bump version and push tag # https://github.com/marketplace/actions/github-tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.1
@@ -41,19 +46,39 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
     needs: [version]
     steps:
       - uses: actions/checkout@v3.5.3
         with:
           fetch-depth: 0
-      # - name: Generate release notes
-      #   uses: yuk1ty/conventional-release-note@v1.1.1 # https://github.com/marketplace/actions/conventional-release-note
-      #   id: gen_note
-      #   with:
-      #     kind: default
-      #     tag-pattern: v*
-      #     current-tag: v${{ needs.version.outputs.FullSemVer }}
-      ##${{ steps.gen_note.outputs.summary }}
+      - uses: actions/setup-python@v4 # https://github.com/marketplace/actions/setup-python
+        id: setup-python
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+      - name: Version package
+        run: poetry version ${{ needs.version.outputs.MajorMinorPatch }}
+      - name: Build package
+        run: poetry build
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
       - name: Release Changelog Builder
         uses: mikepenz/release-changelog-builder-action@v4 # https://github.com/marketplace/actions/release-changelog-builder
         id: gen_note

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ado-asana-sync"
-version = "0.1.0"
+version = "0.0.0-dev"
 description = "Tool to sync work items from Azure DevOps to Asana"
 authors = ["Dan Anstis <dan@bsod.co.nz>"]
 license = "MIT"
