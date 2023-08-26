@@ -7,6 +7,7 @@ from asana.rest import ApiException
 from azure.devops.v7_0.work.models import TeamContext
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from ado_asana_sync.sync.app import app
+from datetime import datetime, timezone
 
 
 class work_item:
@@ -14,6 +15,7 @@ class work_item:
     def __init__(
         self,
         ado_id,
+        ado_rev,
         title,
         item_type,
         status,
@@ -26,6 +28,7 @@ class work_item:
         updated_date=None,
     ) -> None:
         self.ado_id = ado_id
+        self.ado_rev = ado_rev
         self.title = title
         self.item_type = item_type
         self.status = status
@@ -135,6 +138,7 @@ def sync_project(a: app, project):
 
         current_work_item = work_item(
             ado_id=ado_task.id,
+            ado_rev=ado_task.rev,
             title=ado_task.fields["System.Title"],
             description=ado_task.fields.get("System.Description"),
             status=ado_task.fields["System.State"],
@@ -302,7 +306,20 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
         }
     )
     try:
-        tasks_api_instance.create_task(body)
+        result = tasks_api_instance.create_task(body)
+        # Convert the created_at date to ISO8601 UTC.
+        dt = result.data.created_at.replace(tzinfo=timezone.utc).astimezone(
+            timezone.utc
+        )
+        # add the match to the db.
+        a.matches.insert(
+            {
+                "ado_id": task.ado_id,
+                "ado_rev": task.ado_rev,
+                "asana_id": result.data.gid,
+                "asana_timestamp": dt.isoformat(),
+            }
+        )
     except ApiException as e:
         logging.error("Exception when calling TasksApi->create_task: %s\n" % e)
 

@@ -11,7 +11,7 @@ packages = [{ include = "ado_asana_sync" }]
 python = "^3.10"
 asana = "^4.0.6"
 azure-devops = "^7.1.0b3"
-beanie = "^1.21.0"
+tinydb = "^4.8.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"

@@ -110,5 +110,6 @@ venv.bak/
 
 # Other
 *.ignore*
-projects.json
+data/projects.json
+data/matches.json
 .aider*

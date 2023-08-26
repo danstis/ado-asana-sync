@@ -2,6 +2,7 @@ import os
 import asana
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
+from tinydb import TinyDB, Query
 
 
 class app:
@@ -30,3 +31,5 @@ class app:
         asana_config = asana.Configuration()
         asana_config.access_token = self.asana_token
         self.asana_client = asana.ApiClient(asana_config)
+        # setup tinydb
+        self.matches = TinyDB(os.path.join(os.path.dirname(__package__), "data", "matches.json"))
