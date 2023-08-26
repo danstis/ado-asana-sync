@@ -32,4 +32,7 @@ class app:
         asana_config.access_token = self.asana_token
         self.asana_client = asana.ApiClient(asana_config)
         # setup tinydb
-        self.matches = TinyDB(os.path.join(os.path.dirname(__package__), "data", "matches.json"))
+        self.db = TinyDB(
+            os.path.join(os.path.dirname(__package__), "data", "appdata.json")
+        )
+        self.matches = self.db.table("matches")

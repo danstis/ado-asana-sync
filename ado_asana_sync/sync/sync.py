@@ -314,6 +314,7 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
         # add the match to the db.
         a.matches.insert(
             {
+                # TODO: create a class for this data and serialise to JSON.
                 "ado_id": task.ado_id,
                 "ado_rev": task.ado_rev,
                 "asana_id": result.data.gid,

@@ -109,7 +109,7 @@ venv.bak/
 /pylint.out
 
 # Other
-*.ignore*
-data/projects.json
-data/matches.json
 .aider*
+*.ignore*
+data/appdata.json
+data/projects.json
