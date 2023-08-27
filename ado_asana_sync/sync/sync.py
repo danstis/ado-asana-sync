@@ -281,7 +281,8 @@ def sync_project(a: App, project):
                 logging.info(
                     f"{ado_task.fields['System.Title']}:found a matching asana task by name, updating task"
                 )
-                item.asana_gid = asana_task.gid
+                if asana_task is not None:
+                    item.asana_gid = asana_task.gid
                 update_asana_task(
                     a,
                     item,
