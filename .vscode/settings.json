@@ -9,7 +9,10 @@
   "python.analysis.typeCheckingMode": "off",
   "cSpell.words": [
     "msrest",
+    "pytz",
     "rtype",
+    "timezones",
+    "tinydb",
     "VSTS"
   ],
   "git.branchProtection": [

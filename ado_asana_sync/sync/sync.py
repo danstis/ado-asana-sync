@@ -1,39 +1,57 @@
+from __future__ import annotations
 import os
 import json
 import logging
 import asana
+from ado_asana_sync.sync.app import App
 from asana import UserResponse
 from asana.rest import ApiException
-from azure.devops.v7_0.work.models import TeamContext
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
-from ado_asana_sync.sync.app import app
+from azure.devops.v7_0.work.models import TeamContext
+from datetime import datetime, timezone
+from tinydb import Query
 
 
-class work_item:
-    # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
+class TaskItem:
+    """
+    Represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
+
+    Each TaskItem object corresponds to a work item in ADO and a task in Asana. It contains information about the task such as its ID, revision number, title, type, URL, and the IDs of the corresponding Asana task and user.
+
+    Attributes:
+        ado_id (int): The ID of the task in ADO.
+        ado_rev (int): The revision number of the task in ADO.
+        title (str): The title of the task.
+        item_type (str): The type of the task.
+        url (str): The URL of the task in ADO.
+        asana_gid (str): The ID of the corresponding task in Asana.
+        asana_updated (str): The last updated time of the Asana task in ISO 8601 format.
+        assigned_to (str): The ID of the user to whom the task is assigned in Asana.
+        created_date (str): The creation date of the task in ISO 8601 format.
+        updated_date (str): The last updated date of the task in ISO 8601 format.
+    """
+
     def __init__(
         self,
-        ado_id,
-        title,
-        item_type,
-        status,
-        description,
-        url=None,
-        assigned_to=None,
-        priority=None,
-        due_date=None,
-        created_date=None,
-        updated_date=None,
+        ado_id: int,
+        ado_rev: int,
+        title: str,
+        item_type: str,
+        url: str,
+        asana_gid: str = None,
+        asana_updated: str = None,
+        assigned_to: str = None,
+        created_date: str = None,
+        updated_date: str = None,
     ) -> None:
         self.ado_id = ado_id
+        self.ado_rev = ado_rev
         self.title = title
         self.item_type = item_type
-        self.status = status
-        self.description = description
         self.url = url
+        self.asana_gid = asana_gid
+        self.asana_updated = asana_updated
         self.assigned_to = assigned_to
-        self.priority = priority
-        self.due_date = due_date
         self.created_date = created_date
         self.updated_date = updated_date
 
@@ -66,14 +84,96 @@ class work_item:
         """
         return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {self.title}'
 
+    @classmethod
+    def find_by_ado_id(cls, a: App, ado_id: int) -> TaskItem | None:
+        """
+        Find and retrieve a TaskItem by its Azure DevOps (ADO) ID.
+
+        Args:
+            a (App): The App instance.
+            ado_id (int): The ADO ID of the TaskItem to find.
+
+        Returns:
+            TaskItem: The TaskItem object with the matching ADO ID.
+            None: If there is no matching item.
+        """
+        query = Query().ado_id == ado_id
+        if a.matches.contains(query):
+            item = a.matches.search(query)
+            return cls(**item[0])
+        else:
+            return None
+
+    def save(self, a: App) -> None:
+        """
+        Save the TaskItem to the database.
+
+        Args:
+            a (App): The App instance.
+
+        Returns:
+            None
+        """
+        task_data = {
+            "ado_id": self.ado_id,
+            "ado_rev": self.ado_rev,
+            "title": self.title,
+            "item_type": self.item_type,
+            "url": self.url,
+            "asana_gid": self.asana_gid,
+            "asana_updated": self.asana_updated,
+            "assigned_to": self.assigned_to,
+            "created_date": self.created_date,
+            "updated_date": self.updated_date,
+        }
+        query = Query().ado_id == task_data["ado_id"]
+        if a.matches.contains(query):
+            a.matches.update(task_data, query)
+        else:
+            a.matches.insert(task_data)
+
+    def is_current(self, a: App) -> bool:
+        """
+        Check if the current TaskItem is up-to-date with its corresponding tasks in Azure DevOps (ADO) and Asana.
+
+        This method retrieves the corresponding tasks in ADO and Asana using the stored IDs, and compares their revision number and last updated time with the stored values. If either the ADO task's revision number or the Asana task's last updated time is different from the stored values, the TaskItem is considered not current.
+
+        Args:
+            a (App): The App instance.
+
+        Returns:
+            bool: True if the TaskItem is current, False otherwise.
+        """
+        ado_task = a.ado_wit_client.get_work_item(self.ado_id)
+        asana_task = get_asana_task(a, self.asana_gid)
+
+        if not ado_task or not asana_task:
+            return False
+
+        if (
+            ado_task.rev != self.ado_rev
+            or iso8601_utc(asana_task.modified_at) != self.asana_updated
+        ):
+            return False
+
+        return True
+
 
 def read_projects() -> list:
-    """Read projects from JSON file and return as list."""
+    """
+    Read projects from JSON file and return as a list.
+
+    Returns:
+        projects (list): List of projects with specific attributes.
+    """
+    # Initialize an empty list to store the projects
     projects = []
 
+    # Open the JSON file and load the data
     with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
         data = json.load(f)
 
+    # Iterate over each project in the data and append it to the projects list
     for project in data:
         projects.append(
             {
@@ -83,10 +183,26 @@ def read_projects() -> list:
                 "asanaProjectName": project["asanaProjectName"],
             }
         )
+
+    # Return the list of projects
     return projects
 
 
-def sync_project(a: app, project):
+def sync_project(a: App, project):
+    """
+    Synchronizes a project by mapping ADO work items to Asana tasks.
+
+    Args:
+        a (App): The main application object.
+        project (dict): A dictionary containing information about the project to sync. It should have the following keys:
+            - adoProjectName (str): The name of the ADO project.
+            - adoTeamName (str): The name of the ADO team within the ADO project.
+            - asanaWorkspaceName (str): The name of the Asana workspace.
+            - asanaProjectName (str): The name of the Asana project within the Asana workspace.
+
+    Returns:
+        None
+    """
     # Log the item being synced
     logging.info(
         f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
@@ -125,44 +241,76 @@ def sync_project(a: app, project):
         # Skip this item if is not assigned, or the assignee does not match an Asana user.
         ado_assigned_email = get_task_user_email(ado_task)
         if ado_assigned_email == None:
-            logging.info(
-                f"skipping item as it is not assigned {ado_task.fields['System.Title']}"
+            logging.debug(
+                f"{ado_task.fields['System.Title']}:skipping item as it is not assigned"
             )
             continue
         asana_matched_user = matching_user(asana_users, ado_assigned_email)
         if asana_matched_user == None:
             continue
 
-        current_work_item = work_item(
-            ado_id=ado_task.id,
-            title=ado_task.fields["System.Title"],
-            description=ado_task.fields.get("System.Description"),
-            status=ado_task.fields["System.State"],
-            item_type=ado_task.fields["System.WorkItemType"],
-            created_date=ado_task.fields["System.CreatedDate"],
-            priority=ado_task.fields["Microsoft.VSTS.Common.Priority"],
-            url=ado_task.url,
-            assigned_to=asana_matched_user.gid,
-        )
+        # Check if this is an already mapped item.
+        item = TaskItem.find_by_ado_id(a, ado_task.id)
+        if item == None:
+            logging.info(f"{ado_task.fields['System.Title']}:unmapped task")
+            item = TaskItem(
+                ado_id=ado_task.id,
+                ado_rev=ado_task.rev,
+                title=ado_task.fields["System.Title"],
+                item_type=ado_task.fields["System.WorkItemType"],
+                created_date=iso8601_utc(datetime.utcnow()),
+                updated_date=iso8601_utc(datetime.utcnow()),
+                url=ado_task.url,
+                assigned_to=asana_matched_user.gid,
+            )
+            # Check if there is a matching asana task with a matching title.
+            asana_task = get_asana_task_by_name(a, asana_project, item.asana_title)
+            if asana_task == None:
+                # The Asana task does not exist, create it and map the tasks
+                logging.info(
+                    f"{ado_task.fields['System.Title']}:no matching asana task exists, creating new task"
+                )
+                create_asana_task(
+                    a,
+                    asana_project,
+                    item,
+                )
+                continue
+            else:
+                # The Asana task exists, map the tasks in the db
+                logging.info(
+                    f"{ado_task.fields['System.Title']}:found a matching asana task by name, updating task"
+                )
+                if asana_task is not None:
+                    item.asana_gid = asana_task.gid
+                update_asana_task(
+                    a,
+                    item,
+                )
+                continue
 
-        # Get the corresponding Asana task by name
-        asana_task = get_asana_task(a, asana_project, current_work_item.asana_title)
-        if asana_task == None:
-            # The Asana task does not exist, create it
-            logging.info(f"creating task {current_work_item.asana_title}")
-            create_asana_task(
-                a,
-                asana_project,
-                current_work_item,
-            )
-        else:
-            # The Asana task exists, update it
-            logging.info(f"updating task {current_work_item.asana_title}")
-            update_asana_task(
-                a,
-                asana_task.gid,
-                current_work_item,
-            )
+        # If already mapped, check if the item needs an update (ado rev is higher, or asana item is newer).
+        if item.is_current(a):
+            logging.info(f"{item.asana_title}:task is already up to date")
+            continue
+
+        # Update the asana task, as it is not current.
+        logging.info(f"{item.asana_title}:task has been updated, updating task")
+        asana_task = get_asana_task(a, item.asana_gid)
+        if asana_task is None:
+            logging.error(f"No Asana task found with gid: {item.asana_gid}")
+            continue
+        item.ado_rev = ado_task.rev
+        item.title = ado_task.fields["System.Title"]
+        item.item_type = ado_task.fields["System.WorkItemType"]
+        item.updated_date = iso8601_utc(datetime.now())
+        item.url = ado_task.url
+        item.assigned_to = asana_matched_user.gid
+        item.asana_updated = iso8601_utc(asana_task.modified_at)
+        update_asana_task(
+            a,
+            item,
+        )
 
 
 def get_task_user_email(task: WorkItem) -> str:
@@ -198,7 +346,7 @@ def matching_user(user_list: list[UserResponse], email: str) -> UserResponse | N
     return None
 
 
-def get_asana_workspace(a: app, name) -> str:
+def get_asana_workspace(a: App, name) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
 
@@ -216,7 +364,7 @@ def get_asana_workspace(a: app, name) -> str:
         logging.error("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
 
 
-def get_asana_project(a: app, workspace_gid, name) -> str:
+def get_asana_project(a: App, workspace_gid, name) -> str:
     """
     Returns the project gid for the named Asana project.
 
@@ -236,7 +384,7 @@ def get_asana_project(a: app, workspace_gid, name) -> str:
         logging.error("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
 
-def get_asana_task(a: app, asana_project, task_name) -> object:
+def get_asana_task_by_name(a: App, asana_project, task_name) -> object:
     """
     Returns the entire task object for the named Asana task in the given project.
 
@@ -279,7 +427,48 @@ def get_asana_task(a: app, asana_project, task_name) -> object:
         logging.error("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
 
 
-def create_asana_task(a: app, asana_project: "str", task: "work_item"):
+def get_asana_task(a: App, task_gid) -> object | None:
+    """
+    Returns the entire task object for the Asana task with the given gid in the given project.
+
+    :param asana_project: The gid of the Asana project.
+    :type asana_project: str
+    :param task_gid: The name of the Asana task.
+    :type task_gid: str
+    :return: Task object or None if no task is found.
+    :rtype: object or None
+    """
+    api_instance = asana.TasksApi(a.asana_client)
+    try:
+        # Get all tasks in the project
+        opt_fields = [
+            "assignee_section",
+            "due_at",
+            "name",
+            "completed_at",
+            "tags",
+            "dependents",
+            "projects",
+            "completed",
+            "permalink_url",
+            "parent",
+            "assignee",
+            "assignee_status",
+            "num_subtasks",
+            "modified_at",
+            "workspace",
+            "due_on",
+        ]
+        api_response = api_instance.get_task(
+            task_gid,
+            opt_fields=opt_fields,
+        )
+        return api_response.data
+    except ApiException as e:
+        logging.error("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+
+
+def create_asana_task(a: App, asana_project: "str", task: "TaskItem"):
     """
     Create an Asana task in the specified project.
 
@@ -295,19 +484,38 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
     body = asana.TasksBody(
         {
             "name": task.asana_title,
-            "due_on": task.due_date,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "projects": [asana_project],
             "assignee": task.assigned_to,
         }
     )
     try:
-        tasks_api_instance.create_task(body)
+        result = tasks_api_instance.create_task(body)
+        # add the match to the db.
+        task.asana_gid = result.data.gid
+        task.asana_updated = iso8601_utc(result.data.modified_at)
+        task.updated_date = iso8601_utc(datetime.now())
+        task.save(a)
     except ApiException as e:
         logging.error("Exception when calling TasksApi->create_task: %s\n" % e)
 
 
-def update_asana_task(a: app, asana_task_id: str, task: work_item):
+def iso8601_utc(dt: datetime) -> str:
+    """
+    Convert a given datetime object to a string representation in ISO 8601 format with UTC timezone.
+
+    Args:
+        dt (datetime): A datetime object representing a specific date and time.
+
+    Returns:
+        str: A string representing the given datetime object in ISO 8601 format with UTC timezone.
+    """
+    if not dt.tzinfo:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def update_asana_task(a: App, task: TaskItem):
     """
     Update an Asana task with the provided task details.
 
@@ -323,19 +531,21 @@ def update_asana_task(a: app, asana_task_id: str, task: work_item):
     body = asana.TasksBody(
         {
             "name": task.asana_title,
-            "due_on": task.due_date,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
         }
     )
 
     try:
-        tasks_api_instance.update_task(body, asana_task_id)
+        result = tasks_api_instance.update_task(body, task.asana_gid)
+        task.asana_updated = iso8601_utc(result.data.modified_at)
+        task.updated_date = iso8601_utc(datetime.now())
+        task.save(a)
     except ApiException as e:
         logging.error("Exception when calling TasksApi->update_task: %s\n" % e)
 
 
-def get_asana_users(a: app, asana_workspace_gid: str) -> list[UserResponse]:
+def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
     """
     Retrieves a list of Asana users in a specific workspace.
 
