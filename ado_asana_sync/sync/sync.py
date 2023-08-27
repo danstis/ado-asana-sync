@@ -258,8 +258,8 @@ def sync_project(a: App, project):
                 ado_rev=ado_task.rev,
                 title=ado_task.fields["System.Title"],
                 item_type=ado_task.fields["System.WorkItemType"],
-                created_date=iso8601_utc(datetime.now()),
-                updated_date=iso8601_utc(datetime.now()),
+                item.created_date = iso8601_utc(datetime.utcnow()),
+                item.updated_date = iso8601_utc(datetime.utcnow()),
                 url=ado_task.url,
                 assigned_to=asana_matched_user.gid,
             )
