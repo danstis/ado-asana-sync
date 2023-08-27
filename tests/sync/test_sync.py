@@ -13,8 +13,6 @@ class TestWorkItem(unittest.TestCase):
             ado_rev=3,
             title="Test Title",
             item_type="User Story",
-            status="Test Status",
-            description="Test Description",
             url="https://testurl.example",
         )
 
@@ -34,12 +32,8 @@ class TestWorkItem(unittest.TestCase):
             ado_rev=1,
             title="Test Title",
             item_type="Task",
-            status="In Progress",
-            description="Test Description",
             url="https://example.com",
             assigned_to="John Doe",
-            priority="High",
-            due_date="2022-01-01",
             created_date="2021-01-01",
             updated_date="2021-12-31",
         )
@@ -55,8 +49,7 @@ class TestWorkItem(unittest.TestCase):
             ado_rev=42,
             title="Test Title",
             item_type="Task",
-            status="In Progress",
-            description="Test Description",
+            url="https://example.com",
         )
 
         # Assert that the asana_title returns the correct formatted title
@@ -66,7 +59,7 @@ class TestWorkItem(unittest.TestCase):
     def test_asana_title_with_empty_values(self):
         # Create a work_item object with all parameters provided as empty values
         work_item_obj = TaskItem(
-            ado_id=None, ado_rev=None, title="", item_type="", status="", description=""
+            ado_id=None, ado_rev=None, title="", item_type="", url=""
         )
 
         # Assert that the asana_title returns the correct formatted title
@@ -80,8 +73,7 @@ class TestWorkItem(unittest.TestCase):
             ado_rev="invalid",
             title=123,
             item_type=True,
-            status=None,
-            description=456,
+            url="https://example.com",
         )
 
         # Assert that the asana_title returns the correct formatted title
