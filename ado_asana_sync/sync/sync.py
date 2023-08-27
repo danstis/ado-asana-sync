@@ -30,6 +30,7 @@ class TaskItem:
         created_date (str): The creation date of the task in ISO 8601 format.
         updated_date (str): The last updated date of the task in ISO 8601 format.
     """
+
     def __init__(
         self,
         ado_id: int,
@@ -159,12 +160,20 @@ class TaskItem:
 
 
 def read_projects() -> list:
-    """Read projects from JSON file and return as list."""
+    """
+    Read projects from JSON file and return as a list.
+
+    Returns:
+        projects (list): List of projects with specific attributes.
+    """
+    # Initialize an empty list to store the projects
     projects = []
 
+    # Open the JSON file and load the data
     with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
         data = json.load(f)
 
+    # Iterate over each project in the data and append it to the projects list
     for project in data:
         projects.append(
             {
@@ -174,10 +183,26 @@ def read_projects() -> list:
                 "asanaProjectName": project["asanaProjectName"],
             }
         )
+
+    # Return the list of projects
     return projects
 
 
 def sync_project(a: App, project):
+    """
+    Synchronizes a project by mapping ADO work items to Asana tasks.
+
+    Args:
+        a (App): The main application object.
+        project (dict): A dictionary containing information about the project to sync. It should have the following keys:
+            - adoProjectName (str): The name of the ADO project.
+            - adoTeamName (str): The name of the ADO team within the ADO project.
+            - asanaWorkspaceName (str): The name of the Asana workspace.
+            - asanaProjectName (str): The name of the Asana project within the Asana workspace.
+
+    Returns:
+        None
+    """
     # Log the item being synced
     logging.info(
         f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
@@ -242,7 +267,9 @@ def sync_project(a: App, project):
             asana_task = get_asana_task_by_name(a, asana_project, item.asana_title)
             if asana_task == None:
                 # The Asana task does not exist, create it and map the tasks
-                logging.info(f"{ado_task.fields['System.Title']}:no matching asana task exists, creating new task")
+                logging.info(
+                    f"{ado_task.fields['System.Title']}:no matching asana task exists, creating new task"
+                )
                 create_asana_task(
                     a,
                     asana_project,
@@ -251,7 +278,9 @@ def sync_project(a: App, project):
                 continue
             else:
                 # The Asana task exists, map the tasks in the db
-                logging.info(f"{ado_task.fields['System.Title']}:found a matching asana task by name, updating task")
+                logging.info(
+                    f"{ado_task.fields['System.Title']}:found a matching asana task by name, updating task"
+                )
                 item.asana_gid = asana_task.gid
                 update_asana_task(
                     a,
