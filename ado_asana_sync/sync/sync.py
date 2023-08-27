@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import asana
-from ado_asana_sync.sync.app import app
+from ado_asana_sync.sync.app import App
 from asana import UserResponse
 from asana.rest import ApiException
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
@@ -10,7 +10,11 @@ from azure.devops.v7_0.work.models import TeamContext
 from datetime import datetime, timezone
 
 
-class work_item:
+class Mapping:
+    pass
+
+
+class TaskItem:
     # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
     def __init__(
         self,
@@ -89,7 +93,7 @@ def read_projects() -> list:
     return projects
 
 
-def sync_project(a: app, project):
+def sync_project(a: App, project):
     # Log the item being synced
     logging.info(
         f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
@@ -136,7 +140,7 @@ def sync_project(a: app, project):
         if asana_matched_user == None:
             continue
 
-        current_work_item = work_item(
+        current_work_item = TaskItem(
             ado_id=ado_task.id,
             ado_rev=ado_task.rev,
             title=ado_task.fields["System.Title"],
@@ -202,7 +206,7 @@ def matching_user(user_list: list[UserResponse], email: str) -> UserResponse | N
     return None
 
 
-def get_asana_workspace(a: app, name) -> str:
+def get_asana_workspace(a: App, name) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
 
@@ -220,7 +224,7 @@ def get_asana_workspace(a: app, name) -> str:
         logging.error("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
 
 
-def get_asana_project(a: app, workspace_gid, name) -> str:
+def get_asana_project(a: App, workspace_gid, name) -> str:
     """
     Returns the project gid for the named Asana project.
 
@@ -240,7 +244,7 @@ def get_asana_project(a: app, workspace_gid, name) -> str:
         logging.error("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
 
-def get_asana_task(a: app, asana_project, task_name) -> object:
+def get_asana_task(a: App, asana_project, task_name) -> object:
     """
     Returns the entire task object for the named Asana task in the given project.
 
@@ -283,7 +287,7 @@ def get_asana_task(a: app, asana_project, task_name) -> object:
         logging.error("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
 
 
-def create_asana_task(a: app, asana_project: "str", task: "work_item"):
+def create_asana_task(a: App, asana_project: "str", task: "TaskItem"):
     """
     Create an Asana task in the specified project.
 
@@ -337,7 +341,7 @@ def iso8601_utc(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
 
 
-def update_asana_task(a: app, asana_task_id: str, task: work_item):
+def update_asana_task(a: App, asana_task_id: str, task: TaskItem):
     """
     Update an Asana task with the provided task details.
 
@@ -365,7 +369,7 @@ def update_asana_task(a: app, asana_task_id: str, task: work_item):
         logging.error("Exception when calling TasksApi->update_task: %s\n" % e)
 
 
-def get_asana_users(a: app, asana_workspace_gid: str) -> list[UserResponse]:
+def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
     """
     Retrieves a list of Asana users in a specific workspace.
 

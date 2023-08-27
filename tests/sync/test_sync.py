@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 class TestWorkItem(unittest.TestCase):
     def setUp(self) -> None:
-        self.test_item = work_item(
+        self.test_item = TaskItem(
             ado_id=123,
             ado_rev=3,
             title="Test Title",
@@ -29,7 +29,7 @@ class TestWorkItem(unittest.TestCase):
     # Tests that the asana_title returns the correct formatted title when all parameters are provided
     def test_asana_title_with_all_parameters(self):
         # Create a work_item object with all parameters provided
-        work_item_obj = work_item(
+        work_item_obj = TaskItem(
             ado_id=1,
             ado_rev=1,
             title="Test Title",
@@ -50,7 +50,7 @@ class TestWorkItem(unittest.TestCase):
     # Tests that the asana_title returns the correct formatted title when only mandatory parameters are provided
     def test_asana_title_with_mandatory_parameters(self):
         # Create a work_item object with only mandatory parameters provided
-        work_item_obj = work_item(
+        work_item_obj = TaskItem(
             ado_id=1,
             ado_rev=42,
             title="Test Title",
@@ -65,7 +65,7 @@ class TestWorkItem(unittest.TestCase):
     # Tests that the asana_title returns the correct formatted title when all parameters are provided with empty values
     def test_asana_title_with_empty_values(self):
         # Create a work_item object with all parameters provided as empty values
-        work_item_obj = work_item(
+        work_item_obj = TaskItem(
             ado_id=None, ado_rev=None, title="", item_type="", status="", description=""
         )
 
@@ -75,7 +75,7 @@ class TestWorkItem(unittest.TestCase):
     # Tests that the asana_title returns the correct formatted title when all parameters are provided with invalid values
     def test_asana_title_with_invalid_values(self):
         # Create a work_item object with all parameters provided with invalid values
-        work_item_obj = work_item(
+        work_item_obj = TaskItem(
             ado_id="invalid",
             ado_rev="invalid",
             title=123,

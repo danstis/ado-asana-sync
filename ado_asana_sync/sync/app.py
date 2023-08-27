@@ -2,10 +2,10 @@ import os
 import asana
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
-from tinydb import TinyDB, Query
+from tinydb import TinyDB
 
 
-class app:
+class App:
     def __init__(
         self,
         ado_pat=os.environ.get("ADO_PAT"),
