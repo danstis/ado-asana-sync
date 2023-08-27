@@ -296,6 +296,9 @@ def sync_project(a: App, project):
         # Update the asana task, as it is not current.
         logging.info(f"{item.asana_title}:task has been updated, updating task")
         asana_task = get_asana_task(a, item.asana_gid)
+        if asana_task is None:
+            logging.error(f'No Asana task found with gid: {item.asana_gid}')
+            continue
         item.ado_rev = ado_task.rev
         item.title = ado_task.fields["System.Title"]
         item.item_type = ado_task.fields["System.WorkItemType"]
