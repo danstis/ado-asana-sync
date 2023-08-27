@@ -137,6 +137,12 @@ class TestIso8601Utc(unittest.TestCase):
         result = iso8601_utc(dt)
         self.assertEqual(result, "2024-02-29T12:00:00+00:00")
 
+     # Tests that the function assumes a datetime object without a timezone is in UTC.
+    def test_convert_naive_datetime(self):
+        dt = datetime(2022, 1, 1, 12, 0, 0)
+        result = iso8601_utc(dt)
+        self.assertEqual(result, "2022-01-01T12:00:00+00:00")
+
 
 class TestMatchingUser(unittest.TestCase):
     # Tests that matching_user returns the matching user when the email exists in the user_list.
