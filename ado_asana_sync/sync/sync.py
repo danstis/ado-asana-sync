@@ -13,7 +13,23 @@ from tinydb import Query
 
 
 class TaskItem:
-    # https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1&tabs=HTTP#examples
+    """
+    Represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
+
+    Each TaskItem object corresponds to a work item in ADO and a task in Asana. It contains information about the task such as its ID, revision number, title, type, URL, and the IDs of the corresponding Asana task and user.
+
+    Attributes:
+        ado_id (int): The ID of the task in ADO.
+        ado_rev (int): The revision number of the task in ADO.
+        title (str): The title of the task.
+        item_type (str): The type of the task.
+        url (str): The URL of the task in ADO.
+        asana_gid (str): The ID of the corresponding task in Asana.
+        asana_updated (str): The last updated time of the Asana task in ISO 8601 format.
+        assigned_to (str): The ID of the user to whom the task is assigned in Asana.
+        created_date (str): The creation date of the task in ISO 8601 format.
+        updated_date (str): The last updated date of the task in ISO 8601 format.
+    """
     def __init__(
         self,
         ado_id: int,
