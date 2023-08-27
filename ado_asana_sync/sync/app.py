@@ -6,12 +6,40 @@ from tinydb import TinyDB
 
 
 class App:
+    """
+    Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
+
+    Args:
+        ado_pat (str, optional): ADO Personal Access Token. Defaults to value retrieved from environment variable "ADO_PAT".
+        ado_url (str, optional): ADO URL. Defaults to value retrieved from environment variable "ADO_URL".
+        asana_token (str, optional): Asana access token. Defaults to value retrieved from environment variable "ASANA_TOKEN".
+
+    Attributes:
+        ado_pat (str): ADO Personal Access Token.
+        ado_url (str): ADO URL.
+        asana_token (str): Asana access token.
+        ado_core_client: ADO core client.
+        ado_work_client: ADO work client.
+        ado_wit_client: ADO work item tracking client.
+        asana_client: Asana client.
+        db: TinyDB database.
+        matches: TinyDB table named "matches".
+    """
+
     def __init__(
         self,
         ado_pat=os.environ.get("ADO_PAT"),
         ado_url=os.environ.get("ADO_URL"),
         asana_token=os.environ.get("ASANA_TOKEN"),
     ) -> None:
+        """
+        Initializes the App object with the provided ADO PAT, ADO URL, and Asana token.
+
+        Args:
+            ado_pat (str, optional): ADO Personal Access Token. Defaults to value retrieved from environment variable "ADO_PAT".
+            ado_url (str, optional): ADO URL. Defaults to value retrieved from environment variable "ADO_URL".
+            asana_token (str, optional): Asana access token. Defaults to value retrieved from environment variable "ASANA_TOKEN".
+        """
         self.ado_pat = ado_pat
         self.ado_url = ado_url
         self.asana_token = asana_token
@@ -21,6 +49,9 @@ class App:
         self.asana_client = None
 
     def connect(self):
+        """
+        Connects to ADO and Asana, and sets up the TinyDB database.
+        """
         # connect ADO
         ado_credentials = BasicAuthentication("", self.ado_pat)
         ado_connection = Connection(base_url=self.ado_url, creds=ado_credentials)
