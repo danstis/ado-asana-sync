@@ -8,7 +8,7 @@ app_config = App()
 try:
     app_config.connect()
 except Exception as e:
-    logging.error(f'Failed to connect: {e}')
+    logging.error("Failed to connect: %s", e)
 
 p = read_projects()
 for i in p:
