@@ -2,11 +2,11 @@ import os
 import json
 import logging
 import asana
+from ado_asana_sync.sync.app import app
 from asana import UserResponse
 from asana.rest import ApiException
-from azure.devops.v7_0.work.models import TeamContext
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
-from ado_asana_sync.sync.app import app
+from azure.devops.v7_0.work.models import TeamContext
 from datetime import datetime, timezone
 
 
@@ -307,10 +307,6 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
     )
     try:
         result = tasks_api_instance.create_task(body)
-        # Convert the created_at date to ISO8601 UTC.
-        dt = result.data.created_at.replace(tzinfo=timezone.utc).astimezone(
-            timezone.utc
-        )
         # add the match to the db.
         a.matches.insert(
             {
@@ -318,11 +314,27 @@ def create_asana_task(a: app, asana_project: "str", task: "work_item"):
                 "ado_id": task.ado_id,
                 "ado_rev": task.ado_rev,
                 "asana_id": result.data.gid,
-                "asana_timestamp": dt.isoformat(),
+                "asana_timestamp": iso8601_utc(result.data.created_at),
+                "last_updated": iso8601_utc(datetime.now()),
             }
         )
     except ApiException as e:
         logging.error("Exception when calling TasksApi->create_task: %s\n" % e)
+
+
+def iso8601_utc(dt: datetime) -> str:
+    """
+    Convert a given datetime object to a string representation in ISO 8601 format with UTC timezone.
+
+    Args:
+        dt (datetime): A datetime object representing a specific date and time.
+
+    Returns:
+        str: A string representing the given datetime object in ISO 8601 format with UTC timezone.
+    """
+    if not dt.tzinfo:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
 
 
 def update_asana_task(a: app, asana_task_id: str, task: work_item):
