@@ -5,7 +5,10 @@ from ado_asana_sync.sync.app import App
 # Create an instance of the app configuration and connect to the services.
 logging.basicConfig(level=logging.INFO)
 app_config = App()
-app_config.connect()
+try:
+    app_config.connect()
+except Exception as e:
+    logging.error(f'Failed to connect: {e}')
 
 p = read_projects()
 for i in p:
