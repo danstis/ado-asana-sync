@@ -132,6 +132,17 @@ class TaskItem:
             a.matches.insert(task_data)
 
     def is_current(self, a: App) -> bool:
+        """
+        Check if the current TaskItem is up-to-date with its corresponding tasks in Azure DevOps (ADO) and Asana.
+
+        This method retrieves the corresponding tasks in ADO and Asana using the stored IDs, and compares their revision number and last updated time with the stored values. If either the ADO task's revision number or the Asana task's last updated time is different from the stored values, the TaskItem is considered not current.
+
+        Args:
+            a (App): The App instance.
+
+        Returns:
+            bool: True if the TaskItem is current, False otherwise.
+        """
         ado_task = a.ado_wit_client.get_work_item(self.ado_id)
         asana_task = get_asana_task(a, self.asana_gid)
 
