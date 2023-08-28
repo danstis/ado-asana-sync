@@ -374,8 +374,7 @@ def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
         if display_name is None or email is None:
             return None
         return ADOAssignedUser(display_name, email)
-    else:
-        return None
+    return None
 
 
 def matching_user(
