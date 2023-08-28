@@ -22,6 +22,7 @@ class App:
         ado_work_client: ADO work client.
         ado_wit_client: ADO work item tracking client.
         asana_client: Asana client.
+        asana_page_size: The default page size for API calls, can be between 1-100.
         db: TinyDB database.
         matches: TinyDB table named "matches".
     """
