@@ -11,7 +11,6 @@ from azure.devops.v7_0.work.models import TeamContext
 from datetime import datetime, timezone
 from tinydb import Query
 
-
 class TaskItem:
     """
     Represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
@@ -227,6 +226,14 @@ def sync_project(a: App, project):
         a, asana_workspace_id, project["asanaProjectName"]
     )
 
+    # Get all Asana Tasks in this project.
+    logging.info(
+        "Getting all Asana tasks for project %s [%s]",
+        project["adoProjectName"],
+        asana_project,
+    )
+    asana_project_tasks = get_asana_project_tasks(a, asana_project)
+
     # Get the backlog items for the ADO project and team
     ado_items = a.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
@@ -264,7 +271,7 @@ def sync_project(a: App, project):
                 assigned_to=asana_matched_user.gid,
             )
             # Check if there is a matching asana task with a matching title.
-            asana_task = get_asana_task_by_name(a, asana_project, item.asana_title)
+            asana_task = get_asana_task_by_name(asana_project_tasks, item.asana_title)
             if asana_task == None:
                 # The Asana task does not exist, create it and map the tasks
                 logging.info(
@@ -384,47 +391,84 @@ def get_asana_project(a: App, workspace_gid, name) -> str:
         logging.error("Exception when calling ProjectsApi->get_projects: %s\n" % e)
 
 
-def get_asana_task_by_name(a: App, asana_project, task_name) -> object:
+def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
     """
-    Returns the entire task object for the named Asana task in the given project.
+    Returns the entire task object for the named Asana task from the given list of tasks.
 
-    :param asana_project: The gid of the Asana project.
-    :type asana_project: str
+    :param task_list: List of Asana tasks to search in.
+    :type task_list: list[object]
     :param task_name: The name of the Asana task.
     :type task_name: str
     :return: Task object or None if no task is found.
     :rtype: object or None
     """
+
+    for t in task_list:
+        if t.name == task_name:
+            return t
+
+
+def get_asana_project_tasks(a: App, asana_project) -> list[object]:
+    """
+    Returns a list of task objects for the given project.
+
+    :param asana_project: The gid of the Asana project.
+    :type asana_project: str
+    :return: Task object or None if no task is found.
+    :rtype: object or None
+    """
     api_instance = asana.TasksApi(a.asana_client)
+    opt_fields = [
+        "assignee_section",
+        "due_at",
+        "name",
+        "completed_at",
+        "tags",
+        "dependents",
+        "projects",
+        "completed",
+        "permalink_url",
+        "parent",
+        "assignee",
+        "assignee_status",
+        "num_subtasks",
+        "modified_at",
+        "workspace",
+        "due_on",
+    ]
+    all_tasks = []
+    offset = None
     try:
         # Get all tasks in the project
-        opt_fields = [
-            "assignee_section",
-            "due_at",
-            "name",
-            "completed_at",
-            "tags",
-            "dependents",
-            "projects",
-            "completed",
-            "permalink_url",
-            "parent",
-            "assignee",
-            "assignee_status",
-            "num_subtasks",
-            "modified_at",
-            "workspace",
-            "due_on",
-        ]
-        api_response = api_instance.get_tasks(
-            project=asana_project,
-            opt_fields=opt_fields,
-        )
-        for t in api_response.data:
-            if t.name == task_name:
-                return t
+        while True:
+            api_params = {
+                "project": asana_project,
+                "limit": a.asana_page_size,
+                "opt_fields": opt_fields,
+            }
+            if offset:
+                api_params["offset"] = offset
+
+            api_response = api_instance.get_tasks(**api_params)
+
+            # Append tasks to the all_tasks list
+            all_tasks.extend(api_response.data)
+
+            # Check for continuation token in the response
+            offset = getattr(api_response.next_page, "offset", None)
+            # if api_response.next_page != None:
+            #     offset = api_response.next_page.offset
+            # else:
+            #     offset = None
+            if not offset:
+                break
+
+        return all_tasks
     except ApiException as e:
-        logging.error("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+        logging.error(
+            "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s\n"
+            % e
+        )
 
 
 def get_asana_task(a: App, task_gid) -> object | None:
@@ -465,7 +509,7 @@ def get_asana_task(a: App, task_gid) -> object | None:
         )
         return api_response.data
     except ApiException as e:
-        logging.error("Exception when calling TasksApi->get_tasks_in_project: %s\n" % e)
+        logging.error("Exception when calling TasksApi->get_task: %s\n" % e)
 
 
 def create_asana_task(a: App, asana_project: "str", task: "TaskItem"):
