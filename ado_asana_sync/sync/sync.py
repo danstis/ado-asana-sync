@@ -2,13 +2,14 @@ from __future__ import annotations
 import os
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import asana
 from ado_asana_sync.sync.app import App
 from asana import UserResponse
 from asana.rest import ApiException
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from azure.devops.v7_0.work.models import TeamContext
-from datetime import datetime, timezone
 from tinydb import Query
 
 
@@ -268,19 +269,19 @@ def sync_project(a: App, project):
         ado_task = a.ado_wit_client.get_work_item(wi.target.id)
 
         # Skip this item if is not assigned, or the assignee does not match an Asana user.
-        ado_assigned_email = get_task_user_email(ado_task)
-        if ado_assigned_email == None:
+        ado_assigned = get_task_user(ado_task)
+        if ado_assigned is None:
             logging.debug(
                 f"{ado_task.fields['System.Title']}:skipping item as it is not assigned"
             )
             continue
-        asana_matched_user = matching_user(asana_users, ado_assigned_email)
-        if asana_matched_user == None:
+        asana_matched_user = matching_user(asana_users, ado_assigned)
+        if asana_matched_user is None:
             continue
 
         # Check if this is an already mapped item.
         item = TaskItem.find_by_ado_id(a, ado_task.id)
-        if item == None:
+        if item is None:
             logging.info(f"{ado_task.fields['System.Title']}:unmapped task")
             item = TaskItem(
                 ado_id=ado_task.id,
@@ -289,12 +290,14 @@ def sync_project(a: App, project):
                 item_type=ado_task.fields["System.WorkItemType"],
                 created_date=iso8601_utc(datetime.utcnow()),
                 updated_date=iso8601_utc(datetime.utcnow()),
-                url=safe_get(ado_task, "_links", "additional_properties", "html", "href"),
+                url=safe_get(
+                    ado_task, "_links", "additional_properties", "html", "href"
+                ),
                 assigned_to=asana_matched_user.gid,
             )
             # Check if there is a matching asana task with a matching title.
             asana_task = get_asana_task_by_name(asana_project_tasks, item.asana_title)
-            if asana_task == None:
+            if asana_task is None:
                 # The Asana task does not exist, create it and map the tasks
                 logging.info(
                     f"{ado_task.fields['System.Title']}:no matching asana task exists, creating new task"
@@ -342,35 +345,54 @@ def sync_project(a: App, project):
         )
 
 
-def get_task_user_email(task: WorkItem) -> str:
+@dataclass
+class ADOAssignedUser:
     """
-    Return the email address of the user assigned to the Azure DevOps work item.
+    Class to store the details of the assigned user in ADO.
+    """
+
+    display_name: str
+    email: str
+
+
+def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
+    """
+    Return the email and display name of the user assigned to the Azure DevOps work item.
     If no user is assigned, then return None.
 
     Args:
         task (WorkItem): The Azure DevOps work item object.
 
     Returns:
-        str: The email address of the user assigned to the work item. If no user is assigned, it returns None.
+        ADOAssignedUser: The details of the assigned user in ADO.
+        None: If the task is not assigned.
     """
-    assigned_user = task.fields.get("System.AssignedTo", None)
-    return assigned_user.get("uniqueName", None) if assigned_user else None
+    assigned_to = task.fields.get("System.AssignedTo", None)
+    if assigned_to is not None:
+        display_name = assigned_to.get("displayName", None)
+        email = assigned_to.get("uniqueName", None)
+        if display_name is None or email is None:
+            return None
+        return ADOAssignedUser(display_name, email)
+    return None
 
 
-def matching_user(user_list: list[UserResponse], email: str) -> UserResponse | None:
+def matching_user(
+    user_list: list[UserResponse], ado_user: ADOAssignedUser
+) -> UserResponse | None:
     """
     Check if a given email exists in a list of user objects.
 
     Args:
         user_list (list[UserResponse]): A list of UserResponse objects representing users.
-        email (str): A string representing the email to search for.
+        user (ADOAssignedUser): An ADO User representation, containing display_name and email.
 
     Returns:
         UserResponse: The matching asana user.
         None: If no matching user is found.
     """
     for user in user_list:
-        if user.email == email:
+        if user.email == ado_user.email or user.name == ado_user.display_name:
             return user
     return None
 
