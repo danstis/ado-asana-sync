@@ -336,7 +336,9 @@ def sync_project(a: App, project):
         item.title = ado_task.fields["System.Title"]
         item.item_type = ado_task.fields["System.WorkItemType"]
         item.updated_date = iso8601_utc(datetime.now())
-        item.url = ado_task.url
+        item.url = (
+            safe_get(ado_task, "_links", "additional_properties", "html", "href"),
+        )
         item.assigned_to = asana_matched_user.gid
         item.asana_updated = iso8601_utc(asana_task.modified_at)
         update_asana_task(
