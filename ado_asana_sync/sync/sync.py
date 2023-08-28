@@ -11,6 +11,7 @@ from azure.devops.v7_0.work.models import TeamContext
 from datetime import datetime, timezone
 from tinydb import Query
 
+
 class TaskItem:
     """
     Represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
@@ -158,6 +159,27 @@ class TaskItem:
         return True
 
 
+def safe_get(obj, *attrs_keys):
+    """
+    Safely retrieves nested attributes from an object.
+
+    Args:
+        obj: The object to retrieve attributes from.
+        *attrs_keys: Variable number of attribute keys.
+
+    Returns:
+        The value of the nested attribute if found, else None.
+    """
+    for attr_key in attrs_keys:
+        if isinstance(obj, dict):
+            obj = obj.get(attr_key)
+        else:
+            obj = getattr(obj, attr_key, None)
+        if obj is None:
+            return None
+    return obj
+
+
 def read_projects() -> list:
     """
     Read projects from JSON file and return as a list.
@@ -267,7 +289,7 @@ def sync_project(a: App, project):
                 item_type=ado_task.fields["System.WorkItemType"],
                 created_date=iso8601_utc(datetime.utcnow()),
                 updated_date=iso8601_utc(datetime.utcnow()),
-                url=ado_task.url,
+                url=safe_get(ado_task, "_links", "additional_properties", "html", "href"),
                 assigned_to=asana_matched_user.gid,
             )
             # Check if there is a matching asana task with a matching title.
