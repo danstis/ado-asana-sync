@@ -47,6 +47,7 @@ class App:
         self.ado_work_client = None
         self.ado_wit_client = None
         self.asana_client = None
+        self.asana_page_size = 100
 
     def connect(self):
         """

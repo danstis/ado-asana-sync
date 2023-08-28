@@ -11,7 +11,6 @@ from azure.devops.v7_0.work.models import TeamContext
 from datetime import datetime, timezone
 from tinydb import Query
 
-
 class TaskItem:
     """
     Represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
@@ -444,7 +443,7 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
         while True:
             api_params = {
                 "project": asana_project,
-                "limit": 100,
+                "limit": a.asana_page_size,
                 "opt_fields": opt_fields,
             }
             if offset:
