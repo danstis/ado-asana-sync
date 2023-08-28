@@ -91,7 +91,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.version.outputs.FullSemVer }}
-          body: ${{ steps.gen_note.outputs.changelog }}
+          # body: ${{ steps.gen_note.outputs.changelog }}
           discussion_category_name: Announcements
           generate_release_notes: true
       # - name: Create a new GitHub Discussion
