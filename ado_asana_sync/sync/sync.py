@@ -2,14 +2,14 @@ from __future__ import annotations
 import os
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import asana
 from ado_asana_sync.sync.app import App
 from asana import UserResponse
 from asana.rest import ApiException
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from azure.devops.v7_0.work.models import TeamContext
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from tinydb import Query
 
 
