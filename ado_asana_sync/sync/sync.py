@@ -5,8 +5,8 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import asana
-from ado_asana_sync.sync.app import App
 from asana import UserResponse, TagResponse
+from ado_asana_sync.sync.app import App
 from asana.rest import ApiException
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from azure.devops.v7_0.work.models import TeamContext
@@ -196,7 +196,7 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
     api_instance = asana.TagsApi(a.asana_client)
     try:
         # Get all tags in the workspace
-        logging.info("get workspace tag '%s'", tag)
+        logging.info("get workspace tag '%s'" % tag)
         api_response = api_instance.get_tags(workspace=workspace)
 
         # Iterate through the tags to find the desired tag
@@ -230,7 +230,7 @@ def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
     body = asana.TagsBody({"name": tag})
     try:
         # Create a tag
-        logging.info("tag '%s' not found, creating it", tag)
+        logging.info("tag '%s' not found, creating it" % tag)
         api_response = api_instance.create_tag_for_workspace(body, workspace)
         return api_response.data
     except ApiException as e:
@@ -262,7 +262,7 @@ def tag_asana_item(a: App, task: TaskItem, tag: TagResponse) -> None:
     if tag not in task_tags:
         # Add the tag to the task.
         try:
-            logging.info("adding tag '%s' to task '%s'", tag.name, task.asana_title)
+            logging.info("adding tag '%s' to task '%s'" % tag.name, task.asana_title)
             body = asana.TagsBody({"tag": tag.gid})
             api_instance.add_tag_for_task(body, task.asana_gid)
         except ApiException as e:
