@@ -1,6 +1,7 @@
 # Checklist
 
-- [ ] Assign labels to PR
+- [ ] Assign labels to PR.
+- [ ] Ensure PR title matches the conventional commits format.
 
 ## CodiumAI Agent Commands
 
