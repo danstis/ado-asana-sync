@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import asana
 from asana import UserResponse, TagResponse
-from ado_asana_sync.sync.app import App
 from asana.rest import ApiException
+from ado_asana_sync.sync.app import App
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from azure.devops.v7_0.work.models import TeamContext
 from tinydb import Query
@@ -196,7 +196,7 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
     api_instance = asana.TagsApi(a.asana_client)
     try:
         # Get all tags in the workspace
-        logging.info("get workspace tag '%s'" % tag)
+        logging.info("get workspace tag '%s'", tag)
         api_response = api_instance.get_tags(workspace=workspace)
 
         # Iterate through the tags to find the desired tag
@@ -205,7 +205,7 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
                 return t
         return None
     except ApiException as e:
-        logging.error("Exception when calling TagsApi->get_tags: %s\n" % e)
+        logging.error("Exception when calling TagsApi->get_tags: %s\n", e)
 
 
 def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
@@ -230,11 +230,13 @@ def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
     body = asana.TagsBody({"name": tag})
     try:
         # Create a tag
-        logging.info("tag '%s' not found, creating it" % tag)
+        logging.info("tag '%s' not found, creating it", tag)
         api_response = api_instance.create_tag_for_workspace(body, workspace)
         return api_response.data
     except ApiException as e:
-        print("Exception when calling TagsApi->create_tag_for_workspace: %s\n" % e)
+        logging.error(
+            "Exception when calling TagsApi->create_tag_for_workspace: %s\n", e
+        )
 
 
 def get_asana_task_tags(a: App, task: TaskItem) -> list[TagResponse]:
@@ -250,7 +252,7 @@ def get_asana_task_tags(a: App, task: TaskItem) -> list[TagResponse]:
         )
         return api_response.data
     except ApiException as e:
-        logging.error("Exception when calling TagsApi->get_tags_for_task: %s\n" % e)
+        logging.error("Exception when calling TagsApi->get_tags_for_task: %s\n", e)
 
 
 def tag_asana_item(a: App, task: TaskItem, tag: TagResponse) -> None:
@@ -262,11 +264,11 @@ def tag_asana_item(a: App, task: TaskItem, tag: TagResponse) -> None:
     if tag not in task_tags:
         # Add the tag to the task.
         try:
-            logging.info("adding tag '%s' to task '%s'" % tag.name, task.asana_title)
+            logging.info("adding tag '%s' to task '%s'", tag.name, task.asana_title)
             body = asana.TagsBody({"tag": tag.gid})
             api_instance.add_tag_for_task(body, task.asana_gid)
         except ApiException as e:
-            print("Exception when calling TasksApi->add_tag_for_task: %s\n" % e)
+            logging.error("Exception when calling TasksApi->add_tag_for_task: %s\n", e)
 
 
 def read_projects() -> list:
@@ -506,7 +508,7 @@ def get_asana_workspace(a: App, name) -> str:
             if w.name == name:
                 return w.gid
     except ApiException as e:
-        logging.error("Exception when calling WorkspacesApi->get_workspaces: %s\n" % e)
+        logging.error("Exception when calling WorkspacesApi->get_workspaces: %s\n", e)
 
 
 def get_asana_project(a: App, workspace_gid, name) -> str:
@@ -526,7 +528,7 @@ def get_asana_project(a: App, workspace_gid, name) -> str:
             if p.name == name:
                 return p.gid
     except ApiException as e:
-        logging.error("Exception when calling ProjectsApi->get_projects: %s\n" % e)
+        logging.error("Exception when calling ProjectsApi->get_projects: %s\n", e)
 
 
 def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
@@ -647,7 +649,7 @@ def get_asana_task(a: App, task_gid) -> object | None:
         )
         return api_response.data
     except ApiException as e:
-        logging.error("Exception when calling TasksApi->get_task: %s\n" % e)
+        logging.error("Exception when calling TasksApi->get_task: %s\n", e)
 
 
 def create_asana_task(
@@ -683,7 +685,7 @@ def create_asana_task(
         task.updated_date = iso8601_utc(datetime.now())
         task.save(a)
     except ApiException as e:
-        logging.error("Exception when calling TasksApi->create_task: %s\n" % e)
+        logging.error("Exception when calling TasksApi->create_task: %s\n", e)
 
 
 def iso8601_utc(dt: datetime) -> str:
@@ -732,7 +734,7 @@ def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:
         # Add the tag to the updated item if it does not already have it assigned.
         tag_asana_item(a, task, tag)
     except ApiException as e:
-        logging.error("Exception when calling TasksApi->update_task: %s\n" % e)
+        logging.error("Exception when calling TasksApi->update_task: %s\n", e)
 
 
 def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
@@ -759,4 +761,4 @@ def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
         )
         return api_response.data
     except ApiException as e:
-        logging.error("Exception when calling UsersApi->get_users: %s\n" % e)
+        logging.error("Exception when calling UsersApi->get_users: %s\n", e)
