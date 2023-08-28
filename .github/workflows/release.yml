@@ -46,7 +46,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    environment: release
+    # environment: release
     permissions:
       id-token: write
       contents: write
