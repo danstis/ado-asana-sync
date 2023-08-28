@@ -22,6 +22,7 @@ class App:
         ado_work_client: ADO work client.
         ado_wit_client: ADO work item tracking client.
         asana_client: Asana client.
+        asana_page_size: The default page size for API calls, can be between 1-100.
         db: TinyDB database.
         matches: TinyDB table named "matches".
     """
@@ -47,6 +48,7 @@ class App:
         self.ado_work_client = None
         self.ado_wit_client = None
         self.asana_client = None
+        self.asana_page_size = 100
 
     def connect(self):
         """

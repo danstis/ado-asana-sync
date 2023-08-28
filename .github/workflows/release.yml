@@ -49,6 +49,8 @@ jobs:
     environment: release
     permissions:
       id-token: write
+      contents: write
+      discussions: write
     needs: [version]
     steps:
       - uses: actions/checkout@v3.5.3
@@ -79,30 +81,12 @@ jobs:
         run: poetry build
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-      - name: Release Changelog Builder
-        uses: mikepenz/release-changelog-builder-action@v4 # https://github.com/marketplace/actions/release-changelog-builder
-        id: gen_note
         with:
-          configuration: ".changelog.json"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          skip-existing: true
       - name: Create Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v0.1.15 # https://github.com/marketplace/actions/gh-release
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.version.outputs.FullSemVer }}
-          release_name: v${{ needs.version.outputs.FullSemVer }}
-          body: ${{ steps.gen_note.outputs.changelog }}
-      - name: Create a new GitHub Discussion
-        id: create-discussion
-        uses: abirismyname/create-discussion@v1.x # https://github.com/marketplace/actions/create-github-discussion
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          title: Releaese v${{ needs.version.outputs.FullSemVer }}
-          body: |
-            [Release](https://github.com/danstis/ado-asana-sync/releases/tag/v${{ needs.version.outputs.FullSemVer }})
-            ${{ steps.gen_note.outputs.changelog }}
-          repository-id: ${{ secrets.DISCUSSION_REPO_ID }}
-          category-id: ${{ secrets.DISCUSSION_CATEGORY_ID }}
+          discussion_category_name: Announcements
+          generate_release_notes: true
