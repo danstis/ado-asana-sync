@@ -77,8 +77,8 @@ jobs:
         run: poetry version ${{ needs.version.outputs.MajorMinorPatch }}
       - name: Build package
         run: poetry build
-      - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      # - name: Publish package distributions to PyPI
+      #   uses: pypa/gh-action-pypi-publish@release/v1
       # - name: Release Changelog Builder
       #   uses: mikepenz/release-changelog-builder-action@v4 # https://github.com/marketplace/actions/release-changelog-builder
       #   id: gen_note
