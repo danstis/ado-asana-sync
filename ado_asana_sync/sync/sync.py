@@ -347,6 +347,10 @@ def sync_project(a: App, project):
 
 @dataclass
 class ADOAssignedUser:
+    """
+    Class to store the details of the assigned user in ADO.
+    """
+
     display_name: str
     email: str
 
