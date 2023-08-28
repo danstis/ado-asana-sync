@@ -270,18 +270,18 @@ def sync_project(a: App, project):
 
         # Skip this item if is not assigned, or the assignee does not match an Asana user.
         ado_assigned = get_task_user(ado_task)
-        if ado_assigned == None:
+        if ado_assigned is None:
             logging.debug(
                 f"{ado_task.fields['System.Title']}:skipping item as it is not assigned"
             )
             continue
         asana_matched_user = matching_user(asana_users, ado_assigned)
-        if asana_matched_user == None:
+        if asana_matched_user is None:
             continue
 
         # Check if this is an already mapped item.
         item = TaskItem.find_by_ado_id(a, ado_task.id)
-        if item == None:
+        if item is None:
             logging.info(f"{ado_task.fields['System.Title']}:unmapped task")
             item = TaskItem(
                 ado_id=ado_task.id,
@@ -297,7 +297,7 @@ def sync_project(a: App, project):
             )
             # Check if there is a matching asana task with a matching title.
             asana_task = get_asana_task_by_name(asana_project_tasks, item.asana_title)
-            if asana_task == None:
+            if asana_task is None:
                 # The Asana task does not exist, create it and map the tasks
                 logging.info(
                     f"{ado_task.fields['System.Title']}:no matching asana task exists, creating new task"
