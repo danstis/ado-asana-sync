@@ -4,6 +4,7 @@ from ado_asana_sync.sync.sync import *
 from asana import UserResponse
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 
 class TestWorkItem(unittest.TestCase):
@@ -214,6 +215,36 @@ class TestMatchingUser(unittest.TestCase):
         result = matching_user(user_list, email)
 
         assert result is None
+
+
+class TestGetAsanaTaskByName(unittest.TestCase):
+    def test_task_found(self):
+        # Create a mock task object
+        mock_task = MagicMock()
+        mock_task.name = "Task 1"
+
+        # Create a list of mock tasks
+        task_list = [mock_task]
+
+        # Call the function being tested
+        result = get_asana_task_by_name(task_list, "Task 1")
+
+        # Assert that the result is the mock task
+        self.assertEqual(result, mock_task)
+
+    def test_task_not_found(self):
+        # Create a mock task object
+        mock_task = MagicMock()
+        mock_task.name = "Task 1"
+
+        # Create a list of mock tasks
+        task_list = [mock_task]
+
+        # Call the function being tested
+        result = get_asana_task_by_name(task_list, "Task 2")
+
+        # Assert that the result is None
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":
