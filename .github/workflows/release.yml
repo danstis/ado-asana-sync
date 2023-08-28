@@ -82,7 +82,7 @@ jobs:
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
       - name: Create Release
-        uses: softprops/action-gh-release@v0.1.15
+        uses: softprops/action-gh-release@v0.1.15 # https://github.com/marketplace/actions/gh-release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.version.outputs.FullSemVer }}
