@@ -219,11 +219,12 @@ class TestMatchingUser(unittest.TestCase):
 
 class TestGetAsanaTaskByName(unittest.TestCase):
     def test_task_found(self):
-        # Create a mock task object
+        """
+        Test case for verifying that a task can be found by name.
+        """
+
         mock_task = MagicMock()
         mock_task.name = "Task 1"
-
-        # Create a list of mock tasks
         task_list = [mock_task]
 
         # Call the function being tested
@@ -233,11 +234,12 @@ class TestGetAsanaTaskByName(unittest.TestCase):
         self.assertEqual(result, mock_task)
 
     def test_task_not_found(self):
-        # Create a mock task object
+        """
+        Test case for the scenario where the task is not found in the task list.
+        """
+
         mock_task = MagicMock()
         mock_task.name = "Task 1"
-
-        # Create a list of mock tasks
         task_list = [mock_task]
 
         # Call the function being tested
