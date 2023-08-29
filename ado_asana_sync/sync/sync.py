@@ -420,16 +420,16 @@ def sync_project(a: App, project):
 
         # If already mapped, check if the item needs an update (ado rev is higher, or asana item is newer).
         if existing_match.is_current(a):
-            logging.info(f"{existing_match.asana_title}:task is already up to date")
+            logging.info(f"%s:task is already up to date", existing_match.asana_title)
             continue
 
         # Update the asana task, as it is not current.
         logging.info(
-            f"{existing_match.asana_title}:task has been updated, updating task"
+            f"%s:task has been updated, updating task", existing_match.asana_title
         )
         asana_task = get_asana_task(a, existing_match.asana_gid)
         if asana_task is None:
-            logging.error(f"No Asana task found with gid: {existing_match.asana_gid}")
+            logging.error(f"No Asana task found with gid: %s", existing_match.asana_gid)
             continue
         existing_match.ado_rev = ado_task.rev
         existing_match.title = ado_task.fields["System.Title"]
