@@ -18,8 +18,6 @@ RUN pip install "poetry==${POETRY_VERSION}"
 COPY pyproject.toml poetry.lock /app/
 RUN poetry config virtualenvs.create false \
     && poetry install --no-root
-# TODO: Fix versioning.
-# TODO: Add hadolint scanning to pipeline.
 # TODO: Add docker build and publish to release pipeline.
 COPY . .
 ARG VERSION=0.0.1
