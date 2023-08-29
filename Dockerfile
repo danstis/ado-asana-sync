@@ -21,9 +21,9 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-root --no-interaction --no-ansi
 # TODO: Add docker build and publish to release pipeline.
 
-COPY ado_asana_sync/ ./ado_asana_sync/
-COPY tests/ ./tests/
-COPY README.md LICENSE ./
+COPY ado_asana_sync/ /app/ado_asana_sync/
+COPY tests/ /app/tests/
+COPY README.md LICENSE /app/
 
 ARG VERSION=0.0.1
 RUN poetry version ${VERSION} \
