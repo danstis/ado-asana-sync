@@ -126,9 +126,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ if eq(github.ref, 'refs/heads/main') }}:
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ endif }}
+            ${{ github.ref == 'refs/heads/main' && env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.Major }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.Major }}.${{ needs.version.outputs.Minor }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.MajorMinorPatch }}
