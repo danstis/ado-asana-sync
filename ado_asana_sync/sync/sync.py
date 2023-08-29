@@ -386,7 +386,7 @@ def sync_project(a: App, project):
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
-                assigned_to=asana_matched_user.gid,
+                assigned_to=getattr(asana_matched_user, "gid", None),
             )
             # Check if there is a matching asana task with a matching title.
             asana_task = get_asana_task_by_name(
@@ -438,7 +438,7 @@ def sync_project(a: App, project):
         existing_match.url = safe_get(
             ado_task, "_links", "additional_properties", "html", "href"
         )
-        existing_match.assigned_to = asana_matched_user.gid
+        existing_match.assigned_to = getattr(asana_matched_user, "gid", None)
         existing_match.asana_updated = iso8601_utc(asana_task.modified_at)
         update_asana_task(
             a,
@@ -493,6 +493,8 @@ def matching_user(
         UserResponse: The matching asana user.
         None: If no matching user is found.
     """
+    if ado_user is None:
+        return None
     for user in user_list:
         if user.email == ado_user.email or user.name == ado_user.display_name:
             return user
