@@ -108,6 +108,13 @@ jobs:
       - name: Static type check with mypy
         run: |
           poetry run mypy ado_asana_sync | tee mypy.out
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0 # https://github.com/marketplace/actions/hadolint-action
+        with:
+          dockerfile: Dockerfile
+          output-file: hadolint.out
+          format: json
+          failure-threshold: ignore
       - uses: actions/download-artifact@v3
         with:
           name: test-output

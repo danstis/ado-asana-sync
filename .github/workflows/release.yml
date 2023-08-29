@@ -8,6 +8,8 @@ on:
 
 env:
   PYTHON_VERSION: "3.10"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 # Add repo secrets (DISCUSSION_REPO_ID & DISCUSSION_CATEGORY_ID)
 # https://github.com/marketplace/actions/create-github-discussion#obtaining-the-repository-id-and-category-id
@@ -21,6 +23,8 @@ jobs:
     outputs:
       FullSemVer: ${{ steps.gitversion.outputs.FullSemVer }}
       MajorMinorPatch: ${{ steps.gitversion.outputs.MajorMinorPatch }} #TODO: Update to use valid python versions
+      Major: ${{ steps.gitversion.outputs.Major }}
+      Minor: ${{ steps.gitversion.outputs.Minor }}
     steps:
       - uses: actions/checkout@v3.5.3
         with:
@@ -36,6 +40,8 @@ jobs:
         run: |
           echo "::notice::FullSemVer ${{ steps.gitversion.outputs.FullSemVer }}"
           echo "::notice::MajorMinorPatch ${{ steps.gitversion.outputs.MajorMinorPatch }}"
+          echo "::notice::Major ${{ steps.gitversion.outputs.Major }}"
+          echo "::notice::Minor ${{ steps.gitversion.outputs.Minor }}"
       - name: Bump version and push tag # https://github.com/marketplace/actions/github-tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.1
@@ -90,3 +96,41 @@ jobs:
           tag_name: v${{ needs.version.outputs.FullSemVer }}
           discussion_category_name: Announcements
           generate_release_notes: true
+
+  docker:
+    name: Docker Build and Push
+    runs-on: ubuntu-latest
+    environment: release
+    needs: [version]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to the Container registry # https://github.com/marketplace/actions/docker-login
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push # https://github.com/marketplace/actions/build-and-push-docker-images
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ if eq(github.ref, 'refs/heads/main') }}:
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ endif }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.Major }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.Major }}.${{ needs.version.outputs.Minor }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.MajorMinorPatch }}
+          build-args: |
+            VERSION=${{ needs.version.outputs.MajorMinorPatch }}

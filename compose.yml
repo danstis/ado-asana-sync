@@ -1,0 +1,16 @@
+# docker compose up --build --remove-orphans
+version: '3'
+name: ado-asana-sync
+
+services:
+  sync:
+    image: ghcr.io/danstis/ado-asana-sync-sync:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./data:/app/data
+    environment:
+      ADO_PAT: ${ADO_PAT}
+      ADO_URL: ${ADO_URL}
+      ASANA_TOKEN: ${ASANA_TOKEN}
