@@ -6,6 +6,7 @@ ENV PYTHONFAULTHANDLER=1 \
 
 WORKDIR /app
 
+# Build image
 FROM base AS builder
 
 ENV PIP_DEFAULT_TIMEOUT=100 \
@@ -19,11 +20,16 @@ COPY pyproject.toml poetry.lock /app/
 RUN poetry config virtualenvs.create false \
     && poetry install --no-root --no-interaction --no-ansi
 # TODO: Add docker build and publish to release pipeline.
-COPY . .
+
+COPY ado_asana_sync/ ./ado_asana_sync/
+COPY tests/ ./tests/
+COPY README.md LICENSE ./
+
 ARG VERSION=0.0.1
 RUN poetry version ${VERSION} \
     && poetry build
 
+# Final Image
 FROM base AS final
 
 RUN useradd -m syncuser
