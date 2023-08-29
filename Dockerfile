@@ -17,7 +17,7 @@ RUN pip install "poetry==${POETRY_VERSION}"
 
 COPY pyproject.toml poetry.lock /app/
 RUN poetry config virtualenvs.create false \
-    && poetry install --no-root
+    && poetry install --no-root --no-interaction --no-ansi
 # TODO: Add docker build and publish to release pipeline.
 COPY . .
 ARG VERSION=0.0.1
@@ -25,6 +25,8 @@ RUN poetry version ${VERSION} \
     && poetry build
 
 FROM base AS final
+
+RUN useradd -m syncuser
 
 ENV ADO_PAT=${ADO_PAT} \
     ADO_URL=${ADO_URL} \
@@ -36,4 +38,5 @@ ENV ADO_PAT=${ADO_PAT} \
 COPY --from=builder /app/dist /app/.tmp
 RUN pip install /app/.tmp/*.whl \
     && rm -rf /app/.tmp
+USER syncuser
 CMD ["python", "-m", "ado_asana_sync.sync"]

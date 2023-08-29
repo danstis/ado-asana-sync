@@ -1,8 +1,10 @@
+__pycache__
 .aider*
 .changelog.json
 .devcontainer
 .editorconfig
 .env
+.git
 .github
 .gitignore
 .hadolint
