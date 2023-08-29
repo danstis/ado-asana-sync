@@ -4,7 +4,7 @@ name: ado-asana-sync
 
 services:
   sync:
-    image: ghcr.io/danstis/ado-asana-sync-sync:latest
+    image: ghcr.io/danstis/ado-asana-sync:latest
     build:
       context: .
       dockerfile: Dockerfile
