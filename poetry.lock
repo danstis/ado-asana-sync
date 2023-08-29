@@ -2,13 +2,13 @@
 
 [[package]]
 name = "asana"
-version = "4.0.7"
+version = "4.0.8"
 description = "Asana"
 optional = false
 python-versions = "*"
 files = [
-    {file = "asana-4.0.7-py3-none-any.whl", hash = "sha256:c641ac9be2c718f0ebc44ef09fced1cf566786275f3e246abc65fe05ecf6f5df"},
-    {file = "asana-4.0.7.tar.gz", hash = "sha256:8d9d5afa0b4a533e0d3bf8fe4e4087a8d18ff10c24b8871023313f4156fd6280"},
+    {file = "asana-4.0.8-py3-none-any.whl", hash = "sha256:ea405b8b353c113af61d25cf310101340fdbc45cca7883ca8f2f7fef8e1a327e"},
+    {file = "asana-4.0.8.tar.gz", hash = "sha256:f0f1ca91b04dd02fe16bb0e08866beb8b7350547a66b2d9ce94984d1498298ff"},
 ]
 
 [package.dependencies]
