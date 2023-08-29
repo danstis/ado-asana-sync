@@ -16,25 +16,26 @@ ENV PIP_DEFAULT_TIMEOUT=100 \
 RUN pip install "poetry==${POETRY_VERSION}"
 
 COPY pyproject.toml poetry.lock /app/
-RUN poetry config virtualenvs.in-project true \
+RUN poetry config virtualenvs.create false \
     && poetry install --no-root
-
+# TODO: Fix versioning.
+# TODO: Add hadolint scanning to pipeline.
+# TODO: Add docker build and publish to release pipeline.
 COPY . .
 ARG VERSION=0.0.1
 RUN poetry version ${VERSION} \
     && poetry build
-ENV VIRTUAL_ENV="/app/.venv"
-ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
-RUN pip install /app/dist/*.whl
 
 FROM base AS final
 
-ENV VIRTUAL_ENV="/app/.venv"
-ENV PATH="${VIRTUAL_ENV}/bin:${PATH}" \
-    ADO_PAT=${ADO_PAT} \
+ENV ADO_PAT=${ADO_PAT} \
     ADO_URL=${ADO_URL} \
-    ASANA_TOKEN=${ASANA_TOKEN}
+    ASANA_TOKEN=${ASANA_TOKEN} \
+    PIP_DEFAULT_TIMEOUT=100 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/dist /app/dist
+COPY --from=builder /app/dist /app/.tmp
+RUN pip install /app/.tmp/*.whl \
+    && rm -rf /app/.tmp
 CMD ["python", "-m", "ado_asana_sync.sync"]
