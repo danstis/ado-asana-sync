@@ -19,7 +19,6 @@ RUN pip install "poetry==${POETRY_VERSION}"
 COPY pyproject.toml poetry.lock /app/
 RUN poetry config virtualenvs.create false \
     && poetry install --no-root --no-interaction --no-ansi
-# TODO: Add docker build and publish to release pipeline.
 
 COPY ado_asana_sync/ /app/ado_asana_sync/
 COPY tests/ /app/tests/
