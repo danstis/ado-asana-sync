@@ -1,8 +1,11 @@
+import logging
 import os
 import asana
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class App:
@@ -13,11 +16,13 @@ class App:
         ado_pat (str, optional): ADO Personal Access Token. Defaults to value retrieved from environment variable "ADO_PAT".
         ado_url (str, optional): ADO URL. Defaults to value retrieved from environment variable "ADO_URL".
         asana_token (str, optional): Asana access token. Defaults to value retrieved from environment variable "ASANA_TOKEN".
+        asana_workspace_name (str, optional): Asana workspace name. Defaults to value retrieved from environment variable "ASANA_WORKSPACE_NAME".
 
     Attributes:
         ado_pat (str): ADO Personal Access Token.
         ado_url (str): ADO URL.
         asana_token (str): Asana access token.
+        asana_workspace_name (str): Asana workspace name.
         ado_core_client: ADO core client.
         ado_work_client: ADO work client.
         ado_wit_client: ADO work item tracking client.
@@ -29,21 +34,15 @@ class App:
 
     def __init__(
         self,
-        ado_pat=os.environ.get("ADO_PAT"),
-        ado_url=os.environ.get("ADO_URL"),
-        asana_token=os.environ.get("ASANA_TOKEN"),
+        ado_pat: str,
+        ado_url: str,
+        asana_token: str,
+        asana_workspace_name: str,
     ) -> None:
-        """
-        Initializes the App object with the provided ADO PAT, ADO URL, and Asana token.
-
-        Args:
-            ado_pat (str, optional): ADO Personal Access Token. Defaults to value retrieved from environment variable "ADO_PAT".
-            ado_url (str, optional): ADO URL. Defaults to value retrieved from environment variable "ADO_URL".
-            asana_token (str, optional): Asana access token. Defaults to value retrieved from environment variable "ASANA_TOKEN".
-        """
-        self.ado_pat = ado_pat
-        self.ado_url = ado_url
-        self.asana_token = asana_token
+        self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
+        self.ado_url = ado_url or os.environ.get("ADO_URL")
+        self.asana_token = asana_token or os.environ.get("ASANA_TOKEN")
+        self.asana_workspace_name = asana_workspace_name or os.environ.get("ASANA_WORKSPACE_NAME")
         self.ado_core_client = None
         self.ado_work_client = None
         self.ado_wit_client = None
