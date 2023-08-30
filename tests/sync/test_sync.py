@@ -245,6 +245,19 @@ class TestMatchingUser(unittest.TestCase):
 
         assert result is None
 
+    # Tests that matching_user returns None when the ado_user is None.
+    def test_matching_user_ado_user_none(self):
+        user_list = [
+            UserResponse(email="user1@example.com", name="User 1"),
+            UserResponse(email="user2@example.com", name="User 2"),
+            UserResponse(email="user3@example.com", name="User 3"),
+        ]
+        ado_user = None
+
+        result = matching_user(user_list, ado_user)
+
+        assert result is None
+
 
 class TestGetAsanaTaskByName(unittest.TestCase):
     def test_task_found(self):

@@ -361,22 +361,22 @@ def sync_project(a: App, project):
         # Get the work item from the ID
         ado_task = a.ado_wit_client.get_work_item(wi.target.id)
 
-        # Skip this item if is not assigned, or the assignee does not match an Asana user.
+        # Skip this item if is not assigned, or the assignee does not match an Asana user,
+        # unless it has previously been matched.
+        existing_match = TaskItem.find_by_ado_id(a, ado_task.id)
         ado_assigned = get_task_user(ado_task)
-        if ado_assigned is None:
+        if ado_assigned is None and existing_match is None:
             logging.debug(
                 f"{ado_task.fields['System.Title']}:skipping item as it is not assigned"
             )
             continue
         asana_matched_user = matching_user(asana_users, ado_assigned)
-        if asana_matched_user is None:
+        if asana_matched_user is None and existing_match is None:
             continue
 
-        # Check if this is an already mapped item.
-        item = TaskItem.find_by_ado_id(a, ado_task.id)
-        if item is None:
+        if existing_match is None:
             logging.info(f"{ado_task.fields['System.Title']}:unmapped task")
-            item = TaskItem(
+            existing_match = TaskItem(
                 ado_id=ado_task.id,
                 ado_rev=ado_task.rev,
                 title=ado_task.fields["System.Title"],
@@ -386,10 +386,12 @@ def sync_project(a: App, project):
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
-                assigned_to=asana_matched_user.gid,
+                assigned_to=getattr(asana_matched_user, "gid", None),
             )
             # Check if there is a matching asana task with a matching title.
-            asana_task = get_asana_task_by_name(asana_project_tasks, item.asana_title)
+            asana_task = get_asana_task_by_name(
+                asana_project_tasks, existing_match.asana_title
+            )
             if asana_task is None:
                 # The Asana task does not exist, create it and map the tasks
                 logging.info(
@@ -398,7 +400,7 @@ def sync_project(a: App, project):
                 create_asana_task(
                     a,
                     asana_project,
-                    item,
+                    existing_match,
                     tag,
                 )
                 continue
@@ -408,35 +410,39 @@ def sync_project(a: App, project):
                     f"{ado_task.fields['System.Title']}:found a matching asana task by name, updating task"
                 )
                 if asana_task is not None:
-                    item.asana_gid = asana_task.gid
+                    existing_match.asana_gid = asana_task.gid
                 update_asana_task(
                     a,
-                    item,
+                    existing_match,
                     tag,
                 )
                 continue
 
         # If already mapped, check if the item needs an update (ado rev is higher, or asana item is newer).
-        if item.is_current(a):
-            logging.info(f"{item.asana_title}:task is already up to date")
+        if existing_match.is_current(a):
+            logging.info("%s:task is already up to date", existing_match.asana_title)
             continue
 
         # Update the asana task, as it is not current.
-        logging.info(f"{item.asana_title}:task has been updated, updating task")
-        asana_task = get_asana_task(a, item.asana_gid)
+        logging.info(
+            "%s:task has been updated, updating task", existing_match.asana_title
+        )
+        asana_task = get_asana_task(a, existing_match.asana_gid)
         if asana_task is None:
-            logging.error(f"No Asana task found with gid: {item.asana_gid}")
+            logging.error("No Asana task found with gid: %s", existing_match.asana_gid)
             continue
-        item.ado_rev = ado_task.rev
-        item.title = ado_task.fields["System.Title"]
-        item.item_type = ado_task.fields["System.WorkItemType"]
-        item.updated_date = iso8601_utc(datetime.now())
-        item.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
-        item.assigned_to = asana_matched_user.gid
-        item.asana_updated = iso8601_utc(asana_task.modified_at)
+        existing_match.ado_rev = ado_task.rev
+        existing_match.title = ado_task.fields["System.Title"]
+        existing_match.item_type = ado_task.fields["System.WorkItemType"]
+        existing_match.updated_date = iso8601_utc(datetime.now())
+        existing_match.url = safe_get(
+            ado_task, "_links", "additional_properties", "html", "href"
+        )
+        existing_match.assigned_to = getattr(asana_matched_user, "gid", None)
+        existing_match.asana_updated = iso8601_utc(asana_task.modified_at)
         update_asana_task(
             a,
-            item,
+            existing_match,
             tag,
         )
 
@@ -487,6 +493,8 @@ def matching_user(
         UserResponse: The matching asana user.
         None: If no matching user is found.
     """
+    if ado_user is None:
+        return None
     for user in user_list:
         if user.email == ado_user.email or user.name == ado_user.display_name:
             return user
@@ -596,10 +604,6 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
 
             # Check for continuation token in the response
             offset = getattr(api_response.next_page, "offset", None)
-            # if api_response.next_page != None:
-            #     offset = api_response.next_page.offset
-            # else:
-            #     offset = None
             if not offset:
                 break
 
