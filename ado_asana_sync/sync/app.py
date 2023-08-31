@@ -1,8 +1,11 @@
+import logging
 import os
 import asana
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class App:
@@ -49,6 +52,7 @@ class App:
         self.ado_wit_client = None
         self.asana_client = None
         self.asana_page_size = 100
+        _LOGGER.debug("Created new App instance")
 
     def connect(self):
         """
