@@ -10,7 +10,10 @@
       "request": "launch",
       "module": "ado_asana_sync.sync",
       "justMyCode": true,
-      "envFile": "${workspaceFolder}/.env"
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+      }
     }
   ]
 }

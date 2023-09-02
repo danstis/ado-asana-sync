@@ -1,9 +1,12 @@
 from __future__ import annotations
-import os
-import json
-import logging
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Union
+import json
+import logging
+import os
+
 import asana
 from asana import UserResponse, TagResponse
 from asana.rest import ApiException
@@ -14,6 +17,7 @@ from tinydb import Query
 
 
 _LOGGER = logging.getLogger(__name__)
+_SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 
 
 class TaskItem:
@@ -33,6 +37,7 @@ class TaskItem:
         assigned_to (str): The ID of the user to whom the task is assigned in Asana.
         created_date (str): The creation date of the task in ISO 8601 format.
         updated_date (str): The last updated date of the task in ISO 8601 format.
+        state (str): The item state, for example New, Active, Closed.
     """
 
     def __init__(
@@ -47,6 +52,7 @@ class TaskItem:
         assigned_to: str = None,
         created_date: str = None,
         updated_date: str = None,
+        state: str = None,
     ) -> None:
         self.ado_id = ado_id
         self.ado_rev = ado_rev
@@ -58,6 +64,7 @@ class TaskItem:
         self.assigned_to = assigned_to
         self.created_date = created_date
         self.updated_date = updated_date
+        self.state = state
 
     def __str__(self) -> str:
         """
@@ -89,7 +96,7 @@ class TaskItem:
         return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {self.title}'
 
     @classmethod
-    def find_by_ado_id(cls, a: App, ado_id: int) -> TaskItem | None:
+    def find_by_ado_id(cls, a: App, ado_id: int) -> Union[TaskItem, None]:
         """
         Find and retrieve a TaskItem by its Azure DevOps (ADO) ID.
 
@@ -102,6 +109,35 @@ class TaskItem:
             None: If there is no matching item.
         """
         query = Query().ado_id == ado_id
+        if a.matches.contains(query):
+            item = a.matches.search(query)
+            return cls(**item[0])
+        else:
+            return None
+
+    @classmethod
+    def search(
+        cls, a: App, ado_id: int = None, asana_gid: str = None
+    ) -> Union[TaskItem, None]:
+        """
+        Search for a task item in the App object based on the given ADO ID or Asana GID.
+
+        Parameters:
+            a (App): The App object to search in.
+            ado_id (int, optional): The ADO ID to search for. Defaults to None.
+            asana_gid (str, optional): The Asana GID to search for. Defaults to None.
+
+        Returns:
+            Union[TaskItem, None]: The found TaskItem object if a match is found, otherwise None.
+        """
+        if ado_id is None and asana_gid is None:
+            return None
+
+        # Generate the query based on the input.
+        task = Query()
+        query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
+
+        # return the first matching item, or return None if not found.
         if a.matches.contains(query):
             item = a.matches.search(query)
             return cls(**item[0])
@@ -123,6 +159,7 @@ class TaskItem:
             "ado_rev": self.ado_rev,
             "title": self.title,
             "item_type": self.item_type,
+            "state": self.state,
             "url": self.url,
             "asana_gid": self.asana_gid,
             "asana_updated": self.asana_updated,
@@ -184,7 +221,7 @@ def safe_get(obj, *attrs_keys):
     return obj
 
 
-def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
+def get_tag_by_name(a: App, workspace: str, tag: str) -> Union[TagResponse, None]:
     """
     Retrieves a tag by its name from a given workspace.
 
@@ -366,11 +403,12 @@ def sync_project(a: App, project):
 
         # Skip this item if is not assigned, or the assignee does not match an Asana user,
         # unless it has previously been matched.
-        existing_match = TaskItem.find_by_ado_id(a, ado_task.id)
+        existing_match = TaskItem.search(a, ado_id=ado_task.id)
         ado_assigned = get_task_user(ado_task)
         if ado_assigned is None and existing_match is None:
             _LOGGER.debug(
-                f"{ado_task.fields['System.Title']}:skipping item as it is not assigned"
+                "%s:skipping item as it is not assigned",
+                ado_task.fields["System.Title"],
             )
             continue
         asana_matched_user = matching_user(asana_users, ado_assigned)
@@ -384,6 +422,7 @@ def sync_project(a: App, project):
                 ado_rev=ado_task.rev,
                 title=ado_task.fields["System.Title"],
                 item_type=ado_task.fields["System.WorkItemType"],
+                state=ado_task.fields["System.State"],
                 created_date=iso8601_utc(datetime.utcnow()),
                 updated_date=iso8601_utc(datetime.utcnow()),
                 url=safe_get(
@@ -409,9 +448,7 @@ def sync_project(a: App, project):
                 continue
             else:
                 # The Asana task exists, map the tasks in the db
-                _LOGGER.info(
-                    f"{ado_task.fields['System.Title']}:found a matching asana task by name, updating task"
-                )
+                _LOGGER.info(f"{ado_task.fields['System.Title']}:dating task")
                 if asana_task is not None:
                     existing_match.asana_gid = asana_task.gid
                 update_asana_task(
@@ -437,6 +474,7 @@ def sync_project(a: App, project):
         existing_match.ado_rev = ado_task.rev
         existing_match.title = ado_task.fields["System.Title"]
         existing_match.item_type = ado_task.fields["System.WorkItemType"]
+        existing_match.state = ado_task.fields["System.State"]
         existing_match.updated_date = iso8601_utc(datetime.now())
         existing_match.url = safe_get(
             ado_task, "_links", "additional_properties", "html", "href"
@@ -449,6 +487,60 @@ def sync_project(a: App, project):
             tag,
         )
 
+    # Process any existing matched items that are no longer returned in the backlog (closed or removed).
+    all_tasks = a.matches.all()
+    processed_item_ids = set(item.target.id for item in ado_items.work_items)
+    for wi in all_tasks:
+        if wi["ado_id"] not in processed_item_ids:
+            _LOGGER.debug("Processing closed item %s", wi["ado_id"])
+            # Check if this work item is older than the threshold. If so delete the mapping.
+            if (
+                datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
+            ).days > _SYNC_THRESHOLD:
+                _LOGGER.info(
+                    "%s:Task has not been updated in %s days, removing mapping",
+                    wi["asana_title"],
+                    _SYNC_THRESHOLD,
+                )
+                a.matches.remove(wi.doc_id)
+                continue
+
+            # Get the work item details from ADO.
+            existing_match = TaskItem.search(a, ado_id=wi["ado_id"])
+            ado_task = a.ado_wit_client.get_work_item(existing_match.ado_id)
+
+            # Check if the item is already up to date..
+            if existing_match.is_current(a):
+                _LOGGER.debug(
+                    "%s:Task is up to date",
+                    existing_match.asana_title,
+                )
+                continue
+            # Update the asana task, as it is not current.
+            asana_task = get_asana_task(a, existing_match.asana_gid)
+            ado_assigned = get_task_user(ado_task)
+            asana_matched_user = matching_user(asana_users, ado_assigned)
+            if asana_task is None:
+                _LOGGER.error(
+                    "No Asana task found with gid: %s", existing_match.asana_gid
+                )
+                continue
+            existing_match.ado_rev = ado_task.rev
+            existing_match.title = ado_task.fields["System.Title"]
+            existing_match.item_type = ado_task.fields["System.WorkItemType"]
+            existing_match.state = ado_task.fields["System.State"]
+            existing_match.updated_date = iso8601_utc(datetime.now())
+            existing_match.url = safe_get(
+                ado_task, "_links", "additional_properties", "html", "href"
+            )
+            existing_match.assigned_to = getattr(asana_matched_user, "gid", None)
+            existing_match.asana_updated = iso8601_utc(asana_task.modified_at)
+            update_asana_task(
+                a,
+                existing_match,
+                tag,
+            )
+
 
 @dataclass
 class ADOAssignedUser:
@@ -460,7 +552,7 @@ class ADOAssignedUser:
     email: str
 
 
-def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
+def get_task_user(task: WorkItem) -> Union[ADOAssignedUser, None]:
     """
     Return the email and display name of the user assigned to the Azure DevOps work item.
     If no user is assigned, then return None.
@@ -484,7 +576,7 @@ def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
 
 def matching_user(
     user_list: list[UserResponse], ado_user: ADOAssignedUser
-) -> UserResponse | None:
+) -> Union[UserResponse, None]:
     """
     Check if a given email exists in a list of user objects.
 
@@ -682,6 +774,7 @@ def create_asana_task(
             "projects": [asana_project],
             "assignee": task.assigned_to,
             "tag": [tag.gid],
+            "state": task.state == "Closed",
         }
     )
     try:
@@ -729,6 +822,7 @@ def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:
             "name": task.asana_title,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
+            "completed": task.state == "Closed",
         }
     )
 
