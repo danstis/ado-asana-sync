@@ -333,7 +333,6 @@ def read_projects() -> list:
             {
                 "adoProjectName": project["adoProjectName"],
                 "adoTeamName": project["adoTeamName"],
-                "asanaWorkspaceName": project["asanaWorkspaceName"],
                 "asanaProjectName": project["asanaProjectName"],
             }
         )
@@ -351,7 +350,6 @@ def sync_project(a: App, project):
         project (dict): A dictionary containing information about the project to sync. It should have the following keys:
             - adoProjectName (str): The name of the ADO project.
             - adoTeamName (str): The name of the ADO team within the ADO project.
-            - asanaWorkspaceName (str): The name of the Asana workspace.
             - asanaProjectName (str): The name of the Asana project within the Asana workspace.
 
     Returns:
@@ -362,7 +360,7 @@ def sync_project(a: App, project):
         "syncing from %s/%s -> %s/%s",
         project["adoProjectName"],
         project["adoTeamName"],
-        project["asanaWorkspaceName"],
+        a.asana_workspace_name,
         project["asanaProjectName"],
     )
 
@@ -375,7 +373,7 @@ def sync_project(a: App, project):
     )
 
     # Get the Asana workspace ID by name
-    asana_workspace_id = get_asana_workspace(a, project["asanaWorkspaceName"])
+    asana_workspace_id = get_asana_workspace(a, a.asana_workspace_name)
 
     # Get all Asana users in the workspace, this will enable user matching.
     asana_users = get_asana_users(a, asana_workspace_id)

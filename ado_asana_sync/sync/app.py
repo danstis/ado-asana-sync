@@ -34,20 +34,35 @@ class App:
 
     def __init__(
         self,
-        ado_pat: str,
-        ado_url: str,
-        asana_token: str,
-        asana_workspace_name: str,
+        ado_pat: str = None,
+        ado_url: str = None,
+        asana_token: str = None,
+        asana_workspace_name: str = None,
     ) -> None:
         self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
         self.ado_url = ado_url or os.environ.get("ADO_URL")
         self.asana_token = asana_token or os.environ.get("ASANA_TOKEN")
-        self.asana_workspace_name = asana_workspace_name or os.environ.get("ASANA_WORKSPACE_NAME")
+        self.asana_workspace_name = asana_workspace_name or os.environ.get(
+            "ASANA_WORKSPACE_NAME"
+        )
         self.ado_core_client = None
         self.ado_work_client = None
         self.ado_wit_client = None
         self.asana_client = None
         self.asana_page_size = 100
+
+        if not self.ado_pat:
+            raise ValueError("ADO_PAT must be provided")
+
+        if not self.ado_url:
+            raise ValueError("ADO_URL must be provided")
+
+        if not self.asana_token:
+            raise ValueError("ASANA_TOKEN must be provided")
+
+        if not self.asana_workspace_name:
+            raise ValueError("ASANA_WORKSPACE_NAME must be provided")
+
         _LOGGER.debug("Created new App instance")
 
     def connect(self):
