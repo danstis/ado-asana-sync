@@ -140,8 +140,7 @@ class TaskItem:
         if a.matches.contains(query):
             item = a.matches.search(query)
             return cls(**item[0])
-        else:
-            return None
+        return None
 
     def save(self, a: App) -> None:
         """
@@ -220,7 +219,7 @@ def safe_get(obj, *attrs_keys):
     return obj
 
 
-def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse| None:
+def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
     """
     Retrieves a tag by its name from a given workspace.
 
@@ -245,6 +244,7 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse| None:
         return None
     except ApiException as e:
         _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", e)
+        return None
 
 
 def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
@@ -356,7 +356,11 @@ def sync_project(a: App, project):
     """
     # Log the item being synced
     _LOGGER.info(
-        f'syncing from {project["adoProjectName"]}/{project["adoTeamName"]} -> {project["asanaWorkspaceName"]}/{project["asanaProjectName"]}'
+        "syncing from %s/%s -> %s/%s",
+        project["adoProjectName"],
+        project["adoTeamName"],
+        project["asanaWorkspaceName"],
+        project["asanaProjectName"],
     )
 
     # Get the ADO project by name
@@ -415,7 +419,7 @@ def sync_project(a: App, project):
             continue
 
         if existing_match is None:
-            _LOGGER.info(f"{ado_task.fields['System.Title']}:unmapped task")
+            _LOGGER.info("%s:unmapped task", ado_task.fields["System.Title"])
             existing_match = TaskItem(
                 ado_id=ado_task.id,
                 ado_rev=ado_task.rev,
@@ -436,7 +440,8 @@ def sync_project(a: App, project):
             if asana_task is None:
                 # The Asana task does not exist, create it and map the tasks
                 _LOGGER.info(
-                    f"{ado_task.fields['System.Title']}:no matching asana task exists, creating new task"
+                    "%s:no matching asana task exists, creating new task",
+                    ado_task.fields["System.Title"],
                 )
                 create_asana_task(
                     a,
@@ -447,7 +452,7 @@ def sync_project(a: App, project):
                 continue
             else:
                 # The Asana task exists, map the tasks in the db
-                _LOGGER.info(f"{ado_task.fields['System.Title']}:dating task")
+                _LOGGER.info("%s:dating task", ado_task.fields["System.Title"])
                 if asana_task is not None:
                     existing_match.asana_gid = asana_task.gid
                 update_asana_task(
@@ -551,7 +556,7 @@ class ADOAssignedUser:
     email: str
 
 
-def get_task_user(task: WorkItem) ->ADOAssignedUser| None:
+def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
     """
     Return the email and display name of the user assigned to the Azure DevOps work item.
     If no user is assigned, then return None.
@@ -575,7 +580,7 @@ def get_task_user(task: WorkItem) ->ADOAssignedUser| None:
 
 def matching_user(
     user_list: list[UserResponse], ado_user: ADOAssignedUser
-) -> UserResponse| None:
+) -> UserResponse | None:
     """
     Check if a given email exists in a list of user objects.
 
@@ -704,8 +709,7 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
         return all_tasks
     except ApiException as e:
         _LOGGER.error(
-            "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s\n"
-            % e
+            "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s", e
         )
 
 
