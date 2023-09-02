@@ -16,7 +16,8 @@ class App:
         ado_pat (str, optional): ADO Personal Access Token. Defaults to value retrieved from environment variable "ADO_PAT".
         ado_url (str, optional): ADO URL. Defaults to value retrieved from environment variable "ADO_URL".
         asana_token (str, optional): Asana access token. Defaults to value retrieved from environment variable "ASANA_TOKEN".
-        asana_workspace_name (str, optional): Asana workspace name. Defaults to value retrieved from environment variable "ASANA_WORKSPACE_NAME".
+        asana_workspace_name (str, optional): Asana workspace name. Defaults to value retrieved from environment variable
+         "ASANA_WORKSPACE_NAME".
 
     Attributes:
         ado_pat (str): ADO Personal Access Token.
