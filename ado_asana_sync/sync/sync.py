@@ -23,7 +23,8 @@ class TaskItem:
     """
     Represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
 
-    Each TaskItem object corresponds to a work item in ADO and a task in Asana. It contains information about the task such as its ID, revision number, title, type, URL, and the IDs of the corresponding Asana task and user.
+    Each TaskItem object corresponds to a work item in ADO and a task in Asana. It contains information about the task such as
+    its ID, revision number, title, type, URL, and the IDs of the corresponding Asana task and user.
 
     Attributes:
         ado_id (int): The ID of the task in ADO.
@@ -175,7 +176,9 @@ class TaskItem:
         """
         Check if the current TaskItem is up-to-date with its corresponding tasks in Azure DevOps (ADO) and Asana.
 
-        This method retrieves the corresponding tasks in ADO and Asana using the stored IDs, and compares their revision number and last updated time with the stored values. If either the ADO task's revision number or the Asana task's last updated time is different from the stored values, the TaskItem is considered not current.
+        This method retrieves the corresponding tasks in ADO and Asana using the stored IDs, and compares their revision number
+        and last updated time with the stored values. If either the ADO task's revision number or the Asana task's last updated
+        time is different from the stored values, the TaskItem is considered not current.
 
         Args:
             a (App): The App instance.
@@ -709,7 +712,8 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
         return all_tasks
     except ApiException as e:
         _LOGGER.error(
-            "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s", e
+            "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s",
+            e,
         )
 
 
@@ -850,7 +854,8 @@ def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
         asana_workspace_gid (str): The ID of the Asana workspace to retrieve users from.
 
     Returns:
-        list(asana.UserResponse): A list of `asana.UserResponse` objects representing the Asana users in the specified workspace.
+        list(asana.UserResponse): A list of `asana.UserResponse` objects representing the Asana users in the specified
+        workspace.
     """
     users_api_instance = asana.UsersApi(a.asana_client)
     opt_fields = [
