@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 
-class TestWorkItem(unittest.TestCase):
+class TestTaskItem(unittest.TestCase):
     def setUp(self) -> None:
         self.test_item = TaskItem(
             ado_id=123,
@@ -117,9 +117,7 @@ class TestGetTaskUserEmail(unittest.TestCase):
                 "displayName": "John Doe",
             }
         }
-        ado_user = ADOAssignedUser(
-            display_name="John Doe", email="john.doe"
-        )
+        ado_user = ADOAssignedUser(display_name="John Doe", email="john.doe")
         assert get_task_user(task) == ado_user
 
     # Tests that the function returns None when the System.AssignedTo field is present but is None
