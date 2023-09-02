@@ -48,6 +48,7 @@ class App:
         self.ado_wit_client = None
         self.asana_client = None
         self.asana_page_size = 100
+        _LOGGER.debug("Created new App instance")
 
     def connect(self):
         """
