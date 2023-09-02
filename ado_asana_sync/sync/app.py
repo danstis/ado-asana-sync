@@ -52,15 +52,19 @@ class App:
         self.asana_page_size = 100
 
         if not self.ado_pat:
+            _LOGGER.fatal("ADO_PAT must be provided")
             raise ValueError("ADO_PAT must be provided")
 
         if not self.ado_url:
+            _LOGGER.fatal("ADO_URL must be provided")
             raise ValueError("ADO_URL must be provided")
 
         if not self.asana_token:
+            _LOGGER.fatal("ASANA_TOKEN must be provided")
             raise ValueError("ASANA_TOKEN must be provided")
 
         if not self.asana_workspace_name:
+            _LOGGER.fatal("ASANA_WORKSPACE_NAME must be provided")
             raise ValueError("ASANA_WORKSPACE_NAME must be provided")
 
         _LOGGER.debug("Created new App instance")
