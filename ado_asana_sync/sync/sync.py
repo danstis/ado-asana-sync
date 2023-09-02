@@ -236,11 +236,11 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
     """
     api_instance = asana.TagsApi(a.asana_client)
     try:
-        # Get all tags in the workspace
+        # Get all tags in the workspace.
         _LOGGER.info("get workspace tag '%s'", tag)
         api_response = api_instance.get_tags(workspace=workspace)
 
-        # Iterate through the tags to find the desired tag
+        # Iterate through the tags to find the desired tag.
         for t in api_response.data:
             if t.name == tag:
                 return t
@@ -355,7 +355,7 @@ def sync_project(a: App, project):
     Returns:
         None
     """
-    # Log the item being synced
+    # Log the item being synced.
     _LOGGER.info(
         "syncing from %s/%s -> %s/%s",
         project["adoProjectName"],
@@ -364,15 +364,15 @@ def sync_project(a: App, project):
         project["asanaProjectName"],
     )
 
-    # Get the ADO project by name
+    # Get the ADO project by name.
     ado_project = a.ado_core_client.get_project(project["adoProjectName"])
 
-    # Get the ADO team by name within the ADO project
+    # Get the ADO team by name within the ADO project.
     ado_team = a.ado_core_client.get_team(
         project["adoProjectName"], project["adoTeamName"]
     )
 
-    # Get the Asana workspace ID by name
+    # Get the Asana workspace ID by name.
     asana_workspace_id = get_asana_workspace(a, a.asana_workspace_name)
 
     # Get all Asana users in the workspace, this will enable user matching.
@@ -381,7 +381,7 @@ def sync_project(a: App, project):
     # Ensure the sync tag exists.
     tag = create_tag_if_not_existing(a, asana_workspace_id, "synced")
 
-    # Get the Asana project by name within the Asana workspace
+    # Get the Asana project by name within the Asana workspace.
     asana_project = get_asana_project(
         a, asana_workspace_id, project["asanaProjectName"]
     )
@@ -394,7 +394,7 @@ def sync_project(a: App, project):
     )
     asana_project_tasks = get_asana_project_tasks(a, asana_project)
 
-    # Get the backlog items for the ADO project and team
+    # Get the backlog items for the ADO project and team.
     ado_items = a.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
@@ -439,7 +439,7 @@ def sync_project(a: App, project):
                 asana_project_tasks, existing_match.asana_title
             )
             if asana_task is None:
-                # The Asana task does not exist, create it and map the tasks
+                # The Asana task does not exist, create it and map the tasks.
                 _LOGGER.info(
                     "%s:no matching asana task exists, creating new task",
                     ado_task.fields["System.Title"],
@@ -452,7 +452,7 @@ def sync_project(a: App, project):
                 )
                 continue
             else:
-                # The Asana task exists, map the tasks in the db
+                # The Asana task exists, map the tasks in the db.
                 _LOGGER.info("%s:dating task", ado_task.fields["System.Title"])
                 if asana_task is not None:
                     existing_match.asana_gid = asana_task.gid
@@ -514,7 +514,7 @@ def sync_project(a: App, project):
             existing_match = TaskItem.search(a, ado_id=wi["ado_id"])
             ado_task = a.ado_wit_client.get_work_item(existing_match.ado_id)
 
-            # Check if the item is already up to date..
+            # Check if the item is already up to date.
             if existing_match.is_current(a):
                 _LOGGER.debug(
                     "%s:Task is up to date",
@@ -687,7 +687,7 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
     all_tasks = []
     offset = None
     try:
-        # Get all tasks in the project
+        # Get all tasks in the project.
         while True:
             api_params = {
                 "project": asana_project,
@@ -699,10 +699,10 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
 
             api_response = api_instance.get_tasks(**api_params)
 
-            # Append tasks to the all_tasks list
+            # Append tasks to the all_tasks list.
             all_tasks.extend(api_response.data)
 
-            # Check for continuation token in the response
+            # Check for continuation token in the response.
             offset = getattr(api_response.next_page, "offset", None)
             if not offset:
                 break
@@ -728,7 +728,7 @@ def get_asana_task(a: App, task_gid) -> object | None:
     """
     api_instance = asana.TasksApi(a.asana_client)
     try:
-        # Get all tasks in the project
+        # Get all tasks in the project.
         opt_fields = [
             "assignee_section",
             "due_at",
