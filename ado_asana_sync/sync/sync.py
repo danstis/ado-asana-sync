@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Union
 import json
 import logging
 import os
@@ -96,7 +95,7 @@ class TaskItem:
         return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {self.title}'
 
     @classmethod
-    def find_by_ado_id(cls, a: App, ado_id: int) -> Union[TaskItem, None]:
+    def find_by_ado_id(cls, a: App, ado_id: int) -> TaskItem | None:
         """
         Find and retrieve a TaskItem by its Azure DevOps (ADO) ID.
 
@@ -118,7 +117,7 @@ class TaskItem:
     @classmethod
     def search(
         cls, a: App, ado_id: int = None, asana_gid: str = None
-    ) -> Union[TaskItem, None]:
+    ) -> TaskItem | None:
         """
         Search for a task item in the App object based on the given ADO ID or Asana GID.
 
@@ -221,7 +220,7 @@ def safe_get(obj, *attrs_keys):
     return obj
 
 
-def get_tag_by_name(a: App, workspace: str, tag: str) -> Union[TagResponse, None]:
+def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse| None:
     """
     Retrieves a tag by its name from a given workspace.
 
@@ -552,7 +551,7 @@ class ADOAssignedUser:
     email: str
 
 
-def get_task_user(task: WorkItem) -> Union[ADOAssignedUser, None]:
+def get_task_user(task: WorkItem) ->ADOAssignedUser| None:
     """
     Return the email and display name of the user assigned to the Azure DevOps work item.
     If no user is assigned, then return None.
@@ -576,7 +575,7 @@ def get_task_user(task: WorkItem) -> Union[ADOAssignedUser, None]:
 
 def matching_user(
     user_list: list[UserResponse], ado_user: ADOAssignedUser
-) -> Union[UserResponse, None]:
+) -> UserResponse| None:
     """
     Check if a given email exists in a list of user objects.
 
