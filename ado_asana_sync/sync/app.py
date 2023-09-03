@@ -93,3 +93,6 @@ class App:
             os.path.join(os.path.dirname(__package__), "data", "appdata.json")
         )
         self.matches = self.db.table("matches")
+
+    def start(self) -> None:
+        self.connect()
