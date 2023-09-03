@@ -17,6 +17,7 @@ from ado_asana_sync.sync.app import App
 
 _LOGGER = logging.getLogger(__name__)
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
+_CLOSED_STATES = {"Closed", "Removed"}
 
 
 class TaskItem:
@@ -223,8 +224,7 @@ def safe_get(obj, *attrs_keys):
 
 
 def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
-    """
-    Retrieves a tag by its name from a given workspace.
+    """Retrieves a tag by its name from a given workspace.
 
     Args:
         a (App): The Asana client instance.
@@ -241,10 +241,8 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
         api_response = api_instance.get_tags(workspace=workspace)
 
         # Iterate through the tags to find the desired tag.
-        for t in api_response.data:
-            if t.name == tag:
-                return t
-        return None
+        tags_by_name = {t.name: t for t in api_response.data}
+        return tags_by_name.get(tag)
     except ApiException as e:
         _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", e)
         return None
@@ -779,7 +777,7 @@ def create_asana_task(
             "projects": [asana_project],
             "assignee": task.assigned_to,
             "tags": [tag.gid],
-            "state": task.state == "Closed",
+            "state": task.state in _CLOSED_STATES,
         }
     )
     try:
@@ -827,7 +825,7 @@ def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:
             "name": task.asana_title,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
-            "completed": task.state == "Closed",
+            "completed": task.state in _CLOSED_STATES,
         }
     )
 
