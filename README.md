@@ -30,13 +30,13 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) to e
 
 #### ADO
 
-- [azure-devops PyPi](https://pypi.org/project/azure-devops/)
-- [azure-devops GitHub](https://github.com/microsoft/azure-devops-python-api)
-- [azure-devops API reference](https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.1&viewFallbackFrom=azure-devops-rest-5.1)
-- [azure-devops samples](https://github.com/microsoft/azure-devops-python-samples/blob/main/src/samples/work_item_tracking.py)
+* [azure-devops PyPi](https://pypi.org/project/azure-devops/)
+* [azure-devops GitHub](https://github.com/microsoft/azure-devops-python-api)
+* [azure-devops API reference](https://learn.microsoft.com/en-us/rest/api/azure/devops/?view=azure-devops-rest-7.1&viewFallbackFrom=azure-devops-rest-5.1)
+* [azure-devops samples](https://github.com/microsoft/azure-devops-python-samples/blob/main/src/samples/work_item_tracking.py)
 
 #### Asana
 
-- [Asana PyPi](https://pypi.org/project/asana/)
-- [Asana GitHub](https://github.com/asana/python-asana)
-- [Asana API Reference](https://developers.asana.com/docs/rich-text)
+* [Asana PyPi](https://pypi.org/project/asana/)
+* [Asana GitHub](https://github.com/asana/python-asana)
+* [Asana API Reference](https://developers.asana.com/docs/rich-text)
