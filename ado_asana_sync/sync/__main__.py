@@ -13,6 +13,4 @@ try:
 except Exception as e:
     logging.error("Failed to connect: %s", e)
 
-p = read_projects()
-for i in p:
-    sync_project(app_config, i)
+app_config.start()

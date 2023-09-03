@@ -94,5 +94,10 @@ class App:
         )
         self.matches = self.db.table("matches")
 
+    from .sync import read_projects, sync_project
+
     def start(self) -> None:
         self.connect()
+        p = read_projects()
+        for i in p:
+            sync_project(self, i)
