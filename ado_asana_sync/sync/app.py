@@ -7,6 +7,7 @@ from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
 
 _LOGGER = logging.getLogger(__name__)
+ASANA_PAGE_SIZE = 100
 
 
 class App:
@@ -51,7 +52,7 @@ class App:
         self.ado_work_client = None
         self.ado_wit_client = None
         self.asana_client = None
-        self.asana_page_size = 100
+        self.asana_page_size = ASANA_PAGE_SIZE
         self.db = None
         self.matches = None
 
