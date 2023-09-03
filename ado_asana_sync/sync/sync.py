@@ -13,7 +13,7 @@ from azure.devops.v7_0.work.models import TeamContext
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from tinydb import Query
 
-from ado_asana_sync.sync.app import App
+from .app import App
 
 _LOGGER = logging.getLogger(__name__)
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
