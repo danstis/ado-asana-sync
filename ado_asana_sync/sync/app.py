@@ -52,6 +52,8 @@ class App:
         self.ado_wit_client = None
         self.asana_client = None
         self.asana_page_size = 100
+        self.db = None
+        self.matches = None
 
         if not self.ado_pat:
             _LOGGER.fatal("ADO_PAT must be provided")
@@ -93,11 +95,3 @@ class App:
             os.path.join(os.path.dirname(__package__), "data", "appdata.json")
         )
         self.matches = self.db.table("matches")
-
-    from .sync import read_projects, sync_project
-
-    def start(self) -> None:
-        self.connect()
-        p = read_projects()
-        for i in p:
-            sync_project(self, i)
