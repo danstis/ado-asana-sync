@@ -778,7 +778,7 @@ def create_asana_task(
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "projects": [asana_project],
             "assignee": task.assigned_to,
-            "tag": [tag.gid],
+            "tags": [tag.gid],
             "state": task.state == "Closed",
         }
     )
