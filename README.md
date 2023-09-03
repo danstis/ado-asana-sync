@@ -9,7 +9,7 @@
 
 [![Open in Visual Studio Code](https://img.shields.io/static/v1?logo=visualstudiocode&label=&message=Open%20in%20Visual%20Studio%20Code&labelColor=2c2c32&color=007acc&logoColor=007acc)](https://open.vscode.dev/danstis/ado-asana-sync)
 
-This project is a work in progress and is not yet ready for use. Breaking changes will occur as needed.
+This project aims to synchronize work items between Azure DevOps (ADO) and Asana. It's currently in development and not ready for use. Breaking changes will occur as needed.
 
 ## How to use
 
@@ -19,6 +19,8 @@ This project is a work in progress and is not yet ready for use. Breaking change
   * `ADO_URL` - The full URL of your Azure DevOps instance.
   * `ASANA_TOKEN` - Your Personal Access Token for Asana to access the work items.
   * `ASANA_WORKSPACE_NAME` - Name of the Asana workspace to sync with.
+* Run the container with the configured environment variables.
+* The application will start syncing work items between ADO and Asana based on the configured settings.
 
 ## Development
 
