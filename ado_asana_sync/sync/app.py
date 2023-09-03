@@ -71,21 +71,24 @@ class App:
 
         _LOGGER.debug("Created new App instance")
 
-    def connect(self):
+    def connect(self) -> None:
         """
         Connects to ADO and Asana, and sets up the TinyDB database.
         """
         # connect ADO
+        _LOGGER.debug("Connecting to Azure DevOps")
         ado_credentials = BasicAuthentication("", self.ado_pat)
         ado_connection = Connection(base_url=self.ado_url, creds=ado_credentials)
         self.ado_core_client = ado_connection.clients.get_core_client()
         self.ado_work_client = ado_connection.clients.get_work_client()
         self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
         # connect Asana
+        _LOGGER.debug("Connecting to Asana")
         asana_config = asana.Configuration()
         asana_config.access_token = self.asana_token
         self.asana_client = asana.ApiClient(asana_config)
         # setup tinydb
+        _LOGGER.debug("Opening local database")
         self.db = TinyDB(
             os.path.join(os.path.dirname(__package__), "data", "appdata.json")
         )
