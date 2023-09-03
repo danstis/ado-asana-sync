@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import MagicMock
+
 import pytest
 import pytz
+
 from ado_asana_sync.sync.sync import *
-from unittest.mock import MagicMock
 
 
 class TestApp(unittest.TestCase):

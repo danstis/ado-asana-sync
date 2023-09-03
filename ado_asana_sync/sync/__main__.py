@@ -1,10 +1,11 @@
 import logging
 import os
-from ado_asana_sync.sync.sync import read_projects, sync_project
+
 from ado_asana_sync.sync.app import App
+from ado_asana_sync.sync.sync import read_projects, sync_project
 
 # Create an instance of the app configuration and connect to the services.
-log_level = os.environ.get('LOG_LEVEL', 'INFO')
+log_level = os.environ.get("LOG_LEVEL", "INFO")
 logging.basicConfig(level=log_level)
 app_config = App()
 try:

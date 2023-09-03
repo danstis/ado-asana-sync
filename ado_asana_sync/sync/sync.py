@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import logging
 import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import asana
-from asana import UserResponse, TagResponse
+from asana import TagResponse, UserResponse
 from asana.rest import ApiException
-from ado_asana_sync.sync.app import App
-from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from azure.devops.v7_0.work.models import TeamContext
+from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from tinydb import Query
 
+from ado_asana_sync.sync.app import App
 
 _LOGGER = logging.getLogger(__name__)
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
@@ -778,7 +778,7 @@ def create_asana_task(
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "projects": [asana_project],
             "assignee": task.assigned_to,
-            "tag": [tag.gid],
+            "tags": [tag.gid],
             "state": task.state == "Closed",
         }
     )
