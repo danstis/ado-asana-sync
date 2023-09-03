@@ -1,10 +1,12 @@
 import unittest
-import pytz
-from ado_asana_sync.sync.sync import *
-from asana import UserResponse
-from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+
+import pytz
+from asana import UserResponse
+from azure.devops.v7_0.work_item_tracking.models import WorkItem
+
+from ado_asana_sync.sync.sync import *
 
 
 class TestTaskItem(unittest.TestCase):
