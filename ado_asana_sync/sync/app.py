@@ -6,8 +6,14 @@ from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
 
+# _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
+# ASANA_PAGE_SIZE contains the default value for the page size to send to the Asana API.
 ASANA_PAGE_SIZE = 100
+# ASANA_TAG_NAME defined the name of the tag to add to synced items.
+ASANA_TAG_NAME = "synced"
+# SLEEP_TIME defines the sleep time between sync tasks in seconds.
+SLEEP_TIME = 300
 
 
 class App:
@@ -31,6 +37,8 @@ class App:
         ado_wit_client: ADO work item tracking client.
         asana_client: Asana client.
         asana_page_size: The default page size for API calls, can be between 1-100.
+        asana_tag_name: Defines the name of the Asana tag to add to synced items.
+        asana_tag_gid: stores the tag id for the named asana tag in asana_tag_name.
         db: TinyDB database.
         matches: TinyDB table named "matches".
     """
@@ -49,12 +57,15 @@ class App:
             "ASANA_WORKSPACE_NAME"
         )
         self.ado_core_client = None
-        self.ado_work_client = None
         self.ado_wit_client = None
+        self.ado_work_client = None
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
+        self.asana_tag_gid = None
+        self.asana_tag_name = ASANA_TAG_NAME
         self.db = None
         self.matches = None
+        self.sleep_time = SLEEP_TIME
 
         if not self.ado_pat:
             _LOGGER.fatal("ADO_PAT must be provided")
