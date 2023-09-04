@@ -1,18 +1,22 @@
 import logging
 import os
+from logging import getLevelName
 
-from ado_asana_sync.sync.app import App
-from ado_asana_sync.sync.sync import read_projects, sync_project
+from .app import App
+from .sync import start_sync
 
-# Create an instance of the app configuration and connect to the services.
+# _LOGGER is the logging instance for this file.
+_LOGGER = logging.getLogger(__name__)
+
 log_level = os.environ.get("LOG_LEVEL", "INFO")
-logging.basicConfig(level=log_level)
-app_config = App()
-try:
-    app_config.connect()
-except Exception as e:
-    logging.error("Failed to connect: %s", e)
+if not isinstance(getLevelName(log_level), int):
+    raise ValueError(f"Invalid log level: {log_level}")
 
-p = read_projects()
-for i in p:
-    sync_project(app_config, i)
+logging.basicConfig(level=log_level)
+
+_LOGGER.debug("Configuring app")
+app = App()
+app.connect()
+
+_LOGGER.debug("Starting main sync process")
+start_sync(app)

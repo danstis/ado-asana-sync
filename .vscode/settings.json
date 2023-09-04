@@ -1,21 +1,12 @@
 {
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter"
+    "editor.defaultFormatter": "ms-python.python"
   },
   "sonarlint.connectedMode.project": {
     "connectionId": "SonarLint",
     "projectKey": "danstis_ado-asana-sync"
   },
   "python.analysis.typeCheckingMode": "off",
-  "cSpell.words": [
-    "msrest",
-    "pytz",
-    "rtype",
-    "timezones",
-    "tinydb",
-    "VSTS"
-  ],
-  "git.branchProtection": [
-    "main"
-  ]
+  "cSpell.words": ["msrest", "pytz", "rtype", "timezones", "tinydb", "VSTS"],
+  "git.branchProtection": ["main"]
 }

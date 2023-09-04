@@ -5,6 +5,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import sleep
 
 import asana
 from asana import TagResponse, UserResponse
@@ -13,10 +14,15 @@ from azure.devops.v7_0.work.models import TeamContext
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from tinydb import Query
 
-from ado_asana_sync.sync.app import App
+from .app import App
 
+# _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
+# _SYNC_THRESHOLD defines the number of days to continue syncing closed tasks, after this many days they will be removed from
+# the sync DB.
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
+# _CLOSED_STATES defines a list of states that will be considered as completed. If the ADO state matches one of these values
+# it will cause the linked Asana task to be closed.
 _CLOSED_STATES = {"Closed", "Removed"}
 
 
@@ -202,50 +208,43 @@ class TaskItem:
         return True
 
 
-def safe_get(obj, *attrs_keys):
-    """
-    Safely retrieves nested attributes from an object.
+def start_sync(a: App) -> None:
+    while True:
+        a.asana_tag_gid = create_tag_if_not_existing(a, get_asana_workspace(a, a.asana_workspace_name), a.asana_tag_name)
+        projects = read_projects()
+        for project in projects:
+            sync_project(a, project)
 
-    Args:
-        obj: The object to retrieve attributes from.
-        *attrs_keys: Variable number of attribute keys.
+        _LOGGER.info("Sync process complete, sleeping for %s seconds", a.sleep_time)
+        sleep(a.sleep_time)
+
+
+def read_projects() -> list:
+    """
+    Read projects from JSON file and return as a list.
 
     Returns:
-        The value of the nested attribute if found, else None.
+        projects (list): List of projects with specific attributes.
     """
-    for attr_key in attrs_keys:
-        if isinstance(obj, dict):
-            obj = obj.get(attr_key)
-        else:
-            obj = getattr(obj, attr_key, None)
-        if obj is None:
-            return None
-    return obj
+    # Initialize an empty list to store the projects
+    projects = []
 
+    # Open the JSON file and load the data
+    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
+        data = json.load(f)
 
-def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
-    """Retrieves a tag by its name from a given workspace.
+    # Iterate over each project in the data and append it to the projects list
+    for project in data:
+        projects.append(
+            {
+                "adoProjectName": project["adoProjectName"],
+                "adoTeamName": project["adoTeamName"],
+                "asanaProjectName": project["asanaProjectName"],
+            }
+        )
 
-    Args:
-        a (App): The Asana client instance.
-        workspace (str): The ID of the workspace.
-        tag (str): The name of the tag to retrieve.
-
-    Returns:
-        TagResponse | None: The tag object if found, or None if not found.
-    """
-    api_instance = asana.TagsApi(a.asana_client)
-    try:
-        # Get all tags in the workspace.
-        _LOGGER.info("get workspace tag '%s'", tag)
-        api_response = api_instance.get_tags(workspace=workspace)
-
-        # Iterate through the tags to find the desired tag.
-        tags_by_name = {t.name: t for t in api_response.data}
-        return tags_by_name.get(tag)
-    except ApiException as e:
-        _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", e)
-        return None
+    # Return the list of projects
+    return projects
 
 
 def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
@@ -279,6 +278,52 @@ def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
         )
 
 
+def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
+    """Retrieves a tag by its name from a given workspace.
+
+    Args:
+        a (App): The Asana client instance.
+        workspace (str): The ID of the workspace.
+        tag (str): The name of the tag to retrieve.
+
+    Returns:
+        TagResponse | None: The tag object if found, or None if not found.
+    """
+    api_instance = asana.TagsApi(a.asana_client)
+    try:
+        # Get all tags in the workspace.
+        _LOGGER.info("get workspace tag '%s'", tag)
+        api_response = api_instance.get_tags(workspace=workspace)
+
+        # Iterate through the tags to find the desired tag.
+        tags_by_name = {t.name: t for t in api_response.data}
+        return tags_by_name.get(tag)
+    except ApiException as e:
+        _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", e)
+        return None
+
+
+def safe_get(obj, *attrs_keys):
+    """
+    Safely retrieves nested attributes from an object.
+
+    Args:
+        obj: The object to retrieve attributes from.
+        *attrs_keys: Variable number of attribute keys.
+
+    Returns:
+        The value of the nested attribute if found, else None.
+    """
+    for attr_key in attrs_keys:
+        if isinstance(obj, dict):
+            obj = obj.get(attr_key)
+        else:
+            obj = getattr(obj, attr_key, None)
+        if obj is None:
+            return None
+    return obj
+
+
 def get_asana_task_tags(a: App, task: TaskItem) -> list[TagResponse]:
     """
     Retrieves the tag for a given Asana task.
@@ -309,34 +354,6 @@ def tag_asana_item(a: App, task: TaskItem, tag: TagResponse) -> None:
             api_instance.add_tag_for_task(body, task.asana_gid)
         except ApiException as e:
             _LOGGER.error("Exception when calling TasksApi->add_tag_for_task: %s\n", e)
-
-
-def read_projects() -> list:
-    """
-    Read projects from JSON file and return as a list.
-
-    Returns:
-        projects (list): List of projects with specific attributes.
-    """
-    # Initialize an empty list to store the projects
-    projects = []
-
-    # Open the JSON file and load the data
-    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
-        data = json.load(f)
-
-    # Iterate over each project in the data and append it to the projects list
-    for project in data:
-        projects.append(
-            {
-                "adoProjectName": project["adoProjectName"],
-                "adoTeamName": project["adoTeamName"],
-                "asanaProjectName": project["asanaProjectName"],
-            }
-        )
-
-    # Return the list of projects
-    return projects
 
 
 def sync_project(a: App, project):
@@ -375,9 +392,6 @@ def sync_project(a: App, project):
 
     # Get all Asana users in the workspace, this will enable user matching.
     asana_users = get_asana_users(a, asana_workspace_id)
-
-    # Ensure the sync tag exists.
-    tag = create_tag_if_not_existing(a, asana_workspace_id, "synced")
 
     # Get the Asana project by name within the Asana workspace.
     asana_project = get_asana_project(
@@ -446,7 +460,7 @@ def sync_project(a: App, project):
                     a,
                     asana_project,
                     existing_match,
-                    tag,
+                    a.asana_tag_gid,
                 )
                 continue
             else:
@@ -457,7 +471,7 @@ def sync_project(a: App, project):
                 update_asana_task(
                     a,
                     existing_match,
-                    tag,
+                    a.asana_tag_gid,
                 )
                 continue
 
@@ -487,7 +501,7 @@ def sync_project(a: App, project):
         update_asana_task(
             a,
             existing_match,
-            tag,
+            a.asana_tag_gid,
         )
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
@@ -541,7 +555,7 @@ def sync_project(a: App, project):
             update_asana_task(
                 a,
                 existing_match,
-                tag,
+                a.asana_tag_gid,
             )
 
 
