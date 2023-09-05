@@ -23,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 # _CLOSED_STATES defines a list of states that will be considered as completed. If the ADO state matches one of these values
 # it will cause the linked Asana task to be closed.
-_CLOSED_STATES = {"Closed", "Removed"}
+_CLOSED_STATES = {"Closed", "Removed", "Done"}
 
 
 class TaskItem:
