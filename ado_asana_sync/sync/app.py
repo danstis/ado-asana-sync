@@ -1,8 +1,8 @@
 import logging
 import os
 
-import asana
-from azure.devops.connection import Connection
+import asana  # type: ignore
+from azure.devops.connection import Connection  # type: ignore
 from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
 

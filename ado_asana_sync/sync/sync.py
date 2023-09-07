@@ -10,9 +10,11 @@ from time import sleep
 import asana
 from asana import TagResponse, UserResponse
 from asana.rest import ApiException
-from azure.devops.v7_0.work.models import TeamContext
-from azure.devops.v7_0.work_item_tracking.models import WorkItem
+from azure.devops.v7_0.work.models import TeamContext  # type: ignore
+from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 from tinydb import Query
+
+from ado_asana_sync.utils.date import iso8601_utc
 
 from .app import App
 
@@ -210,7 +212,9 @@ class TaskItem:
 
 def start_sync(a: App) -> None:
     while True:
-        a.asana_tag_gid = create_tag_if_not_existing(a, get_asana_workspace(a, a.asana_workspace_name), a.asana_tag_name)
+        a.asana_tag_gid = create_tag_if_not_existing(
+            a, get_asana_workspace(a, a.asana_workspace_name), a.asana_tag_name
+        )
         projects = read_projects()
         for project in projects:
             sync_project(a, project)
@@ -803,21 +807,6 @@ def create_asana_task(
         task.save(a)
     except ApiException as e:
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", e)
-
-
-def iso8601_utc(dt: datetime) -> str:
-    """
-    Convert a given datetime object to a string representation in ISO 8601 format with UTC timezone.
-
-    Args:
-        dt (datetime): A datetime object representing a specific date and time.
-
-    Returns:
-        str: A string representing the given datetime object in ISO 8601 format with UTC timezone.
-    """
-    if not dt.tzinfo:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat()
 
 
 def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:

@@ -1,6 +1,6 @@
 {
   "[python]": {
-    "editor.defaultFormatter": "ms-python.python"
+    "editor.defaultFormatter": "ms-python.black-formatter"
   },
   "sonarlint.connectedMode.project": {
     "connectionId": "SonarLint",
@@ -8,5 +8,6 @@
   },
   "python.analysis.typeCheckingMode": "off",
   "cSpell.words": ["msrest", "pytz", "rtype", "timezones", "tinydb", "VSTS"],
-  "git.branchProtection": ["main"]
+  "git.branchProtection": ["main"],
+  "python.formatting.provider": "none"
 }
