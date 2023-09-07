@@ -36,3 +36,8 @@ class TestIso8601Utc(unittest.TestCase):
         dt = datetime(2022, 1, 1, 12, 0, 0)
         result = iso8601_utc(dt)
         self.assertEqual(result, "2022-01-01T12:00:00+00:00")
+
+    # Tests that the function raises a AttributeError if the argument is not a datetime object.
+    def test_raise_type_error(self):
+        with self.assertRaises(AttributeError):
+            iso8601_utc("2022-01-01T12:00:00+00:00")

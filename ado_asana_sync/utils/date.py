@@ -16,6 +16,9 @@ def iso8601_utc(timestamp: datetime) -> str:
 
     Returns:
         str: A string representing the given datetime object in ISO 8601 format with UTC timezone.
+
+    Note:
+        Naive datetime objects (without timezone information) are assumed to be in UTC.
     """
     if not timestamp.tzinfo:
         timestamp = timestamp.replace(tzinfo=timezone.utc)
