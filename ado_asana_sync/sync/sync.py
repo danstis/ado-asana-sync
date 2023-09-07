@@ -14,7 +14,7 @@ from azure.devops.v7_0.work.models import TeamContext
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from tinydb import Query
 
-from ado_asana_sync.utils import iso8601_utc
+from ado_asana_sync.utils.date import iso8601_utc
 
 from .app import App
 
