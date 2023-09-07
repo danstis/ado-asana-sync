@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytz
 
-from ado_asana_sync.utils.date import iso8601_utc
+from ado_asana_sync.utils import iso8601_utc
 
 
 class TestIso8601Utc(unittest.TestCase):
