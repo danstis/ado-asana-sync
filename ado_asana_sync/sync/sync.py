@@ -14,6 +14,7 @@ from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from ado_asana_sync.utils.date import iso8601_utc
+from ado_asana_sync.utils.utils import safe_get
 
 from .app import App
 from .asana import get_asana_task
@@ -124,27 +125,6 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
     except ApiException as e:
         _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", e)
         return None
-
-
-def safe_get(obj, *attrs_keys):
-    """
-    Safely retrieves nested attributes from an object.
-
-    Args:
-        obj: The object to retrieve attributes from.
-        *attrs_keys: Variable number of attribute keys.
-
-    Returns:
-        The value of the nested attribute if found, else None.
-    """
-    for attr_key in attrs_keys:
-        if isinstance(obj, dict):
-            obj = obj.get(attr_key)
-        else:
-            obj = getattr(obj, attr_key, None)
-        if obj is None:
-            return None
-    return obj
 
 
 def get_asana_task_tags(a: App, task: TaskItem) -> list[TagResponse]:

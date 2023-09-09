@@ -1,12 +1,16 @@
 import unittest
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-import pytz
 from asana import UserResponse
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
-from ado_asana_sync.sync.sync import *
+from ado_asana_sync.sync.sync import (
+    ADOAssignedUser,
+    get_task_user,
+    matching_user,
+    get_asana_task_by_name,
+)
+from ado_asana_sync.sync.task_item import TaskItem
 
 
 class TestTaskItem(unittest.TestCase):
@@ -127,7 +131,6 @@ class TestGetTaskUserEmail(unittest.TestCase):
         task = WorkItem()
         task.fields = {"System.AssignedTo": None}
         assert get_task_user(task) == None
-
 
 
 class TestMatchingUser(unittest.TestCase):
@@ -258,41 +261,6 @@ class TestGetAsanaTaskByName(unittest.TestCase):
 
         # Assert that the result is None
         self.assertIsNone(result)
-
-
-class TestSafeGet(unittest.TestCase):
-    def test_safe_get_dict(self):
-        """
-        Test the safe_get function with a dictionary object as input.
-        """
-        obj = {"a": {"b": {"c": "value"}}}
-        self.assertEqual(safe_get(obj, "a", "b", "c"), "value")
-
-    def test_safe_get_object(self):
-        """
-        Testing safe_get with an object
-        """
-
-        class Obj:
-            def __init__(self, value):
-                self.value = value
-
-        obj = Obj(5)
-        self.assertEqual(safe_get(obj, "value"), 5)
-
-    def test_safe_get_none(self):
-        """
-        Testing safe_get with None
-        """
-        obj = None
-        self.assertEqual(safe_get(obj, "a", "b", "c"), None)
-
-    def test_safe_get_missing_key(self):
-        """
-        Testing safe_get with a missing key
-        """
-        obj = {"a": {"b": {"c": "value"}}}
-        self.assertEqual(safe_get(obj, "a", "b", "d"), None)
 
 
 if __name__ == "__main__":
