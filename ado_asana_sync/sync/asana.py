@@ -54,3 +54,4 @@ def get_asana_task(app: App, task_gid) -> object | None:
         return api_response.data
     except ApiException as e:
         _LOGGER.error("Exception when calling TasksApi->get_task: %s\n", e)
+        return None
