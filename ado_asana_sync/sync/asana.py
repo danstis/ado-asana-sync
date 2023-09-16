@@ -15,7 +15,7 @@ from .app import App
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_asana_task(a: App, task_gid) -> object | None:
+def get_asana_task(app: App, task_gid) -> object | None:
     """
     Returns the entire task object for the Asana task with the given gid in the given project.
 
@@ -26,7 +26,7 @@ def get_asana_task(a: App, task_gid) -> object | None:
     :return: Task object or None if no task is found.
     :rtype: object or None
     """
-    api_instance = asana.TasksApi(a.asana_client)
+    api_instance = asana.TasksApi(app.asana_client)
     try:
         # Get all tasks in the project.
         opt_fields = [
