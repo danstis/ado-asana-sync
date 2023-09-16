@@ -30,17 +30,17 @@ _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 _CLOSED_STATES = {"Closed", "Removed", "Done"}
 
 
-def start_sync(a: App) -> None:
+def start_sync(app: App) -> None:
     while True:
-        a.asana_tag_gid = create_tag_if_not_existing(
-            a, get_asana_workspace(a, a.asana_workspace_name), a.asana_tag_name
+        app.asana_tag_gid = create_tag_if_not_existing(
+            app, get_asana_workspace(app, app.asana_workspace_name), app.asana_tag_name
         )
         projects = read_projects()
         for project in projects:
-            sync_project(a, project)
+            sync_project(app, project)
 
-        _LOGGER.info("Sync process complete, sleeping for %s seconds", a.sleep_time)
-        sleep(a.sleep_time)
+        _LOGGER.info("Sync process complete, sleeping for %s seconds", app.sleep_time)
+        sleep(app.sleep_time)
 
 
 def read_projects() -> list:
@@ -71,7 +71,7 @@ def read_projects() -> list:
     return projects
 
 
-def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
+def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> TagResponse:
     """
     Create a tag for a given workspace if it does not already exist.
 
@@ -86,23 +86,23 @@ def create_tag_if_not_existing(a: App, workspace: str, tag: str) -> TagResponse:
     Raises:
         ApiException: If an error occurs while making the API call.
     """
-    existing_tag = get_tag_by_name(a, workspace, tag)
+    existing_tag = get_tag_by_name(app, workspace, tag)
     if existing_tag is not None:
         return existing_tag
-    api_instance = asana.TagsApi(a.asana_client)
+    api_instance = asana.TagsApi(app.asana_client)
     body = asana.TagsBody({"name": tag})
     try:
         # Create a tag
         _LOGGER.info("tag '%s' not found, creating it", tag)
         api_response = api_instance.create_tag_for_workspace(body, workspace)
         return api_response.data
-    except ApiException as e:
+    except ApiException as exception:
         _LOGGER.error(
-            "Exception when calling TagsApi->create_tag_for_workspace: %s\n", e
+            "Exception when calling TagsApi->create_tag_for_workspace: %s\n", exception
         )
 
 
-def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
+def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
     """Retrieves a tag by its name from a given workspace.
 
     Args:
@@ -113,7 +113,7 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
     Returns:
         TagResponse | None: The tag object if found, or None if not found.
     """
-    api_instance = asana.TagsApi(a.asana_client)
+    api_instance = asana.TagsApi(app.asana_client)
     try:
         # Get all tags in the workspace.
         _LOGGER.info("get workspace tag '%s'", tag)
@@ -122,16 +122,16 @@ def get_tag_by_name(a: App, workspace: str, tag: str) -> TagResponse | None:
         # Iterate through the tags to find the desired tag.
         tags_by_name = {t.name: t for t in api_response.data}
         return tags_by_name.get(tag)
-    except ApiException as e:
-        _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", e)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", exception)
         return None
 
 
-def get_asana_task_tags(a: App, task: TaskItem) -> list[TagResponse]:
+def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse]:
     """
     Retrieves the tag for a given Asana task.
     """
-    api_instance = asana.TagsApi(a.asana_client)
+    api_instance = asana.TagsApi(app.asana_client)
 
     try:
         # Get a task's tags
@@ -139,27 +139,27 @@ def get_asana_task_tags(a: App, task: TaskItem) -> list[TagResponse]:
             task.asana_gid,
         )
         return api_response.data
-    except ApiException as e:
-        _LOGGER.error("Exception when calling TagsApi->get_tags_for_task: %s\n", e)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling TagsApi->get_tags_for_task: %s\n", exception)
 
 
-def tag_asana_item(a: App, task: TaskItem, tag: TagResponse) -> None:
+def tag_asana_item(app: App, task: TaskItem, tag: TagResponse) -> None:
     """
     Adds a tag to a given item if it is not already assigned.
     """
-    api_instance = asana.TasksApi(a.asana_client)
-    task_tags = get_asana_task_tags(a, task)
+    api_instance = asana.TasksApi(app.asana_client)
+    task_tags = get_asana_task_tags(app, task)
     if tag not in task_tags:
         # Add the tag to the task.
         try:
             _LOGGER.info("adding tag '%s' to task '%s'", tag.name, task.asana_title)
             body = asana.TagsBody({"tag": tag.gid})
             api_instance.add_tag_for_task(body, task.asana_gid)
-        except ApiException as e:
-            _LOGGER.error("Exception when calling TasksApi->add_tag_for_task: %s\n", e)
+        except ApiException as exception:
+            _LOGGER.error("Exception when calling TasksApi->add_tag_for_task: %s\n", exception)
 
 
-def sync_project(a: App, project):
+def sync_project(app: App, project):
     """
     Synchronizes a project by mapping ADO work items to Asana tasks.
 
@@ -178,27 +178,27 @@ def sync_project(a: App, project):
         "syncing from %s/%s -> %s/%s",
         project["adoProjectName"],
         project["adoTeamName"],
-        a.asana_workspace_name,
+        app.asana_workspace_name,
         project["asanaProjectName"],
     )
 
     # Get the ADO project by name.
-    ado_project = a.ado_core_client.get_project(project["adoProjectName"])
+    ado_project = app.ado_core_client.get_project(project["adoProjectName"])
 
     # Get the ADO team by name within the ADO project.
-    ado_team = a.ado_core_client.get_team(
+    ado_team = app.ado_core_client.get_team(
         project["adoProjectName"], project["adoTeamName"]
     )
 
     # Get the Asana workspace ID by name.
-    asana_workspace_id = get_asana_workspace(a, a.asana_workspace_name)
+    asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
 
     # Get all Asana users in the workspace, this will enable user matching.
-    asana_users = get_asana_users(a, asana_workspace_id)
+    asana_users = get_asana_users(app, asana_workspace_id)
 
     # Get the Asana project by name within the Asana workspace.
     asana_project = get_asana_project(
-        a, asana_workspace_id, project["asanaProjectName"]
+        app, asana_workspace_id, project["asanaProjectName"]
     )
 
     # Get all Asana Tasks in this project.
@@ -207,10 +207,10 @@ def sync_project(a: App, project):
         project["adoProjectName"],
         asana_project,
     )
-    asana_project_tasks = get_asana_project_tasks(a, asana_project)
+    asana_project_tasks = get_asana_project_tasks(app, asana_project)
 
     # Get the backlog items for the ADO project and team.
-    ado_items = a.ado_work_client.get_backlog_level_work_items(
+    ado_items = app.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
     )
@@ -218,11 +218,11 @@ def sync_project(a: App, project):
     # Loop through each backlog item
     for wi in ado_items.work_items:
         # Get the work item from the ID
-        ado_task = a.ado_wit_client.get_work_item(wi.target.id)
+        ado_task = app.ado_wit_client.get_work_item(wi.target.id)
 
         # Skip this item if is not assigned, or the assignee does not match an Asana user,
         # unless it has previously been matched.
-        existing_match = TaskItem.search(a, ado_id=ado_task.id)
+        existing_match = TaskItem.search(app, ado_id=ado_task.id)
         ado_assigned = get_task_user(ado_task)
         if ado_assigned is None and existing_match is None:
             _LOGGER.debug(
@@ -260,10 +260,10 @@ def sync_project(a: App, project):
                     ado_task.fields["System.Title"],
                 )
                 create_asana_task(
-                    a,
+                    app,
                     asana_project,
                     existing_match,
-                    a.asana_tag_gid,
+                    app.asana_tag_gid,
                 )
                 continue
             else:
@@ -272,14 +272,14 @@ def sync_project(a: App, project):
                 if asana_task is not None:
                     existing_match.asana_gid = asana_task.gid
                 update_asana_task(
-                    a,
+                    app,
                     existing_match,
-                    a.asana_tag_gid,
+                    app.asana_tag_gid,
                 )
                 continue
 
         # If already mapped, check if the item needs an update (ado rev is higher, or asana item is newer).
-        if existing_match.is_current(a):
+        if existing_match.is_current(app):
             _LOGGER.info("%s:task is already up to date", existing_match.asana_title)
             continue
 
@@ -287,7 +287,7 @@ def sync_project(a: App, project):
         _LOGGER.info(
             "%s:task has been updated, updating task", existing_match.asana_title
         )
-        asana_task = get_asana_task(a, existing_match.asana_gid)
+        asana_task = get_asana_task(app, existing_match.asana_gid)
         if asana_task is None:
             _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
             continue
@@ -302,13 +302,13 @@ def sync_project(a: App, project):
         existing_match.assigned_to = getattr(asana_matched_user, "gid", None)
         existing_match.asana_updated = iso8601_utc(asana_task.modified_at)
         update_asana_task(
-            a,
+            app,
             existing_match,
-            a.asana_tag_gid,
+            app.asana_tag_gid,
         )
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    all_tasks = a.matches.all()
+    all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
@@ -322,22 +322,22 @@ def sync_project(a: App, project):
                     wi["asana_title"],
                     _SYNC_THRESHOLD,
                 )
-                a.matches.remove(wi.doc_id)
+                app.matches.remove(wi.doc_id)
                 continue
 
             # Get the work item details from ADO.
-            existing_match = TaskItem.search(a, ado_id=wi["ado_id"])
-            ado_task = a.ado_wit_client.get_work_item(existing_match.ado_id)
+            existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+            ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
 
             # Check if the item is already up to date.
-            if existing_match.is_current(a):
+            if existing_match.is_current(app):
                 _LOGGER.debug(
                     "%s:Task is up to date",
                     existing_match.asana_title,
                 )
                 continue
             # Update the asana task, as it is not current.
-            asana_task = get_asana_task(a, existing_match.asana_gid)
+            asana_task = get_asana_task(app, existing_match.asana_gid)
             ado_assigned = get_task_user(ado_task)
             asana_matched_user = matching_user(asana_users, ado_assigned)
             if asana_task is None:
@@ -356,9 +356,9 @@ def sync_project(a: App, project):
             existing_match.assigned_to = getattr(asana_matched_user, "gid", None)
             existing_match.asana_updated = iso8601_utc(asana_task.modified_at)
             update_asana_task(
-                a,
+                app,
                 existing_match,
-                a.asana_tag_gid,
+                app.asana_tag_gid,
             )
 
 
@@ -416,32 +416,32 @@ def matching_user(
     return None
 
 
-def get_asana_workspace(a: App, name) -> str:
+def get_asana_workspace(app: App, name) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
 
     :return: Workspace gid.
     :rtype: str
     """
-    api_instance = asana.WorkspacesApi(a.asana_client)
+    api_instance = asana.WorkspacesApi(app.asana_client)
     try:
         # Get all workspaces
         api_response = api_instance.get_workspaces()
         for w in api_response.data:
             if w.name == name:
                 return w.gid
-    except ApiException as e:
-        _LOGGER.error("Exception when calling WorkspacesApi->get_workspaces: %s\n", e)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling WorkspacesApi->get_workspaces: %s\n", exception)
 
 
-def get_asana_project(a: App, workspace_gid, name) -> str:
+def get_asana_project(app: App, workspace_gid, name) -> str:
     """
     Returns the project gid for the named Asana project.
 
     :return: Project gid.
     :rtype: str
     """
-    api_instance = asana.ProjectsApi(a.asana_client)
+    api_instance = asana.ProjectsApi(app.asana_client)
     try:
         # Get all projects
         api_response = api_instance.get_projects(
@@ -450,8 +450,8 @@ def get_asana_project(a: App, workspace_gid, name) -> str:
         for p in api_response.data:
             if p.name == name:
                 return p.gid
-    except ApiException as e:
-        _LOGGER.error("Exception when calling ProjectsApi->get_projects: %s\n", e)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling ProjectsApi->get_projects: %s\n", exception)
 
 
 def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
@@ -471,7 +471,7 @@ def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
             return t
 
 
-def get_asana_project_tasks(a: App, asana_project) -> list[object]:
+def get_asana_project_tasks(app: App, asana_project) -> list[object]:
     """
     Returns a list of task objects for the given project.
 
@@ -480,7 +480,7 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
     :return: Task object or None if no task is found.
     :rtype: object or None
     """
-    api_instance = asana.TasksApi(a.asana_client)
+    api_instance = asana.TasksApi(app.asana_client)
     opt_fields = [
         "assignee_section",
         "due_at",
@@ -506,7 +506,7 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
         while True:
             api_params = {
                 "project": asana_project,
-                "limit": a.asana_page_size,
+                "limit": app.asana_page_size,
                 "opt_fields": opt_fields,
             }
             if offset:
@@ -523,15 +523,15 @@ def get_asana_project_tasks(a: App, asana_project) -> list[object]:
                 break
 
         return all_tasks
-    except ApiException as e:
+    except ApiException as exception:
         _LOGGER.error(
             "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s",
-            e,
+            exception,
         )
 
 
 def create_asana_task(
-    a: App, asana_project: "str", task: "TaskItem", tag: TagResponse
+    app: App, asana_project: "str", task: "TaskItem", tag: TagResponse
 ) -> None:
     """
     Create an Asana task in the specified project.
@@ -545,7 +545,7 @@ def create_asana_task(
     Returns:
         None
     """
-    tasks_api_instance = asana.TasksApi(a.asana_client)
+    tasks_api_instance = asana.TasksApi(app.asana_client)
     body = asana.TasksBody(
         {
             "name": task.asana_title,
@@ -562,12 +562,12 @@ def create_asana_task(
         task.asana_gid = result.data.gid
         task.asana_updated = iso8601_utc(result.data.modified_at)
         task.updated_date = iso8601_utc(datetime.now())
-        task.save(a)
-    except ApiException as e:
-        _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", e)
+        task.save(app)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
 
 
-def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:
+def update_asana_task(app: App, task: TaskItem, tag: TagResponse) -> None:
     """
     Update an Asana task with the provided task details.
 
@@ -580,7 +580,7 @@ def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:
     Returns:
         None: The function does not return any value. The Asana task is updated with the provided details.
     """
-    tasks_api_instance = asana.TasksApi(a.asana_client)
+    tasks_api_instance = asana.TasksApi(app.asana_client)
     body = asana.TasksBody(
         {
             "name": task.asana_title,
@@ -595,14 +595,14 @@ def update_asana_task(a: App, task: TaskItem, tag: TagResponse) -> None:
         result = tasks_api_instance.update_task(body, task.asana_gid)
         task.asana_updated = iso8601_utc(result.data.modified_at)
         task.updated_date = iso8601_utc(datetime.now())
-        task.save(a)
+        task.save(app)
         # Add the tag to the updated item if it does not already have it assigned.
-        tag_asana_item(a, task, tag)
-    except ApiException as e:
-        _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", e)
+        tag_asana_item(app, task, tag)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
 
 
-def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
+def get_asana_users(app: App, asana_workspace_gid: str) -> list[UserResponse]:
     """
     Retrieves a list of Asana users in a specific workspace.
 
@@ -614,7 +614,7 @@ def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
         list(asana.UserResponse): A list of `asana.UserResponse` objects representing the Asana users in the specified
         workspace.
     """
-    users_api_instance = asana.UsersApi(a.asana_client)
+    users_api_instance = asana.UsersApi(app.asana_client)
     opt_fields = [
         "email",
         "name",
@@ -626,5 +626,5 @@ def get_asana_users(a: App, asana_workspace_gid: str) -> list[UserResponse]:
             opt_fields=opt_fields,
         )
         return api_response.data
-    except ApiException as e:
-        _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", e)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)

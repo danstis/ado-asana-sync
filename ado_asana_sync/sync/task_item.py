@@ -88,7 +88,7 @@ class TaskItem:
         return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {self.title}'
 
     @classmethod
-    def find_by_ado_id(cls, a: App, ado_id: int) -> TaskItem | None:
+    def find_by_ado_id(cls, app: App, ado_id: int) -> TaskItem | None:
         """
         Find and retrieve a TaskItem by its Azure DevOps (ADO) ID.
 
@@ -101,14 +101,14 @@ class TaskItem:
             None: If there is no matching item.
         """
         query = Query().ado_id == ado_id
-        if a.matches.contains(query):
-            item = a.matches.search(query)
+        if app.matches.contains(query):
+            item = app.matches.search(query)
             return cls(**item[0])
         return None
 
     @classmethod
     def search(
-        cls, a: App, ado_id: int = None, asana_gid: str = None
+        cls, app: App, ado_id: int = None, asana_gid: str = None
     ) -> TaskItem | None:
         """
         Search for a task item in the App object based on the given ADO ID or Asana GID.
@@ -129,12 +129,12 @@ class TaskItem:
         query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
 
         # return the first matching item, or return None if not found.
-        if a.matches.contains(query):
-            item = a.matches.search(query)
+        if app.matches.contains(query):
+            item = app.matches.search(query)
             return cls(**item[0])
         return None
 
-    def save(self, a: App) -> None:
+    def save(self, app: App) -> None:
         """
         Save the TaskItem to the database.
 
@@ -158,12 +158,12 @@ class TaskItem:
             "updated_date": self.updated_date,
         }
         query = Query().ado_id == task_data["ado_id"]
-        if a.matches.contains(query):
-            a.matches.update(task_data, query)
+        if app.matches.contains(query):
+            app.matches.update(task_data, query)
         else:
-            a.matches.insert(task_data)
+            app.matches.insert(task_data)
 
-    def is_current(self, a: App) -> bool:
+    def is_current(self, app: App) -> bool:
         """
         Check if the current TaskItem is up-to-date with its corresponding tasks in Azure DevOps (ADO) and Asana.
 
@@ -177,8 +177,8 @@ class TaskItem:
         Returns:
             bool: True if the TaskItem is current, False otherwise.
         """
-        ado_task = a.ado_wit_client.get_work_item(self.ado_id)
-        asana_task = get_asana_task(a, self.asana_gid)
+        ado_task = app.ado_wit_client.get_work_item(self.ado_id)
+        asana_task = get_asana_task(app, self.asana_gid)
 
         if not ado_task or not asana_task:
             return False
