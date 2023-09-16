@@ -1,3 +1,6 @@
+""" This module contains the TaskItem class, which represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
+"""
+
 from __future__ import annotations
 
 from tinydb import Query
@@ -101,8 +104,7 @@ class TaskItem:
         if a.matches.contains(query):
             item = a.matches.search(query)
             return cls(**item[0])
-        else:
-            return None
+        return None
 
     @classmethod
     def search(
