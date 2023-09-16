@@ -15,7 +15,7 @@ from .app import App
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_asana_task(app: App, task_gid) -> object | None:
+def get_asana_task(app: App, task_gid: str) -> object | None:
     """
     Returns the entire task object for the Asana task with the given gid in the given project.
 
