@@ -8,8 +8,6 @@ import logging
 import asana
 from asana.rest import ApiException
 
-from ado_asana_sync.utils.date import iso8601_utc
-
 from .app import App
 
 
