@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import sleep
 
-import asana
-from asana import TagResponse, UserResponse
-from asana.rest import ApiException
+import asana  # type: ignore
+from asana import TagResponse, UserResponse  # type: ignore
+from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
