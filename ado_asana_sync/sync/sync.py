@@ -71,7 +71,9 @@ def read_projects() -> list:
     return projects
 
 
-def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> TagResponse:
+def create_tag_if_not_existing(
+    app: App, workspace: str, tag: str
+) -> TagResponse | None:
     """
     Create a tag for a given workspace if it does not already exist.
 
@@ -100,6 +102,7 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> TagRespons
         _LOGGER.error(
             "Exception when calling TagsApi->create_tag_for_workspace: %s\n", exception
         )
+        return None
 
 
 def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
@@ -127,7 +130,7 @@ def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
         return None
 
 
-def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse]:
+def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse] | None:
     """
     Retrieves the tag for a given Asana task.
     """
@@ -140,7 +143,10 @@ def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse]:
         )
         return api_response.data
     except ApiException as exception:
-        _LOGGER.error("Exception when calling TagsApi->get_tags_for_task: %s\n", exception)
+        _LOGGER.error(
+            "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
+        )
+        return None
 
 
 def tag_asana_item(app: App, task: TaskItem, tag: TagResponse) -> None:
@@ -156,7 +162,9 @@ def tag_asana_item(app: App, task: TaskItem, tag: TagResponse) -> None:
             body = asana.TagsBody({"tag": tag.gid})
             api_instance.add_tag_for_task(body, task.asana_gid)
         except ApiException as exception:
-            _LOGGER.error("Exception when calling TasksApi->add_tag_for_task: %s\n", exception)
+            _LOGGER.error(
+                "Exception when calling TasksApi->add_tag_for_task: %s\n", exception
+            )
 
 
 def sync_project(app: App, project):
@@ -416,7 +424,7 @@ def matching_user(
     return None
 
 
-def get_asana_workspace(app: App, name) -> str:
+def get_asana_workspace(app: App, name) -> str | None:
     """
     Returns the workspace gid for the named Asana workspace.
 
@@ -431,10 +439,13 @@ def get_asana_workspace(app: App, name) -> str:
             if w.name == name:
                 return w.gid
     except ApiException as exception:
-        _LOGGER.error("Exception when calling WorkspacesApi->get_workspaces: %s\n", exception)
+        _LOGGER.error(
+            "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
+        )
+        return None
 
 
-def get_asana_project(app: App, workspace_gid, name) -> str:
+def get_asana_project(app: App, workspace_gid, name) -> str | None:
     """
     Returns the project gid for the named Asana project.
 
@@ -451,7 +462,10 @@ def get_asana_project(app: App, workspace_gid, name) -> str:
             if p.name == name:
                 return p.gid
     except ApiException as exception:
-        _LOGGER.error("Exception when calling ProjectsApi->get_projects: %s\n", exception)
+        _LOGGER.error(
+            "Exception when calling ProjectsApi->get_projects: %s\n", exception
+        )
+        return None
 
 
 def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
@@ -471,7 +485,7 @@ def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
             return t
 
 
-def get_asana_project_tasks(app: App, asana_project) -> list[object]:
+def get_asana_project_tasks(app: App, asana_project) -> list[object] | None:
     """
     Returns a list of task objects for the given project.
 
@@ -528,6 +542,7 @@ def get_asana_project_tasks(app: App, asana_project) -> list[object]:
             "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s",
             exception,
         )
+        return None
 
 
 def create_asana_task(
@@ -602,7 +617,7 @@ def update_asana_task(app: App, task: TaskItem, tag: TagResponse) -> None:
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
 
 
-def get_asana_users(app: App, asana_workspace_gid: str) -> list[UserResponse]:
+def get_asana_users(app: App, asana_workspace_gid: str) -> list[UserResponse] | None:
     """
     Retrieves a list of Asana users in a specific workspace.
 
@@ -628,3 +643,4 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[UserResponse]:
         return api_response.data
     except ApiException as exception:
         _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)
+        return None
