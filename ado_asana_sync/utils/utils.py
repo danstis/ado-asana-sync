@@ -1,3 +1,7 @@
+""" The util module contains utility functions that are used throughout the application.
+"""
+
+
 def safe_get(obj, *attrs_keys):
     """
     Safely retrieves nested attributes from an object.
