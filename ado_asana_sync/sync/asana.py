@@ -52,6 +52,6 @@ def get_asana_task(app: App, task_gid) -> object | None:
             opt_fields=opt_fields,
         )
         return api_response.data
-    except ApiException as e:
-        _LOGGER.error("Exception when calling TasksApi->get_task: %s\n", e)
+    except ApiException as exception:
+        _LOGGER.error("Exception when calling TasksApi->get_task: %s\n", exception)
         return None
