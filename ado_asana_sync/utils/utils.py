@@ -2,7 +2,7 @@
 """
 
 
-def safe_get(obj, *attrs_keys):
+def safe_get(obj: dict | object, *attrs_keys: str) -> any:
     """
     Safely retrieves nested attributes from an object.
 
