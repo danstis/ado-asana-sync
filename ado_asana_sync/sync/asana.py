@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import logging
 
-import asana
-from asana.rest import ApiException
+import asana  # type: ignore
+from asana.rest import ApiException  # type: ignore
 
 from .app import App
 
