@@ -3,6 +3,7 @@ import os
 
 import asana  # type: ignore
 from azure.devops.connection import Connection  # type: ignore
+from azure.monitor.opentelemetry import configure_azure_monitor
 from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
 
@@ -45,16 +46,21 @@ class App:
 
     def __init__(
         self,
-        ado_pat: str = None,
-        ado_url: str = None,
-        asana_token: str = None,
-        asana_workspace_name: str = None,
+        ado_pat: str = "",
+        ado_url: str = "",
+        asana_token: str = "",
+        asana_workspace_name: str = "",
+        applicationinsights_connection_string: str = "",
     ) -> None:
         self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
         self.ado_url = ado_url or os.environ.get("ADO_URL")
         self.asana_token = asana_token or os.environ.get("ASANA_TOKEN")
         self.asana_workspace_name = asana_workspace_name or os.environ.get(
             "ASANA_WORKSPACE_NAME"
+        )
+        self.applicationinsights_connection_string = (
+            applicationinsights_connection_string
+            or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
         )
         self.ado_core_client = None
         self.ado_wit_client = None
@@ -89,19 +95,23 @@ class App:
         """
         Connects to ADO and Asana, and sets up the TinyDB database.
         """
-        # connect ADO
+        # Connect ADO.
         _LOGGER.debug("Connecting to Azure DevOps")
         ado_credentials = BasicAuthentication("", self.ado_pat)
         ado_connection = Connection(base_url=self.ado_url, creds=ado_credentials)
         self.ado_core_client = ado_connection.clients.get_core_client()
         self.ado_work_client = ado_connection.clients.get_work_client()
         self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
-        # connect Asana
+        # Connect Asana.
         _LOGGER.debug("Connecting to Asana")
         asana_config = asana.Configuration()
         asana_config.access_token = self.asana_token
         self.asana_client = asana.ApiClient(asana_config)
-        # setup tinydb
+        # Configure application insights.
+        configure_azure_monitor(
+            connection_string=self.applicationinsights_connection_string,
+        )
+        # Setup tinydb.
         _LOGGER.debug("Opening local database")
         self.db = TinyDB(
             os.path.join(os.path.dirname(__package__), "data", "appdata.json")

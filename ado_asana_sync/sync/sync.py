@@ -12,6 +12,7 @@ from asana import TagResponse, UserResponse  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
+from opentelemetry import trace
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.utils import safe_get
@@ -20,7 +21,7 @@ from .app import App
 from .asana import get_asana_task
 from .task_item import TaskItem
 
-# _LOGGER is the logging instance for this file.
+# _LOGGER is the logging instance for this module.
 _LOGGER = logging.getLogger(__name__)
 # _SYNC_THRESHOLD defines the number of days to continue syncing closed tasks, after this many days they will be removed from
 # the sync DB.
@@ -28,19 +29,28 @@ _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 # _CLOSED_STATES defines a list of states that will be considered as completed. If the ADO state matches one of these values
 # it will cause the linked Asana task to be closed.
 _CLOSED_STATES = {"Closed", "Removed", "Done"}
+# _TRACER is the tracer instance for this module.
+_TRACER = trace.get_tracer(__name__)
 
 
 def start_sync(app: App) -> None:
     while True:
-        app.asana_tag_gid = create_tag_if_not_existing(
-            app, get_asana_workspace(app, app.asana_workspace_name), app.asana_tag_name
-        )
-        projects = read_projects()
-        for project in projects:
-            sync_project(app, project)
+        with _TRACER.start_as_current_span("start_sync") as span:
+            span.add_event("Start sync run")
+            app.asana_tag_gid = create_tag_if_not_existing(
+                app,
+                get_asana_workspace(app, app.asana_workspace_name),
+                app.asana_tag_name,
+            )
+            projects = read_projects()
+            for project in projects:
+                sync_project(app, project)
 
-        _LOGGER.info("Sync process complete, sleeping for %s seconds", app.sleep_time)
-        sleep(app.sleep_time)
+            _LOGGER.info(
+                "Sync process complete, sleeping for %s seconds", app.sleep_time
+            )
+            span.end()
+            sleep(app.sleep_time)
 
 
 def read_projects() -> list:
@@ -50,25 +60,28 @@ def read_projects() -> list:
     Returns:
         projects (list): List of projects with specific attributes.
     """
-    # Initialize an empty list to store the projects
-    projects = []
+    with _TRACER.start_as_current_span("read_projects"):
+        # Initialize an empty list to store the projects
+        projects = []
 
-    # Open the JSON file and load the data
-    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
-        data = json.load(f)
+        # Open the JSON file and load the data
+        with open(
+            os.path.join(os.path.dirname(__package__), "data", "projects.json")
+        ) as f:
+            data = json.load(f)
 
-    # Iterate over each project in the data and append it to the projects list
-    for project in data:
-        projects.append(
-            {
-                "adoProjectName": project["adoProjectName"],
-                "adoTeamName": project["adoTeamName"],
-                "asanaProjectName": project["asanaProjectName"],
-            }
-        )
+        # Iterate over each project in the data and append it to the projects list
+        for project in data:
+            projects.append(
+                {
+                    "adoProjectName": project["adoProjectName"],
+                    "adoTeamName": project["adoTeamName"],
+                    "asanaProjectName": project["asanaProjectName"],
+                }
+            )
 
-    # Return the list of projects
-    return projects
+        # Return the list of projects
+        return projects
 
 
 def create_tag_if_not_existing(
@@ -88,21 +101,23 @@ def create_tag_if_not_existing(
     Raises:
         ApiException: If an error occurs while making the API call.
     """
-    existing_tag = get_tag_by_name(app, workspace, tag)
-    if existing_tag is not None:
-        return existing_tag
-    api_instance = asana.TagsApi(app.asana_client)
-    body = asana.TagsBody({"name": tag})
-    try:
-        # Create a tag
-        _LOGGER.info("tag '%s' not found, creating it", tag)
-        api_response = api_instance.create_tag_for_workspace(body, workspace)
-        return api_response.data
-    except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling TagsApi->create_tag_for_workspace: %s\n", exception
-        )
-        return None
+    with _TRACER.start_as_current_span("create_tag_if_not_existing"):
+        existing_tag = get_tag_by_name(app, workspace, tag)
+        if existing_tag is not None:
+            return existing_tag
+        api_instance = asana.TagsApi(app.asana_client)
+        body = asana.TagsBody({"name": tag})
+        try:
+            # Create a tag
+            _LOGGER.info("tag '%s' not found, creating it", tag)
+            api_response = api_instance.create_tag_for_workspace(body, workspace)
+            return api_response.data
+        except ApiException as exception:
+            _LOGGER.error(
+                "Exception when calling TagsApi->create_tag_for_workspace: %s\n",
+                exception,
+            )
+            return None
 
 
 def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
@@ -116,37 +131,39 @@ def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
     Returns:
         TagResponse | None: The tag object if found, or None if not found.
     """
-    api_instance = asana.TagsApi(app.asana_client)
-    try:
-        # Get all tags in the workspace.
-        _LOGGER.info("get workspace tag '%s'", tag)
-        api_response = api_instance.get_tags(workspace=workspace)
+    with _TRACER.start_as_current_span("get_tag_by_name"):
+        api_instance = asana.TagsApi(app.asana_client)
+        try:
+            # Get all tags in the workspace.
+            _LOGGER.info("get workspace tag '%s'", tag)
+            api_response = api_instance.get_tags(workspace=workspace)
 
-        # Iterate through the tags to find the desired tag.
-        tags_by_name = {t.name: t for t in api_response.data}
-        return tags_by_name.get(tag)
-    except ApiException as exception:
-        _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", exception)
-        return None
+            # Iterate through the tags to find the desired tag.
+            tags_by_name = {t.name: t for t in api_response.data}
+            return tags_by_name.get(tag)
+        except ApiException as exception:
+            _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", exception)
+            return None
 
 
 def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse]:
     """
     Retrieves the tag for a given Asana task.
     """
-    api_instance = asana.TagsApi(app.asana_client)
+    with _TRACER.start_as_current_span("get_asana_task_tags"):
+        api_instance = asana.TagsApi(app.asana_client)
 
-    try:
-        # Get a task's tags
-        api_response = api_instance.get_tags_for_task(
-            task.asana_gid,
-        )
-        return api_response.data
-    except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
-        )
-        return []
+        try:
+            # Get a task's tags
+            api_response = api_instance.get_tags_for_task(
+                task.asana_gid,
+            )
+            return api_response.data
+        except ApiException as exception:
+            _LOGGER.error(
+                "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
+            )
+            return []
 
 
 def tag_asana_item(app: App, task: TaskItem, tag: TagResponse) -> None:
