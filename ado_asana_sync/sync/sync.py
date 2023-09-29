@@ -331,7 +331,7 @@ def sync_project(app: App, project):
                     wi["title"],
                     _SYNC_THRESHOLD,
                 )
-                app.matches.remove(wi.doc_id)
+                app.matches.remove(doc_ids=[wi.doc_id])
                 continue
 
             # Get the work item details from ADO.
