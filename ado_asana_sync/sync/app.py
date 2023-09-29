@@ -1,3 +1,11 @@
+"""
+This module contains the App class which represents an application that connects to Azure DevOps (ADO) and Asana, and sets up
+a TinyDB database.
+
+Classes:
+    App: Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
+"""
+
 import logging
 import os
 
@@ -45,10 +53,10 @@ class App:
 
     def __init__(
         self,
-        ado_pat: str = None,
-        ado_url: str = None,
-        asana_token: str = None,
-        asana_workspace_name: str = None,
+        ado_pat: str = "",
+        ado_url: str = "",
+        asana_token: str = "",
+        asana_workspace_name: str = "",
     ) -> None:
         self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
         self.ado_url = ado_url or os.environ.get("ADO_URL")
