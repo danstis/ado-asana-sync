@@ -1,5 +1,6 @@
 """
-This module contains the App class which represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
+This module contains the App class which represents an application that connects to Azure DevOps (ADO) and Asana, and sets up
+a TinyDB database.
 
 Classes:
     App: Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
