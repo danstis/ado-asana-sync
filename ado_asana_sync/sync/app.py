@@ -1,3 +1,7 @@
+"""
+This module contains the App class which represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
+"""
+
 import logging
 import os
 
