@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,14 +13,15 @@ from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from ado_asana_sync.utils.date import iso8601_utc
+from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
 
 from .app import App
 from .asana import get_asana_task
 from .task_item import TaskItem
 
-# _LOGGER is the logging instance for this file.
-_LOGGER = logging.getLogger(__name__)
+# This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
+_LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 # _SYNC_THRESHOLD defines the number of days to continue syncing closed tasks, after this many days they will be removed from
 # the sync DB.
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
@@ -29,18 +29,30 @@ _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 # it will cause the linked Asana task to be closed.
 _CLOSED_STATES = {"Closed", "Removed", "Done"}
 
+# ADO field constants
+ADO_STATE = "System.State"
+ADO_TITLE = "System.Title"
+ADO_WORK_ITEM_TYPE = "System.WorkItemType"
+
 
 def start_sync(app: App) -> None:
     while True:
-        app.asana_tag_gid = create_tag_if_not_existing(
-            app, get_asana_workspace(app, app.asana_workspace_name), app.asana_tag_name
-        )
-        projects = read_projects()
-        for project in projects:
-            sync_project(app, project)
+        with _TRACER.start_as_current_span("start_sync") as span:
+            span.add_event("Start sync run")
+            app.asana_tag_gid = create_tag_if_not_existing(
+                app,
+                get_asana_workspace(app, app.asana_workspace_name),
+                app.asana_tag_name,
+            )
+            projects = read_projects()
+            for project in projects:
+                sync_project(app, project)
 
-        _LOGGER.info("Sync process complete, sleeping for %s seconds", app.sleep_time)
-        sleep(app.sleep_time)
+            _LOGGER.info(
+                "Sync process complete, sleeping for %s seconds", app.sleep_time
+            )
+            span.end()
+            sleep(app.sleep_time)
 
 
 def read_projects() -> list:
@@ -50,25 +62,29 @@ def read_projects() -> list:
     Returns:
         projects (list): List of projects with specific attributes.
     """
-    # Initialize an empty list to store the projects
-    projects = []
+    with _TRACER.start_as_current_span("read_projects"):
+        # Initialize an empty list to store the projects
+        projects = []
 
-    # Open the JSON file and load the data
-    with open(os.path.join(os.path.dirname(__package__), "data", "projects.json")) as f:
-        data = json.load(f)
+        # Open the JSON file and load the data
+        with open(
+            os.path.join(os.path.dirname(__package__), "data", "projects.json"),
+            encoding="utf-8",
+        ) as file:
+            data = json.load(file)
 
-    # Iterate over each project in the data and append it to the projects list
-    for project in data:
-        projects.append(
-            {
-                "adoProjectName": project["adoProjectName"],
-                "adoTeamName": project["adoTeamName"],
-                "asanaProjectName": project["asanaProjectName"],
-            }
-        )
+        # Iterate over each project in the data and append it to the projects list
+        for project in data:
+            projects.append(
+                {
+                    "adoProjectName": project["adoProjectName"],
+                    "adoTeamName": project["adoTeamName"],
+                    "asanaProjectName": project["asanaProjectName"],
+                }
+            )
 
-    # Return the list of projects
-    return projects
+        # Return the list of projects
+        return projects
 
 
 def create_tag_if_not_existing(
@@ -88,21 +104,23 @@ def create_tag_if_not_existing(
     Raises:
         ApiException: If an error occurs while making the API call.
     """
-    existing_tag = get_tag_by_name(app, workspace, tag)
-    if existing_tag is not None:
-        return existing_tag
-    api_instance = asana.TagsApi(app.asana_client)
-    body = asana.TagsBody({"name": tag})
-    try:
-        # Create a tag
-        _LOGGER.info("tag '%s' not found, creating it", tag)
-        api_response = api_instance.create_tag_for_workspace(body, workspace)
-        return api_response.data
-    except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling TagsApi->create_tag_for_workspace: %s\n", exception
-        )
-        return None
+    with _TRACER.start_as_current_span("create_tag_if_not_existing"):
+        existing_tag = get_tag_by_name(app, workspace, tag)
+        if existing_tag is not None:
+            return existing_tag
+        api_instance = asana.TagsApi(app.asana_client)
+        body = asana.TagsBody({"name": tag})
+        try:
+            # Create a tag
+            _LOGGER.info("tag '%s' not found, creating it", tag)
+            api_response = api_instance.create_tag_for_workspace(body, workspace)
+            return api_response.data
+        except ApiException as exception:
+            _LOGGER.error(
+                "Exception when calling TagsApi->create_tag_for_workspace: %s\n",
+                exception,
+            )
+            return None
 
 
 def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
@@ -116,37 +134,39 @@ def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
     Returns:
         TagResponse | None: The tag object if found, or None if not found.
     """
-    api_instance = asana.TagsApi(app.asana_client)
-    try:
-        # Get all tags in the workspace.
-        _LOGGER.info("get workspace tag '%s'", tag)
-        api_response = api_instance.get_tags(workspace=workspace)
+    with _TRACER.start_as_current_span("get_tag_by_name"):
+        api_instance = asana.TagsApi(app.asana_client)
+        try:
+            # Get all tags in the workspace.
+            _LOGGER.info("get workspace tag '%s'", tag)
+            api_response = api_instance.get_tags(workspace=workspace)
 
-        # Iterate through the tags to find the desired tag.
-        tags_by_name = {t.name: t for t in api_response.data}
-        return tags_by_name.get(tag)
-    except ApiException as exception:
-        _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", exception)
-        return None
+            # Iterate through the tags to find the desired tag.
+            tags_by_name = {t.name: t for t in api_response.data}
+            return tags_by_name.get(tag)
+        except ApiException as exception:
+            _LOGGER.error("Exception when calling TagsApi->get_tags: %s\n", exception)
+            return None
 
 
 def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse]:
     """
     Retrieves the tag for a given Asana task.
     """
-    api_instance = asana.TagsApi(app.asana_client)
+    with _TRACER.start_as_current_span("get_asana_task_tags"):
+        api_instance = asana.TagsApi(app.asana_client)
 
-    try:
-        # Get a task's tags
-        api_response = api_instance.get_tags_for_task(
-            task.asana_gid,
-        )
-        return api_response.data
-    except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
-        )
-        return []
+        try:
+            # Get a task's tags
+            api_response = api_instance.get_tags_for_task(
+                task.asana_gid,
+            )
+            return api_response.data
+        except ApiException as exception:
+            _LOGGER.error(
+                "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
+            )
+            return []
 
 
 def tag_asana_item(app: App, task: TaskItem, tag: TagResponse) -> None:
@@ -235,7 +255,7 @@ def sync_project(app: App, project):
         if ado_assigned is None and existing_match is None:
             _LOGGER.debug(
                 "%s:skipping item as it is not assigned",
-                ado_task.fields["System.Title"],
+                ado_task.fields[ADO_TITLE],
             )
             continue
         asana_matched_user = matching_user(asana_users, ado_assigned)
@@ -243,13 +263,13 @@ def sync_project(app: App, project):
             continue
 
         if existing_match is None:
-            _LOGGER.info("%s:unmapped task", ado_task.fields["System.Title"])
+            _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
             existing_match = TaskItem(
                 ado_id=ado_task.id,
                 ado_rev=ado_task.rev,
-                title=ado_task.fields["System.Title"],
-                item_type=ado_task.fields["System.WorkItemType"],
-                state=ado_task.fields["System.State"],
+                title=ado_task.fields[ADO_TITLE],
+                item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
+                state=ado_task.fields[ADO_STATE],
                 created_date=iso8601_utc(datetime.utcnow()),
                 updated_date=iso8601_utc(datetime.utcnow()),
                 url=safe_get(
@@ -265,7 +285,7 @@ def sync_project(app: App, project):
                 # The Asana task does not exist, create it and map the tasks.
                 _LOGGER.info(
                     "%s:no matching asana task exists, creating new task",
-                    ado_task.fields["System.Title"],
+                    ado_task.fields[ADO_TITLE],
                 )
                 create_asana_task(
                     app,
@@ -276,7 +296,7 @@ def sync_project(app: App, project):
                 continue
             else:
                 # The Asana task exists, map the tasks in the db.
-                _LOGGER.info("%s:dating task", ado_task.fields["System.Title"])
+                _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
                 if asana_task is not None:
                     existing_match.asana_gid = asana_task.gid
                 update_asana_task(
@@ -300,9 +320,9 @@ def sync_project(app: App, project):
             _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
             continue
         existing_match.ado_rev = ado_task.rev
-        existing_match.title = ado_task.fields["System.Title"]
-        existing_match.item_type = ado_task.fields["System.WorkItemType"]
-        existing_match.state = ado_task.fields["System.State"]
+        existing_match.title = ado_task.fields[ADO_TITLE]
+        existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+        existing_match.state = ado_task.fields[ADO_STATE]
         existing_match.updated_date = iso8601_utc(datetime.now())
         existing_match.url = safe_get(
             ado_task, "_links", "additional_properties", "html", "href"
@@ -336,6 +356,12 @@ def sync_project(app: App, project):
 
             # Get the work item details from ADO.
             existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+            if existing_match is None:
+                _LOGGER.warning(
+                    "Task with ADO ID %s not found in database",
+                    wi["ado_id"],
+                )
+                continue
             ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
 
             # Check if the item is already up to date.
@@ -355,9 +381,9 @@ def sync_project(app: App, project):
                 )
                 continue
             existing_match.ado_rev = ado_task.rev
-            existing_match.title = ado_task.fields["System.Title"]
-            existing_match.item_type = ado_task.fields["System.WorkItemType"]
-            existing_match.state = ado_task.fields["System.State"]
+            existing_match.title = ado_task.fields[ADO_TITLE]
+            existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+            existing_match.state = ado_task.fields[ADO_STATE]
             existing_match.updated_date = iso8601_utc(datetime.now())
             existing_match.url = safe_get(
                 ado_task, "_links", "additional_properties", "html", "href"
@@ -425,7 +451,7 @@ def matching_user(
     return None
 
 
-def get_asana_workspace(app: App, name) -> str | None:
+def get_asana_workspace(app: App, name: str) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
 
@@ -439,11 +465,12 @@ def get_asana_workspace(app: App, name) -> str | None:
         for w in api_response.data:
             if w.name == name:
                 return w.gid
+        raise ValueError(f"No workspace found with name '{name}'")
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
         )
-        return None
+        raise ValueError(f"Call to Asana API failed: {exception}") from exception
 
 
 def get_asana_project(app: App, workspace_gid, name) -> str | None:

@@ -13,6 +13,7 @@ asana = "^4.0.6"
 azure-devops = "^7.1.0b3"
 tinydb = "^4.8.0"
 pytz = "^2023.3"
+azure-monitor-opentelemetry = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.5"
