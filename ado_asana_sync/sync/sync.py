@@ -439,7 +439,7 @@ def matching_user(
     return None
 
 
-def get_asana_workspace(app: App, name: str) -> str | None:
+def get_asana_workspace(app: App, name: str) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
 
@@ -453,11 +453,12 @@ def get_asana_workspace(app: App, name: str) -> str | None:
         for w in api_response.data:
             if w.name == name:
                 return w.gid
+        raise ValueError("No workspace found with name '%s'", name)
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
         )
-        return None
+        raise ValueError("Call to Asana API failed: %s", exception)
 
 
 def get_asana_project(app: App, workspace_gid, name) -> str | None:
