@@ -55,10 +55,10 @@ class App:
 
     def __init__(
         self,
-        ado_pat: Optional[str] = None,
-        ado_url: Optional[str] = None,
-        asana_token: Optional[str] = None,
-        asana_workspace_name: Optional[str] = None,
+        ado_pat: str = "",
+        ado_url: str = "",
+        asana_token: str = "",
+        asana_workspace_name: str = "",
         applicationinsights_connection_string: Optional[str] = None,
     ) -> None:
         self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
