@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Optional
 
 import asana  # type: ignore
 from azure.devops.connection import Connection  # type: ignore
@@ -46,11 +47,11 @@ class App:
 
     def __init__(
         self,
-        ado_pat: str = "",
-        ado_url: str = "",
-        asana_token: str = "",
-        asana_workspace_name: str = "",
-        applicationinsights_connection_string: str = "",
+        ado_pat: Optional[str] = None,
+        ado_url: Optional[str] = None,
+        asana_token: Optional[str] = None,
+        asana_workspace_name: Optional[str] = None,
+        applicationinsights_connection_string: Optional[str] = None,
     ) -> None:
         self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
         self.ado_url = ado_url or os.environ.get("ADO_URL")
@@ -60,7 +61,7 @@ class App:
         )
         self.applicationinsights_connection_string = (
             applicationinsights_connection_string
-            or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+            or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", None)
         )
         self.ado_core_client = None
         self.ado_wit_client = None
