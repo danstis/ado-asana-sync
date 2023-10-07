@@ -454,12 +454,12 @@ def get_asana_workspace(app: App, name: str) -> str:
         for w in api_response.data:
             if w.name == name:
                 return w.gid
-        raise ValueError("No workspace found with name '%s'", name)
+        raise ValueError("No workspace found with name '%s'" % name)
     except ApiException as exception:
         _LOGGER.error(
-            "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
+            "Exception when calling WorkspacesApi->get_workspaces: %s\n" % exception
         )
-        raise ValueError("Call to Asana API failed: %s", exception)
+        raise ValueError("Call to Asana API failed: %s" % exception) from exception
 
 
 def get_asana_project(app: App, workspace_gid, name) -> str | None:
