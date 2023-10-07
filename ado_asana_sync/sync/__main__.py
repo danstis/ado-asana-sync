@@ -1,3 +1,10 @@
+"""
+This module contains the main entry point for the application. It sets up the logging configuration, creates an instance of
+the App class, and starts the main sync process.
+
+Environment Variables:
+    LOG_LEVEL: The log level to use. Defaults to INFO.
+"""
 import logging
 import os
 from logging import getLevelName

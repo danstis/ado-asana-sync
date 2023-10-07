@@ -1,8 +1,9 @@
 """ The util module contains utility functions that are used throughout the application.
 """
+from typing import Any
 
 
-def safe_get(obj: dict | object, *attrs_keys: str) -> any:
+def safe_get(obj: dict | object, *attrs_keys: str) -> Any:
     """
     Safely retrieves nested attributes from an object.
 

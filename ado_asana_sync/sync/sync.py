@@ -343,11 +343,12 @@ def sync_project(app: App, project):
                 datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
             ).days > _SYNC_THRESHOLD:
                 _LOGGER.info(
-                    "%s:Task has not been updated in %s days, removing mapping",
-                    wi["asana_title"],
+                    "%s: %s:Task has not been updated in %s days, removing mapping",
+                    wi["item_type"],
+                    wi["title"],
                     _SYNC_THRESHOLD,
                 )
-                app.matches.remove(wi.doc_id)
+                app.matches.remove(doc_ids=[wi.doc_id])
                 continue
 
             # Get the work item details from ADO.
