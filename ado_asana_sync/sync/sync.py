@@ -462,7 +462,7 @@ def get_asana_workspace(app: App, name: str) -> str:
         raise ValueError(f"No workspace found with name '{name}'")
     except ApiException as exception:
         _LOGGER.error(
-            f"Exception when calling WorkspacesApi->get_workspaces: {exception}\n"
+            "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
         )
         raise ValueError(f"Call to Asana API failed: {exception}") from exception
 
