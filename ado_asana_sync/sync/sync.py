@@ -15,22 +15,21 @@ from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 from opentelemetry import trace
 
 from ado_asana_sync.utils.date import iso8601_utc
+from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
 
 from .app import App
 from .asana import get_asana_task
 from .task_item import TaskItem
 
-# _LOGGER is the logging instance for this module.
-_LOGGER = logging.getLogger(__name__)
+# This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
+_LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 # _SYNC_THRESHOLD defines the number of days to continue syncing closed tasks, after this many days they will be removed from
 # the sync DB.
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 # _CLOSED_STATES defines a list of states that will be considered as completed. If the ADO state matches one of these values
 # it will cause the linked Asana task to be closed.
 _CLOSED_STATES = {"Closed", "Removed", "Done"}
-# _TRACER is the tracer instance for this module.
-_TRACER = trace.get_tracer(__name__)
 
 
 def start_sync(app: App) -> None:
