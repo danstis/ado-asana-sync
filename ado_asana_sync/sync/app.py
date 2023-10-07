@@ -72,9 +72,9 @@ class App:
             or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", None)
         )
         if not self.applicationinsights_connection_string:
-            os.environ["OTEL_LOGS_EXPORTER"] = None
-            os.environ["OTEL_METRICS_EXPORTER"] = None
-            os.environ["OTEL_TRACES_EXPORTER"] = None
+            os.environ["OTEL_LOGS_EXPORTER"] = "None"
+            os.environ["OTEL_METRICS_EXPORTER"] = "None"
+            os.environ["OTEL_TRACES_EXPORTER"] = "None"
         self.ado_core_client = None
         self.ado_wit_client = None
         self.ado_work_client = None
