@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,7 +11,6 @@ from asana import TagResponse, UserResponse  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
-from opentelemetry import trace
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing

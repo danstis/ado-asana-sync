@@ -3,11 +3,8 @@
 
 from __future__ import annotations
 
-import logging
-
 import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
-from opentelemetry import trace
 
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 
