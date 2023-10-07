@@ -29,6 +29,11 @@ _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 # it will cause the linked Asana task to be closed.
 _CLOSED_STATES = {"Closed", "Removed", "Done"}
 
+# ADO field constants
+ADO_STATE = "System.State"
+ADO_TITLE = "System.Title"
+ADO_WORK_ITEM_TYPE = "System.WorkItemType"
+
 
 def start_sync(app: App) -> None:
     while True:
@@ -250,7 +255,7 @@ def sync_project(app: App, project):
         if ado_assigned is None and existing_match is None:
             _LOGGER.debug(
                 "%s:skipping item as it is not assigned",
-                ado_task.fields["System.Title"],
+                ado_task.fields[ADO_TITLE],
             )
             continue
         asana_matched_user = matching_user(asana_users, ado_assigned)
@@ -258,13 +263,13 @@ def sync_project(app: App, project):
             continue
 
         if existing_match is None:
-            _LOGGER.info("%s:unmapped task", ado_task.fields["System.Title"])
+            _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
             existing_match = TaskItem(
                 ado_id=ado_task.id,
                 ado_rev=ado_task.rev,
-                title=ado_task.fields["System.Title"],
-                item_type=ado_task.fields["System.WorkItemType"],
-                state=ado_task.fields["System.State"],
+                title=ado_task.fields[ADO_TITLE],
+                item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
+                state=ado_task.fields[ADO_STATE],
                 created_date=iso8601_utc(datetime.utcnow()),
                 updated_date=iso8601_utc(datetime.utcnow()),
                 url=safe_get(
@@ -280,7 +285,7 @@ def sync_project(app: App, project):
                 # The Asana task does not exist, create it and map the tasks.
                 _LOGGER.info(
                     "%s:no matching asana task exists, creating new task",
-                    ado_task.fields["System.Title"],
+                    ado_task.fields[ADO_TITLE],
                 )
                 create_asana_task(
                     app,
@@ -291,7 +296,7 @@ def sync_project(app: App, project):
                 continue
             else:
                 # The Asana task exists, map the tasks in the db.
-                _LOGGER.info("%s:dating task", ado_task.fields["System.Title"])
+                _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
                 if asana_task is not None:
                     existing_match.asana_gid = asana_task.gid
                 update_asana_task(
@@ -315,9 +320,9 @@ def sync_project(app: App, project):
             _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
             continue
         existing_match.ado_rev = ado_task.rev
-        existing_match.title = ado_task.fields["System.Title"]
-        existing_match.item_type = ado_task.fields["System.WorkItemType"]
-        existing_match.state = ado_task.fields["System.State"]
+        existing_match.title = ado_task.fields[ADO_TITLE]
+        existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+        existing_match.state = ado_task.fields[ADO_STATE]
         existing_match.updated_date = iso8601_utc(datetime.now())
         existing_match.url = safe_get(
             ado_task, "_links", "additional_properties", "html", "href"
@@ -370,9 +375,9 @@ def sync_project(app: App, project):
                 )
                 continue
             existing_match.ado_rev = ado_task.rev
-            existing_match.title = ado_task.fields["System.Title"]
-            existing_match.item_type = ado_task.fields["System.WorkItemType"]
-            existing_match.state = ado_task.fields["System.State"]
+            existing_match.title = ado_task.fields[ADO_TITLE]
+            existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+            existing_match.state = ado_task.fields[ADO_STATE]
             existing_match.updated_date = iso8601_utc(datetime.now())
             existing_match.url = safe_get(
                 ado_task, "_links", "additional_properties", "html", "href"
