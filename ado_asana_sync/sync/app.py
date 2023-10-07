@@ -61,11 +61,11 @@ class App:
         asana_workspace_name: str = "",
         applicationinsights_connection_string: Optional[str] = None,
     ) -> None:
-        self.ado_pat = ado_pat or os.environ.get("ADO_PAT")
-        self.ado_url = ado_url or os.environ.get("ADO_URL")
-        self.asana_token = asana_token or os.environ.get("ASANA_TOKEN")
+        self.ado_pat = ado_pat or os.environ.get("ADO_PAT", "")
+        self.ado_url = ado_url or os.environ.get("ADO_URL", "")
+        self.asana_token = asana_token or os.environ.get("ASANA_TOKEN", "")
         self.asana_workspace_name = asana_workspace_name or os.environ.get(
-            "ASANA_WORKSPACE_NAME"
+            "ASANA_WORKSPACE_NAME", ""
         )
         self.applicationinsights_connection_string = (
             applicationinsights_connection_string
