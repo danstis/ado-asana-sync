@@ -59,7 +59,10 @@ class App:
         self.asana_workspace_name = asana_workspace_name or os.environ.get(
             "ASANA_WORKSPACE_NAME"
         )
-        self.applicationinsights_connection_string = applicationinsights_connection_string or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", None)
+        self.applicationinsights_connection_string = (
+            applicationinsights_connection_string
+            or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", None)
+        )
         if not self.applicationinsights_connection_string:
             os.environ["OTEL_LOGS_EXPORTER"] = None
             os.environ["OTEL_METRICS_EXPORTER"] = None
