@@ -63,9 +63,10 @@ def read_projects() -> list:
 
         # Open the JSON file and load the data
         with open(
-            os.path.join(os.path.dirname(__package__), "data", "projects.json")
-        ) as f:
-            data = json.load(f)
+            os.path.join(os.path.dirname(__package__), "data", "projects.json"),
+            encoding="utf-8",
+        ) as file:
+            data = json.load(file)
 
         # Iterate over each project in the data and append it to the projects list
         for project in data:
