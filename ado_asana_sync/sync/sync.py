@@ -356,6 +356,12 @@ def sync_project(app: App, project):
 
             # Get the work item details from ADO.
             existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+            if existing_match is None:
+                _LOGGER.warning(
+                    "Task with ADO ID %s not found in database",
+                    wi["ado_id"],
+                )
+                continue
             ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
 
             # Check if the item is already up to date.
