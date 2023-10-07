@@ -439,7 +439,7 @@ def matching_user(
     return None
 
 
-def get_asana_workspace(app: App, name) -> str | None:
+def get_asana_workspace(app: App, name: str) -> str | None:
     """
     Returns the workspace gid for the named Asana workspace.
 
