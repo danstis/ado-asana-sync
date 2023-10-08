@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from tinydb import Query
 
 from ado_asana_sync.utils.date import iso8601_utc
@@ -57,6 +59,22 @@ class TaskItem:
         self.created_date = created_date
         self.updated_date = updated_date
         self.state = state
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, TaskItem):
+            return False
+        return (
+            self.ado_id == other.ado_id
+            and self.ado_rev == other.ado_rev
+            and self.title == other.title
+            and self.item_type == other.item_type
+            and self.url == other.url
+            and self.asana_gid == other.asana_gid
+            and self.asana_updated == other.asana_updated
+            and self.assigned_to == other.assigned_to
+            and self.created_date == other.created_date
+            and self.updated_date == other.updated_date
+        )
 
     def __str__(self) -> str:
         """

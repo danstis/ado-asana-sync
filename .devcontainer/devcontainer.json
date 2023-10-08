@@ -61,7 +61,8 @@
 		"eamodio.gitlens",
 		"SonarSource.sonarlint-vscode",
 		"ms-python.black-formatter",
-		"Codium.codium"
+		"Codium.codium",
+		"ryanluker.vscode-coverage-gutters"
 	]
     }
   }
