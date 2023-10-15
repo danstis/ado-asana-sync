@@ -215,7 +215,7 @@ def sync_project(app: App, project):
         ado_project = app.ado_core_client.get_project(project["adoProjectName"])
     except Exception as exception:
         _LOGGER.error(
-            f"ADO project {project['adoProjectName']} not found: {str(exception)}"
+            "ADO project %s not found: %s", project["adoProjectName"], exception
         )
         return
 
@@ -226,7 +226,10 @@ def sync_project(app: App, project):
         )
     except Exception as exception:
         _LOGGER.error(
-            f"ADO team {project['adoTeamName']} not found in project {project['adoProjectName']}: {str(exception)}"
+            "ADO team %s not found in project %s: %s",
+            project["adoTeamName"],
+            project["adoProjectName"],
+            exception,
         )
         return
 
@@ -235,7 +238,7 @@ def sync_project(app: App, project):
         asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
     except Exception as exception:
         _LOGGER.error(
-            f"Asana workspace {app.asana_workspace_name} not found: {str(exception)}"
+            "Asana workspace %s not found: %s", app.asana_workspace_name, exception
         )
         return
 
@@ -244,7 +247,9 @@ def sync_project(app: App, project):
         asana_users = get_asana_users(app, asana_workspace_id)
     except Exception as exception:
         _LOGGER.error(
-            f"Error fetching Asana users in workspace {app.asana_workspace_name}: {str(exception)}"
+            "Error fetching Asana users in workspace %s: %s",
+            app.asana_workspace_name,
+            exception,
         )
         return
 
@@ -255,7 +260,10 @@ def sync_project(app: App, project):
         )
     except Exception as exception:
         _LOGGER.error(
-            f"Asana project {project['asanaProjectName']} not found in workspace {app.asana_workspace_name}: {str(exception)}"
+            "Asana project %s not found in workspace %s: %s",
+            project["asanaProjectName"],
+            app.asana_workspace_name,
+            exception,
         )
         return
 
