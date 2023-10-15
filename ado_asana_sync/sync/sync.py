@@ -210,24 +210,54 @@ def sync_project(app: App, project):
         project["asanaProjectName"],
     )
 
-    # Get the ADO project by name.
-    ado_project = app.ado_core_client.get_project(project["adoProjectName"])
+    try:
+        # Get the ADO project by name.
+        ado_project = app.ado_core_client.get_project(project["adoProjectName"])
+    except NameError as exception:
+        _LOGGER.error(
+            "ADO project %s not found: %s", project["adoProjectName"], exception
+        )
+        return
 
-    # Get the ADO team by name within the ADO project.
-    ado_team = app.ado_core_client.get_team(
-        project["adoProjectName"], project["adoTeamName"]
-    )
+    try:
+        # Get the ADO team by name within the ADO project.
+        ado_team = app.ado_core_client.get_team(
+            project["adoProjectName"], project["adoTeamName"]
+        )
+    except NameError as exception:
+        _LOGGER.error(
+            "ADO team %s not found in project %s: %s",
+            project["adoTeamName"],
+            project["adoProjectName"],
+            exception,
+        )
+        return
 
-    # Get the Asana workspace ID by name.
-    asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
+    try:
+        # Get the Asana workspace ID by name.
+        asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
+    except NameError as exception:
+        _LOGGER.error(
+            "Asana workspace %s not found: %s", app.asana_workspace_name, exception
+        )
+        return
 
     # Get all Asana users in the workspace, this will enable user matching.
     asana_users = get_asana_users(app, asana_workspace_id)
 
     # Get the Asana project by name within the Asana workspace.
-    asana_project = get_asana_project(
-        app, asana_workspace_id, project["asanaProjectName"]
-    )
+    try:
+        asana_project = get_asana_project(
+            app, asana_workspace_id, project["asanaProjectName"]
+        )
+    except NameError as exception:
+        _LOGGER.error(
+            "Asana project %s not found in workspace %s: %s",
+            project["asanaProjectName"],
+            app.asana_workspace_name,
+            exception,
+        )
+        return
 
     # Get all Asana Tasks in this project.
     _LOGGER.info(
@@ -465,7 +495,7 @@ def get_asana_workspace(app: App, name: str) -> str:
         for w in api_response.data:
             if w.name == name:
                 return w.gid
-        raise ValueError(f"No workspace found with name '{name}'")
+        raise NameError(f"No workspace found with name '{name}'")
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
@@ -489,6 +519,7 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
         for p in api_response.data:
             if p.name == name:
                 return p.gid
+        raise NameError(f"No project found with name '{name}'")
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling ProjectsApi->get_projects: %s\n", exception
