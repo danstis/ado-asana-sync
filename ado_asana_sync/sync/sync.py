@@ -213,8 +213,10 @@ def sync_project(app: App, project):
     try:
         # Get the ADO project by name.
         ado_project = app.ado_core_client.get_project(project["adoProjectName"])
-    except Exception as e:
-        _LOGGER.error(f"ADO project {project['adoProjectName']} not found: {str(e)}")
+    except Exception as exception:
+        _LOGGER.error(
+            f"ADO project {project['adoProjectName']} not found: {str(exception)}"
+        )
         return
 
     try:
@@ -222,22 +224,28 @@ def sync_project(app: App, project):
         ado_team = app.ado_core_client.get_team(
             project["adoProjectName"], project["adoTeamName"]
         )
-    except Exception as e:
-        _LOGGER.error(f"ADO team {project['adoTeamName']} not found in project {project['adoProjectName']}: {str(e)}")
+    except Exception as exception:
+        _LOGGER.error(
+            f"ADO team {project['adoTeamName']} not found in project {project['adoProjectName']}: {str(exception)}"
+        )
         return
 
     try:
         # Get the Asana workspace ID by name.
         asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
-    except Exception as e:
-        _LOGGER.error(f"Asana workspace {app.asana_workspace_name} not found: {str(e)}")
+    except Exception as exception:
+        _LOGGER.error(
+            f"Asana workspace {app.asana_workspace_name} not found: {str(exception)}"
+        )
         return
 
     try:
         # Get all Asana users in the workspace, this will enable user matching.
         asana_users = get_asana_users(app, asana_workspace_id)
-    except Exception as e:
-        _LOGGER.error(f"Error fetching Asana users in workspace {app.asana_workspace_name}: {str(e)}")
+    except Exception as exception:
+        _LOGGER.error(
+            f"Error fetching Asana users in workspace {app.asana_workspace_name}: {str(exception)}"
+        )
         return
 
     try:
@@ -245,8 +253,10 @@ def sync_project(app: App, project):
         asana_project = get_asana_project(
             app, asana_workspace_id, project["asanaProjectName"]
         )
-    except Exception as e:
-        _LOGGER.error(f"Asana project {project['asanaProjectName']} not found in workspace {app.asana_workspace_name}: {str(e)}")
+    except Exception as exception:
+        _LOGGER.error(
+            f"Asana project {project['asanaProjectName']} not found in workspace {app.asana_workspace_name}: {str(exception)}"
+        )
         return
 
     # Get all Asana Tasks in this project.
