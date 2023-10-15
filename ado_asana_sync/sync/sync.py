@@ -236,7 +236,7 @@ def sync_project(app: App, project):
     try:
         # Get the Asana workspace ID by name.
         asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
-    except ValueError as exception:
+    except NameError as exception:
         _LOGGER.error(
             "Asana workspace %s not found: %s", app.asana_workspace_name, exception
         )
@@ -246,9 +246,18 @@ def sync_project(app: App, project):
     asana_users = get_asana_users(app, asana_workspace_id)
 
     # Get the Asana project by name within the Asana workspace.
-    asana_project = get_asana_project(
-        app, asana_workspace_id, project["asanaProjectName"]
-    )
+    try:
+        asana_project = get_asana_project(
+            app, asana_workspace_id, project["asanaProjectName"]
+        )
+    except NameError as exception:
+        _LOGGER.error(
+            "Asana project %s not found in workspace %s: %s",
+            project["asanaProjectName"],
+            app.asana_workspace_name,
+            exception,
+        )
+        return
 
     # Get all Asana Tasks in this project.
     _LOGGER.info(
@@ -486,7 +495,7 @@ def get_asana_workspace(app: App, name: str) -> str:
         for w in api_response.data:
             if w.name == name:
                 return w.gid
-        raise ValueError(f"No workspace found with name '{name}'")
+        raise NameError(f"No workspace found with name '{name}'")
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
@@ -510,6 +519,7 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
         for p in api_response.data:
             if p.name == name:
                 return p.gid
+        raise NameError(f"No project found with name '{name}'")
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling ProjectsApi->get_projects: %s\n", exception
