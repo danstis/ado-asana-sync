@@ -98,19 +98,19 @@ msrest = ">=0.7.1,<0.8.0"
 
 [[package]]
 name = "azure-monitor-opentelemetry"
-version = "1.0.0"
+version = "1.1.0"
 description = "Microsoft Azure Monitor Opentelemetry Distro Client Library for Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "azure-monitor-opentelemetry-1.0.0.tar.gz", hash = "sha256:cc0d28d5dda6cc09aacf6afc1010b3ad77d8d1dca0ac33b8a20cd3d52fab5082"},
-    {file = "azure_monitor_opentelemetry-1.0.0-py3-none-any.whl", hash = "sha256:1996c935088e0a604e5bb46896786415aa9ba80b5904173fc1961b3b950cb17a"},
+    {file = "azure-monitor-opentelemetry-1.1.0.tar.gz", hash = "sha256:c5d3597f01e0b7e173ca14784b6be465f0e595d01989f809a37f74ba02dc895b"},
+    {file = "azure_monitor_opentelemetry-1.1.0-py3-none-any.whl", hash = "sha256:f56aa5ed3efca5e825122734f10cee5161c4c79ee2cb6f614eb1a74ae9df729d"},
 ]
 
 [package.dependencies]
 azure-core = ">=1.24.0,<2.0.0"
 azure-core-tracing-opentelemetry = ">=1.0.0b10,<1.1.0"
-azure-monitor-opentelemetry-exporter = ">=1.0.0b17,<1.1.0"
+azure-monitor-opentelemetry-exporter = ">=1.0.0b18,<1.1.0"
 opentelemetry-instrumentation-django = ">=0.41b0,<1.0"
 opentelemetry-instrumentation-fastapi = ">=0.41b0,<1.0"
 opentelemetry-instrumentation-flask = ">=0.41b0,<1.0"
@@ -122,13 +122,13 @@ opentelemetry-resource-detector-azure = ">=0.1.0,<0.2.0"
 
 [[package]]
 name = "azure-monitor-opentelemetry-exporter"
-version = "1.0.0b17"
+version = "1.0.0b18"
 description = "Microsoft Azure Monitor Opentelemetry Exporter Client Library for Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "azure-monitor-opentelemetry-exporter-1.0.0b17.tar.gz", hash = "sha256:97a0c2e8365a07eadd7264bb5304b306172dd66af0d1d4041e58a812e268bfdd"},
-    {file = "azure_monitor_opentelemetry_exporter-1.0.0b17-py2.py3-none-any.whl", hash = "sha256:d8235b2e8d30ffb9d16cc36e4ab1e88a8ae6cd8d89270584e93189b18d0ce87b"},
+    {file = "azure-monitor-opentelemetry-exporter-1.0.0b18.tar.gz", hash = "sha256:f129b18ed5ba45afa8a22b5d1f4bb58a204f5442e1da49d3cabb036e6b009f19"},
+    {file = "azure_monitor_opentelemetry_exporter-1.0.0b18-py2.py3-none-any.whl", hash = "sha256:c8970c729303093109decda3af00535bd488b26ce0eac9506115f84140bfa87e"},
 ]
 
 [package.dependencies]
