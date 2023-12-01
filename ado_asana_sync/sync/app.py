@@ -84,6 +84,7 @@ class App:
         self.asana_tag_name = ASANA_TAG_NAME
         self.db = None
         self.matches = None
+        self.config = None
         self.sleep_time = SLEEP_TIME
 
         if not self.ado_pat:
@@ -130,3 +131,4 @@ class App:
             os.path.join(os.path.dirname(__package__), "data", "appdata.json")
         )
         self.matches = self.db.table("matches")
+        self.config = self.db.table("config")
