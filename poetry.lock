@@ -84,13 +84,13 @@ opentelemetry-api = ">=1.12.0,<2.0.0"
 
 [[package]]
 name = "azure-devops"
-version = "7.1.0b3"
+version = "7.1.0b4"
 description = "Python wrapper around the Azure DevOps 7.x APIs"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "azure-devops-7.1.0b3.tar.gz", hash = "sha256:644e34d110f016e65c7b36647274c90c20223bf2ecca9be8806aa5a4c754b4e7"},
-    {file = "azure_devops-7.1.0b3-py3-none-any.whl", hash = "sha256:ef082a59e79e7f5d979481c7737093cb54618f362b216292fcce7f26d9c452c3"},
+    {file = "azure-devops-7.1.0b4.tar.gz", hash = "sha256:f04ba939112579f3d530cfecc044a74ef9e9339ba23c9ee1ece248241f07ff85"},
+    {file = "azure_devops-7.1.0b4-py3-none-any.whl", hash = "sha256:f827e9fbc7c77bc6f2aaee46e5717514e9fe7d676c87624eccd0ca640b54f122"},
 ]
 
 [package.dependencies]
