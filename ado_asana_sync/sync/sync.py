@@ -105,22 +105,37 @@ def create_tag_if_not_existing(
         ApiException: If an error occurs while making the API call.
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
-        existing_tag = get_tag_by_name(app, workspace, tag)
-        if existing_tag is not None:
-            return existing_tag
-        api_instance = asana.TagsApi(app.asana_client)
-        body = asana.TagsBody({"name": tag})
-        try:
-            # Create a tag
-            _LOGGER.info("tag '%s' not found, creating it", tag)
-            api_response = api_instance.create_tag_for_workspace(body, workspace)
-            return api_response.data
-        except ApiException as exception:
-            _LOGGER.error(
-                "Exception when calling TagsApi->create_tag_for_workspace: %s\n",
-                exception,
-            )
-            return None
+        # Check if the tag_gid is stored in the config table
+        tag_config = app.config.get(doc_id=1)
+        tag_gid = tag_config.get('tag_gid') if tag_config else None
+
+        if tag_gid:
+            # If tag_gid exists in the config, use it to get the tag
+            existing_tag = get_tag_by_name(app, workspace, tag)
+            if existing_tag:
+                return existing_tag
+        else:
+            # If tag_gid does not exist in the config, proceed to get or create the tag
+            existing_tag = get_tag_by_name(app, workspace, tag)
+            if existing_tag is not None:
+                # Store the tag_gid in the config table
+                app.config.upsert({'tag_gid': existing_tag.gid}, doc_ids=[1])
+                return existing_tag
+            api_instance = asana.TagsApi(app.asana_client)
+            body = asana.TagsBody({"name": tag})
+            try:
+                # Create a tag
+                _LOGGER.info("tag '%s' not found, creating it", tag)
+                api_response = api_instance.create_tag_for_workspace(body, workspace)
+                # Store the new tag_gid in the config table
+                app.config.upsert({'tag_gid': api_response.data.gid}, doc_ids=[1])
+                return api_response.data
+            except ApiException as exception:
+                _LOGGER.error(
+                    "Exception when calling TagsApi->create_tag_for_workspace: %s\n",
+                    exception,
+                )
+                return None
 
 
 def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
