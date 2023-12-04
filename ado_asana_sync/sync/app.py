@@ -51,6 +51,7 @@ class App:
         asana_tag_gid: stores the tag id for the named asana tag in asana_tag_name.
         db: TinyDB database.
         matches: TinyDB table named "matches".
+        config: TinyDB table named "config".
     """
 
     def __init__(
