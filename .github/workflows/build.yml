@@ -63,7 +63,7 @@ jobs:
         run: poetry install --no-interaction --no-root
       - name: Test with pytest
         run: poetry run tox
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: test-output
           path: coverage.xml
