@@ -104,7 +104,7 @@ jobs:
           poetry run pylint --output-format=parseable --recursive=true ado_asana_sync | tee pylint.out
       - name: Security lint with bandit
         run: |
-          poetry run bandit --format json --output bandit-report.json --exit-zero --recursive ado_asana_sync
+          poetry run bandit --format json --output bandit.out --exit-zero --recursive ado_asana_sync
       - name: Static type check with mypy
         run: |
           poetry run mypy ado_asana_sync | tee mypy.out
