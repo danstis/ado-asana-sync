@@ -42,8 +42,8 @@ def start_sync(app: App) -> None:
             get_asana_workspace(app, app.asana_workspace_name),
             app.asana_tag_name,
         )
-    except Exception as e:
-        _LOGGER.error("Failed to create or get Asana tag: %s", e)
+    except Exception as exception:
+        _LOGGER.error("Failed to create or get Asana tag: %s", exception)
         return
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
