@@ -36,14 +36,18 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 
 def start_sync(app: App) -> None:
+    try:
+        app.asana_tag_gid = create_tag_if_not_existing(
+            app,
+            get_asana_workspace(app, app.asana_workspace_name),
+            app.asana_tag_name,
+        )
+    except Exception as exception:
+        _LOGGER.error("Failed to create or get Asana tag: %s", exception)
+        return
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
-            app.asana_tag_gid = create_tag_if_not_existing(
-                app,
-                get_asana_workspace(app, app.asana_workspace_name),
-                app.asana_tag_name,
-            )
             projects = read_projects()
             for project in projects:
                 sync_project(app, project)
@@ -51,8 +55,8 @@ def start_sync(app: App) -> None:
             _LOGGER.info(
                 "Sync process complete, sleeping for %s seconds", app.sleep_time
             )
-            span.end()
-            sleep(app.sleep_time)
+
+        sleep(app.sleep_time)
 
 
 def read_projects() -> list:
