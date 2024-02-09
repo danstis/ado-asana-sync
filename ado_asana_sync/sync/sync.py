@@ -51,8 +51,8 @@ def start_sync(app: App) -> None:
             _LOGGER.info(
                 "Sync process complete, sleeping for %s seconds", app.sleep_time
             )
-            span.end()
-            sleep(app.sleep_time)
+
+        sleep(app.sleep_time)
 
 
 def read_projects() -> list:
