@@ -36,14 +36,14 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 
 def start_sync(app: App) -> None:
+    app.asana_tag_gid = create_tag_if_not_existing(
+        app,
+        get_asana_workspace(app, app.asana_workspace_name),
+        app.asana_tag_name,
+    )
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
-            app.asana_tag_gid = create_tag_if_not_existing(
-                app,
-                get_asana_workspace(app, app.asana_workspace_name),
-                app.asana_tag_name,
-            )
             projects = read_projects()
             for project in projects:
                 sync_project(app, project)
