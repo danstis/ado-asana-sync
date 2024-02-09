@@ -1,3 +1,5 @@
+name: Run pr agent on pull requests, respond to user comments
+
 on:
   pull_request:
   issue_comment:
@@ -8,7 +10,6 @@ jobs:
       issues: write
       pull-requests: write
       contents: write
-    name: Run pr agent on pull requests, respond to user comments
     steps:
       - name: PR Agent action step
         id: pragent
