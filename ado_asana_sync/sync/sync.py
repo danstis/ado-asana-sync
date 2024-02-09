@@ -36,11 +36,15 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 
 def start_sync(app: App) -> None:
-    app.asana_tag_gid = create_tag_if_not_existing(
-        app,
-        get_asana_workspace(app, app.asana_workspace_name),
-        app.asana_tag_name,
-    )
+    try:
+        app.asana_tag_gid = create_tag_if_not_existing(
+            app,
+            get_asana_workspace(app, app.asana_workspace_name),
+            app.asana_tag_name,
+        )
+    except Exception as e:
+        _LOGGER.error("Failed to create or get Asana tag: %s", e)
+        return
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
