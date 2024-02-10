@@ -39,7 +39,7 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 
 def start_sync(app: App) -> None:
-    _LOGGER.info("Defined closed states: %s", _CLOSED_STATES)
+    _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         app.asana_tag_gid = create_tag_if_not_existing(
             app,
