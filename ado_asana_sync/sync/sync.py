@@ -342,7 +342,7 @@ def sync_project(app: App, project):
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
-                assigned_to=asana_matched_user.get("gid", None),
+                assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
             )
             # Check if there is a matching asana task with a matching title.
             asana_task = get_asana_task_by_name(
@@ -394,7 +394,7 @@ def sync_project(app: App, project):
         existing_match.url = safe_get(
             ado_task, "_links", "additional_properties", "html", "href"
         )
-        existing_match.assigned_to = asana_matched_user.get("gid", None)
+        existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
         existing_match.asana_updated = asana_task["modified_at"]
         update_asana_task(
             app,
@@ -455,7 +455,7 @@ def sync_project(app: App, project):
             existing_match.url = safe_get(
                 ado_task, "_links", "additional_properties", "html", "href"
             )
-            existing_match.assigned_to = asana_matched_user.get("gid", None)
+            existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
             existing_match.asana_updated = asana_task["modified_at"]
             update_asana_task(
                 app,
