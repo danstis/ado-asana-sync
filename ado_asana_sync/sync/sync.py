@@ -342,7 +342,7 @@ def sync_project(app: App, project):
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
-                assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+                assigned_to=asana_matched_user.get("gid", None) if asana_matched_user is not None else None
             )
             # Check if there is a matching asana task with a matching title.
             asana_task = get_asana_task_by_name(
