@@ -19,7 +19,7 @@
     "ghcr.io/devcontainers-contrib/features/flake8:2": {},
     "ghcr.io/devcontainers-contrib/features/coverage-py:2": {},
     "ghcr.io/devcontainers-contrib/features/tox:2": {},
-    // "ghcr.io/devcontainers/features/docker-in-docker": {},
+    "ghcr.io/devcontainers/features/docker-in-docker": {},
     "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/danstis/devcontainers-features/gitversion:1.0.0": {
       "version": "5.11.1"
@@ -31,9 +31,10 @@
   // "forwardPorts": [],
   // Use 'postCreateCommand' to run commands after the container is created.
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
-  // "remoteEnv": {
-  //   "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}"
-  // },
+  "remoteEnv": {
+    "AIDER_MODEL": "gpt-4-1106-preview",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}"
+  },
   // Configure tool-specific properties.
   "customizations": {
     // Configure properties specific to VS Code.
