@@ -95,9 +95,7 @@ def read_projects() -> list:
         return projects
 
 
-def create_tag_if_not_existing(
-    app: App, workspace: str, tag: str
-) -> TagResponse | None:
+def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None:
     """
     Create a tag for a given workspace if it does not already exist.
 
@@ -107,7 +105,7 @@ def create_tag_if_not_existing(
         tag (str): The name of the tag to create.
 
     Returns:
-        TagResponse: The response from the API call.
+        str: The GUID of the tag.
 
     Raises:
         ApiException: If an error occurs while making the API call.
@@ -126,7 +124,7 @@ def create_tag_if_not_existing(
         if existing_tag is not None:
             # Store the tag_gid in the config table
             app.config.upsert({"tag_gid": existing_tag.gid}, {"doc_id": 1})
-            return existing_tag
+            return existing_tag.gid
         api_instance = asana.TagsApi(app.asana_client)
         body = asana.TagsBody({"name": tag})
         try:
@@ -135,7 +133,7 @@ def create_tag_if_not_existing(
             api_response = api_instance.create_tag_for_workspace(body, workspace)
             # Store the new tag_gid in the config table
             app.config.upsert({"tag_gid": api_response.data.gid}, {"doc_id": 1})
-            return api_response.data
+            return api_response.data.gid
         except ApiException as exception:
             _LOGGER.error(
                 "Exception when calling TagsApi->create_tag_for_workspace: %s\n",
@@ -153,7 +151,7 @@ def get_tag_by_name(app: App, workspace: str, tag: str) -> TagResponse | None:
         tag (str): The name of the tag to retrieve.
 
     Returns:
-        TagResponse | None: The tag object if found, or None if not found.
+        str | None: The tags GUID if found, or None if not found.
     """
     with _TRACER.start_as_current_span("get_tag_by_name"):
         api_instance = asana.TagsApi(app.asana_client)
@@ -190,17 +188,20 @@ def get_asana_task_tags(app: App, task: TaskItem) -> list[TagResponse]:
             return []
 
 
-def tag_asana_item(app: App, task: TaskItem, tag: TagResponse) -> None:
+def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
     """
     Adds a tag to a given item if it is not already assigned.
     """
     api_instance = asana.TasksApi(app.asana_client)
     task_tags = get_asana_task_tags(app, task)
-    if tag not in task_tags:
+    task_tags_gids = [t.gid for t in task_tags]
+    if tag not in task_tags_gids:
         # Add the tag to the task.
         try:
-            _LOGGER.info("adding tag '%s' to task '%s'", tag.name, task.asana_title)
-            body = asana.TagsBody({"tag": tag.gid})
+            _LOGGER.info(
+                "adding tag '%s' to task '%s'", app.asana_tag_name, task.asana_title
+            )
+            body = asana.TagsBody({"tag": tag})
             api_instance.add_tag_for_task(body, task.asana_gid)
         except ApiException as exception:
             _LOGGER.error(
@@ -626,7 +627,7 @@ def get_asana_project_tasks(app: App, asana_project) -> list[object]:
 
 
 def create_asana_task(
-    app: App, asana_project: "str", task: "TaskItem", tag: TagResponse
+    app: App, asana_project: str, task: TaskItem, tag: str
 ) -> None:
     """
     Create an Asana task in the specified project.
@@ -647,7 +648,7 @@ def create_asana_task(
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "projects": [asana_project],
             "assignee": task.assigned_to,
-            "tags": [tag.gid],
+            "tags": [tag],
             "state": task.state in _CLOSED_STATES,
         }
     )
