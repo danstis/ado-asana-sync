@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock
 
-from asana import UserResponse
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
@@ -137,35 +136,35 @@ class TestMatchingUser(unittest.TestCase):
     # Tests that matching_user returns the matching user when the email exists in the user_list.
     def test_matching_user_matching_email_exists(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="User Two", email="user2@example.com")
 
         result = matching_user(user_list, ado_user)
 
-        assert result == UserResponse(email="user2@example.com", name="User 2")
+        assert result == {"email": "user2@example.com", "name": "User 2"}
 
     # Tests that matching_user returns the matching user when the display name exists in the user_list.
     def test_matching_user_matching_display_name_exists(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.co.uk")
 
         result = matching_user(user_list, ado_user)
 
-        assert result == UserResponse(email="user2@example.com", name="User 2")
+        assert result == {"email": "user2@example.com", "name": "User 2"}
 
     # Tests that matching_user returns None when the email does not exist in the user_list.
     def test_matching_user_matching_email_does_not_exist(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="User 4", email="user4@example.com")
 
@@ -185,9 +184,9 @@ class TestMatchingUser(unittest.TestCase):
     # Tests that matching_user returns None when the email is an empty string.
     def test_matching_user_email_empty(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="", email="")
 
@@ -198,18 +197,18 @@ class TestMatchingUser(unittest.TestCase):
     # Tests that matching_user returns the user when the user_list contains only one user and the email matches that user's email.
     def test_matching_user_user_list_contains_one_user_email_matches(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
+            {"email": "user1@example.com", "name": "User 1"},
         ]
         ado_user = ADOAssignedUser(display_name="User 1", email="user1@example.com")
 
         result = matching_user(user_list, ado_user)
 
-        assert result == UserResponse(email="user1@example.com", name="User 1")
+        assert result == {"email": "user1@example.com", "name": "User 1"}
 
     # Tests that matching_user returns None when the user_list contains only one user and the email does not match that user's email.
     def test_matching_user_user_list_contains_one_user_email_does_not_match(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
+            {"email": "user1@example.com", "name": "User 1"},
         ]
         ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.com")
 
@@ -220,9 +219,9 @@ class TestMatchingUser(unittest.TestCase):
     # Tests that matching_user returns None when the ado_user is None.
     def test_matching_user_ado_user_none(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = None
 
