@@ -223,6 +223,7 @@ def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
             )
     return None
 
+
 def sync_project(app: App, project):
     """
     Synchronizes a project by mapping ADO work items to Asana tasks.
