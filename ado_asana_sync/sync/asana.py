@@ -35,7 +35,12 @@ def get_asana_task(app: App, task_gid: str) -> dict | None:
         api_instance = asana.TasksApi(app.asana_client)
         try:
             opts = {
-                "opt_fields": "assignee_section,due_at,name,completed_at,tags,dependents,projects,completed,permalink_url,parent,assignee,assignee_status,num_subtasks,modified_at,workspace,due_on"
+                "opt_fields": (
+                    "assignee_section,due_at,name,completed_at,tags,"
+                    "dependents,projects,completed,permalink_url,parent,"
+                    "assignee,assignee_status,num_subtasks,modified_at,"
+                    "workspace,due_on"
+                )
             }
             # Get the task with the given task_gid.
             api_response = api_instance.get_task(
