@@ -185,7 +185,7 @@ def get_asana_task_tags(app: App, task: TaskItem) -> list[dict]:
         try:
             # Get a task's tags
             api_response = api_instance.get_tags_for_task(task.asana_gid, opts={})
-            return [data for data in api_response]
+            return list(api_response)
         except ApiException as exception:
             _LOGGER.error(
                 "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
@@ -221,7 +221,7 @@ def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
             _LOGGER.error(
                 "Exception when calling TasksApi->add_tag_for_task: %s\n", exception
             )
-
+    return None
 
 def sync_project(app: App, project):
     """
@@ -609,7 +609,11 @@ def get_asana_project_tasks(app: App, asana_project) -> list[object]:
             api_params = {
                 "project": asana_project,
                 "limit": app.asana_page_size,
-                "opt_fields": "assignee_section,due_at,name,completed_at,tags,dependents,projects,completed,permalink_url,parent,assignee,assignee_status,num_subtasks,modified_at,workspace,due_on",
+                "opt_fields": (
+                    "assignee_section,due_at,name,completed_at,tags,dependents,"
+                    "projects,completed,permalink_url,parent,assignee,"
+                    "assignee_status,num_subtasks,modified_at,workspace,due_on"
+                ),
             }
             if offset:
                 api_params["offset"] = offset
@@ -724,7 +728,7 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
 
     try:
         api_response = users_api_instance.get_users(opts)
-        return [data for data in api_response]
+        return list(api_response)
     except ApiException as exception:
         _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)
         return []
