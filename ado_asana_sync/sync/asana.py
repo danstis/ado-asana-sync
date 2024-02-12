@@ -14,16 +14,16 @@ from .app import App
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 
-def get_asana_task(app: App, task_gid: str) -> object | None:
+def get_asana_task(app: App, task_gid: str) -> dict | None:
     """
-    Returns the entire task object for the Asana task with the given gid in the given project.
+    Returns the entire task object for the Asana task with the given gid.
 
-    :param asana_project: The gid of the Asana project.
-    :type asana_project: str
-    :param task_gid: The name of the Asana task.
+    :param app: The application object.
+    :type app: App
+    :param task_gid: The gid of the Asana task.
     :type task_gid: str
     :return: Task object or None if no task is found.
-    :rtype: object or None
+    :rtype: dict or None
     """
     with _TRACER.start_as_current_span("get_asana_task") as span:
         span.set_attributes(
@@ -34,30 +34,15 @@ def get_asana_task(app: App, task_gid: str) -> object | None:
         )
         api_instance = asana.TasksApi(app.asana_client)
         try:
-            # Get all tasks in the project.
-            opt_fields = [
-                "assignee_section",
-                "due_at",
-                "name",
-                "completed_at",
-                "tags",
-                "dependents",
-                "projects",
-                "completed",
-                "permalink_url",
-                "parent",
-                "assignee",
-                "assignee_status",
-                "num_subtasks",
-                "modified_at",
-                "workspace",
-                "due_on",
-            ]
+            opts = {
+                "opt_fields": "assignee_section,due_at,name,completed_at,tags,dependents,projects,completed,permalink_url,parent,assignee,assignee_status,num_subtasks,modified_at,workspace,due_on"
+            }
+            # Get the task with the given task_gid.
             api_response = api_instance.get_task(
                 task_gid,
-                opt_fields=opt_fields,
+                opts,
             )
-            return api_response.data
+            return api_response
         except ApiException as exception:
             _LOGGER.error("Exception when calling TasksApi->get_task: %s\n", exception)
             return None
