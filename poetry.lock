@@ -2,13 +2,13 @@
 
 [[package]]
 name = "asana"
-version = "4.0.11"
+version = "5.0.3"
 description = "Asana"
 optional = false
 python-versions = "*"
 files = [
-    {file = "asana-4.0.11-py3-none-any.whl", hash = "sha256:355ea5ee6f6bbd2dfc7d8bd4825e787cb8335575698b8db12bafab283a18b948"},
-    {file = "asana-4.0.11.tar.gz", hash = "sha256:566a77f21809e4e9f5a2258076c18170bc15d801e1f9514b1e116d16198b0da2"},
+    {file = "asana-5.0.3-py3-none-any.whl", hash = "sha256:fe311dd07f8940b633e05ec6754eb375b1206f506e1dcc63a7064e9513fe04e6"},
+    {file = "asana-5.0.3.tar.gz", hash = "sha256:62518f736d4600c56d30d0f9a2f840bb55f653e9c69dd9760510b4927ac9714f"},
 ]
 
 [package.dependencies]
@@ -1601,4 +1601,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "799a9e38b92191c39931fee463d3386c97a3168c38c5d4b0b0923c6afd0ba03c"
+content-hash = "1c96cfbe1385372d918773a3b199817accd75f4705120876492c34250da347fd"
