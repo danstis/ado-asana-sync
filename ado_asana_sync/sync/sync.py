@@ -359,7 +359,7 @@ def sync_project(app: App, project):
                     asana_project,
                     existing_match,
                     app.asana_tag_gid,
-                )
+                )  # type: ignore[arg-type]
                 continue
             else:
                 # The Asana task exists, map the tasks in the db.
@@ -370,7 +370,7 @@ def sync_project(app: App, project):
                     app,
                     existing_match,
                     app.asana_tag_gid,
-                )
+                )  # type: ignore[arg-type]
                 continue
 
         # If already mapped, check if the item needs an update (ado rev is higher, or asana item is newer).
@@ -461,7 +461,7 @@ def sync_project(app: App, project):
                 app,
                 existing_match,
                 app.asana_tag_gid,
-            )
+            )  # type: ignore[arg-type]
 
 
 @dataclass
@@ -674,7 +674,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
 
 
-def update_asana_task(app: App, task: TaskItem, tag: dict) -> None:
+def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
     """
     Update an Asana task with the provided task details.
 
