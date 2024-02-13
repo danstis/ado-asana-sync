@@ -572,7 +572,7 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
         return None
 
 
-def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict:
+def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict | None:
     """
     Returns the entire task dict for the named Asana task from the given list of tasks.
 
@@ -587,7 +587,7 @@ def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict:
     for t in task_list:
         if t["name"] == task_name:
             return t
-
+    return None
 
 def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
     """
