@@ -39,6 +39,7 @@ To test the application manually, you can use the following steps:
 1. Delete synced tag from Asana workspace and from appdata.json file and ensure it is re-created and assigned to all synced tasks.
 1. Mark Asana task as complete and ensure it is re-opened.
 1. Mark ADO task as complete and ensure it is marked as complete in Asana.
+1. Re-open ADO task and ensure it is re-opened in Asana.
 
 ### Reference
 
