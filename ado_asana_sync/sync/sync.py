@@ -342,7 +342,11 @@ def sync_project(app: App, project):
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
-                assigned_to=asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+                assigned_to=(
+                    asana_matched_user.get("gid", None)
+                    if asana_matched_user is not None
+                    else None
+                ),
             )
             # Check if there is a matching asana task with a matching title.
             asana_task = get_asana_task_by_name(
@@ -393,7 +397,11 @@ def sync_project(app: App, project):
         existing_match.url = safe_get(
             ado_task, "_links", "additional_properties", "html", "href"
         )
-        existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+        existing_match.assigned_to = (
+            asana_matched_user.get("gid", None)
+            if asana_matched_user is not None
+            else None
+        )
         existing_match.asana_updated = asana_task["modified_at"]
         update_asana_task(
             app,
@@ -454,7 +462,11 @@ def sync_project(app: App, project):
             existing_match.url = safe_get(
                 ado_task, "_links", "additional_properties", "html", "href"
             )
-            existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+            existing_match.assigned_to = (
+                asana_matched_user.get("gid", None)
+                if asana_matched_user is not None
+                else None
+            )
             existing_match.asana_updated = asana_task["modified_at"]
             update_asana_task(
                 app,
@@ -495,9 +507,7 @@ def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
     return None
 
 
-def matching_user(
-    user_list: list[dict], ado_user: ADOAssignedUser
-) -> dict | None:
+def matching_user(user_list: list[dict], ado_user: ADOAssignedUser) -> dict | None:
     """
     Check if a given email exists in a list of user dicts.
 
