@@ -236,24 +236,24 @@ class TestGetAsanaTaskByName(unittest.TestCase):
         Test case for verifying that a task can be found by name.
         """
 
-        mock_task = MagicMock()
-        mock_task.name = "Task 1"
-        task_list = [mock_task]
+        task_list = [
+            {"name": "Task 1", "gid": "1"},
+            {"name": "Task 2", "gid": "2"},
+            {"name": "Task 3", "gid": "3"},
+            ]
 
         # Call the function being tested
         result = get_asana_task_by_name(task_list, "Task 1")
 
-        # Assert that the result is the mock task
-        self.assertEqual(result, mock_task)
+        # Assert that the result is the task dictionary
+        self.assertEqual(result, {"name": "Task 1", "gid": "1"})
 
     def test_task_not_found(self):
         """
         Test case for the scenario where the task is not found in the task list.
         """
 
-        mock_task = MagicMock()
-        mock_task.name = "Task 1"
-        task_list = [mock_task]
+        task_list = [{"name": "Task 1"}]
 
         # Call the function being tested
         result = get_asana_task_by_name(task_list, "Task 2")
