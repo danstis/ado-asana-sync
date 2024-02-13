@@ -9,7 +9,7 @@ packages = [{ include = "ado_asana_sync" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-asana = ">=4.0.6,<6.0.0"
+asana = "^5.0.3"
 azure-devops = "^7.1.0b3"
 tinydb = "^4.8.0"
 pytz = "^2023.3"
