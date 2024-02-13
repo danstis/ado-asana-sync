@@ -33,7 +33,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) to e
 To test the application manually, you can use the following steps:
 
 1. Create new ADO work item and ensure it is synced to Asana.
-1. Rename Asana task and ensure it is reverted back to teh ADO name. 
+1. Rename Asana task and ensure it is reverted back to the ADO name. 
 1. Rename ADO task and ensure it is synced to Asana.
 1. Remove Synced tag from item in Asana and ensure it is replaced.
 1. Delete synced tag from Asana workspace and from appdata.json file and ensure it is re-created and assigned to all synced tasks.
