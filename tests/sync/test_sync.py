@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock
 
-from asana import UserResponse
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
@@ -46,7 +45,7 @@ class TestTaskItem(unittest.TestCase):
         )
 
         # Assert that the asana_title returns the correct formatted title
-        assert work_item_obj.asana_title == "Task 1: Test Title"
+        self.assertEqual(work_item_obj.asana_title, "Task 1: Test Title")
 
     # Tests that the asana_title returns the correct formatted title when only mandatory parameters are provided
     def test_asana_title_with_mandatory_parameters(self):
@@ -60,7 +59,7 @@ class TestTaskItem(unittest.TestCase):
         )
 
         # Assert that the asana_title returns the correct formatted title
-        assert work_item_obj.asana_title == "Task 1: Test Title"
+        self.assertEqual(work_item_obj.asana_title, "Task 1: Test Title")
 
     # Tests that the asana_title returns the correct formatted title when all parameters are provided with empty values
     def test_asana_title_with_empty_values(self):
@@ -70,7 +69,7 @@ class TestTaskItem(unittest.TestCase):
         )
 
         # Assert that the asana_title returns the correct formatted title
-        assert work_item_obj.asana_title == " None: "
+        self.assertEqual(work_item_obj.asana_title, " None: ")
 
     # Tests that the asana_title returns the correct formatted title when all parameters are provided with invalid values
     def test_asana_title_with_invalid_values(self):
@@ -84,7 +83,7 @@ class TestTaskItem(unittest.TestCase):
         )
 
         # Assert that the asana_title returns the correct formatted title
-        assert work_item_obj.asana_title == "True invalid: 123"
+        self.assertEqual(work_item_obj.asana_title, "True invalid: 123")
 
 
 class TestGetTaskUserEmail(unittest.TestCase):
@@ -100,19 +99,22 @@ class TestGetTaskUserEmail(unittest.TestCase):
         ado_user = ADOAssignedUser(
             display_name="John Doe", email="john.doe@example.com"
         )
-        assert get_task_user(task) == ado_user
+        result = get_task_user(task)
+        self.assertEqual(result, ado_user)
 
     # Tests that the function returns None when the System.AssignedTo field is not present in the work item
     def test_no_assigned_user(self):
         task = WorkItem()
         task.fields = {}
-        assert get_task_user(task) == None
+        result = get_task_user(task)
+        self.assertIsNone(result)
 
     # Tests that the function returns None when the System.AssignedTo field is present but does not have a uniqueName field
     def test_missing_uniqueName(self):
         task = WorkItem()
         task.fields = {"System.AssignedTo": {}}
-        assert get_task_user(task) == None
+        result = get_task_user(task)
+        self.assertIsNone(result)
 
     # Tests that the function returns the email address even if the uniqueName field in the System.AssignedTo field is not a valid email address
     def test_invalid_email_address(self):
@@ -124,54 +126,56 @@ class TestGetTaskUserEmail(unittest.TestCase):
             }
         }
         ado_user = ADOAssignedUser(display_name="John Doe", email="john.doe")
-        assert get_task_user(task) == ado_user
+        result = get_task_user(task)
+        self.assertEqual(result, ado_user)
 
     # Tests that the function returns None when the System.AssignedTo field is present but is None
     def test_assigned_user_is_None(self):
         task = WorkItem()
         task.fields = {"System.AssignedTo": None}
-        assert get_task_user(task) == None
+        result = get_task_user(task)
+        self.assertIsNone(result)
 
 
 class TestMatchingUser(unittest.TestCase):
     # Tests that matching_user returns the matching user when the email exists in the user_list.
     def test_matching_user_matching_email_exists(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="User Two", email="user2@example.com")
 
         result = matching_user(user_list, ado_user)
 
-        assert result == UserResponse(email="user2@example.com", name="User 2")
+        self.assertEqual(result, {"email": "user2@example.com", "name": "User 2"})
 
     # Tests that matching_user returns the matching user when the display name exists in the user_list.
     def test_matching_user_matching_display_name_exists(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.co.uk")
 
         result = matching_user(user_list, ado_user)
 
-        assert result == UserResponse(email="user2@example.com", name="User 2")
+        self.assertEqual(result, {"email": "user2@example.com", "name": "User 2"})
 
     # Tests that matching_user returns None when the email does not exist in the user_list.
     def test_matching_user_matching_email_does_not_exist(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="User 4", email="user4@example.com")
 
         result = matching_user(user_list, ado_user)
 
-        assert result is None
+        self.assertIsNone(result)
 
     # Tests that matching_user returns None when the user_list is empty.
     def test_matching_user_user_list_empty(self):
@@ -180,55 +184,55 @@ class TestMatchingUser(unittest.TestCase):
 
         result = matching_user(user_list, ado_user)
 
-        assert result is None
+        self.assertIsNone(result)
 
     # Tests that matching_user returns None when the email is an empty string.
     def test_matching_user_email_empty(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = ADOAssignedUser(display_name="", email="")
 
         result = matching_user(user_list, ado_user)
 
-        assert result is None
+        self.assertIsNone(result)
 
     # Tests that matching_user returns the user when the user_list contains only one user and the email matches that user's email.
     def test_matching_user_user_list_contains_one_user_email_matches(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
+            {"email": "user1@example.com", "name": "User 1"},
         ]
         ado_user = ADOAssignedUser(display_name="User 1", email="user1@example.com")
 
         result = matching_user(user_list, ado_user)
 
-        assert result == UserResponse(email="user1@example.com", name="User 1")
+        self.assertEqual(result, {"email": "user1@example.com", "name": "User 1"})
 
     # Tests that matching_user returns None when the user_list contains only one user and the email does not match that user's email.
     def test_matching_user_user_list_contains_one_user_email_does_not_match(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
+            {"email": "user1@example.com", "name": "User 1"},
         ]
         ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.com")
 
         result = matching_user(user_list, ado_user)
 
-        assert result is None
+        self.assertIsNone(result)
 
     # Tests that matching_user returns None when the ado_user is None.
     def test_matching_user_ado_user_none(self):
         user_list = [
-            UserResponse(email="user1@example.com", name="User 1"),
-            UserResponse(email="user2@example.com", name="User 2"),
-            UserResponse(email="user3@example.com", name="User 3"),
+            {"email": "user1@example.com", "name": "User 1"},
+            {"email": "user2@example.com", "name": "User 2"},
+            {"email": "user3@example.com", "name": "User 3"},
         ]
         ado_user = None
 
         result = matching_user(user_list, ado_user)
 
-        assert result is None
+        self.assertIsNone(result)
 
 
 class TestGetAsanaTaskByName(unittest.TestCase):
@@ -237,24 +241,24 @@ class TestGetAsanaTaskByName(unittest.TestCase):
         Test case for verifying that a task can be found by name.
         """
 
-        mock_task = MagicMock()
-        mock_task.name = "Task 1"
-        task_list = [mock_task]
+        task_list = [
+            {"name": "Task 1", "gid": "1"},
+            {"name": "Task 2", "gid": "2"},
+            {"name": "Task 3", "gid": "3"},
+        ]
 
         # Call the function being tested
         result = get_asana_task_by_name(task_list, "Task 1")
 
-        # Assert that the result is the mock task
-        self.assertEqual(result, mock_task)
+        # Assert that the result is the task dictionary
+        self.assertEqual(result, {"name": "Task 1", "gid": "1"})
 
     def test_task_not_found(self):
         """
         Test case for the scenario where the task is not found in the task list.
         """
 
-        mock_task = MagicMock()
-        mock_task.name = "Task 1"
-        task_list = [mock_task]
+        task_list = [{"name": "Task 1"}]
 
         # Call the function being tested
         result = get_asana_task_by_name(task_list, "Task 2")

@@ -7,8 +7,6 @@ from typing import Any
 
 from tinydb import Query
 
-from ado_asana_sync.utils.date import iso8601_utc
-
 from .app import App
 from .asana import get_asana_task
 
@@ -203,7 +201,7 @@ class TaskItem:
 
         if (
             ado_task.rev != self.ado_rev
-            or iso8601_utc(asana_task.modified_at) != self.asana_updated
+            or asana_task["modified_at"] != self.asana_updated
         ):
             return False
 

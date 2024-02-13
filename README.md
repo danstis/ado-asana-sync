@@ -28,6 +28,19 @@ This project aims to synchronize work items between Azure DevOps (ADO) and Asana
 
 This repo uses [Conventional Commits](https://www.conventionalcommits.org/) to ensure the build numbering is generated correctly
 
+### Manual testing
+
+To test the application manually, you can use the following steps:
+
+1. Create new ADO work item and ensure it is synced to Asana.
+1. Rename Asana task and ensure it is reverted back to the ADO name. 
+1. Rename ADO task and ensure it is synced to Asana.
+1. Remove Synced tag from item in Asana and ensure it is replaced.
+1. Delete synced tag from Asana workspace and from appdata.json file and ensure it is re-created and assigned to all synced tasks.
+1. Mark Asana task as complete and ensure it is re-opened.
+1. Mark ADO task as complete and ensure it is marked as complete in Asana.
+1. Re-open ADO task and ensure it is re-opened in Asana.
+
 ### Reference
 
 #### ADO
