@@ -589,6 +589,7 @@ def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict | None
             return t
     return None
 
+
 def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
     """
     Returns a list of task dicts for the given Asana project.
