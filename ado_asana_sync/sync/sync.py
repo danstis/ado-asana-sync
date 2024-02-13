@@ -573,7 +573,7 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
         return None
 
 
-def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
+def get_asana_task_by_name(task_list: list[dict], task_name: str) -> object:
     """
     Returns the entire task object for the named Asana task from the given list of tasks.
 
@@ -586,7 +586,7 @@ def get_asana_task_by_name(task_list: list[object], task_name: str) -> object:
     """
 
     for t in task_list:
-        if t.name == task_name:
+        if t["name"] == task_name:
             return t
 
 
