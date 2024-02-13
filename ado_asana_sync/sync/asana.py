@@ -16,13 +16,13 @@ _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 def get_asana_task(app: App, task_gid: str) -> dict | None:
     """
-    Returns the entire task object for the Asana task with the given gid.
+    Returns the entire task dict for the Asana task with the given gid.
 
     :param app: The application object.
     :type app: App
     :param task_gid: The gid of the Asana task.
     :type task_gid: str
-    :return: Task object or None if no task is found.
+    :return: Task dict or None if no task is found.
     :rtype: dict or None
     """
     with _TRACER.start_as_current_span("get_asana_task") as span:

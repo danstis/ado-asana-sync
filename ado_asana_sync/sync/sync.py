@@ -499,7 +499,7 @@ def matching_user(
     user_list: list[dict], ado_user: ADOAssignedUser
 ) -> dict | None:
     """
-    Check if a given email exists in a list of user objects.
+    Check if a given email exists in a list of user dicts.
 
     Args:
         user_list (list[dict]): A list of user dicts representing users.
@@ -589,16 +589,16 @@ def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict:
             return t
 
 
-def get_asana_project_tasks(app: App, asana_project) -> list[object]:
+def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
     """
-    Returns a list of task objects for the given Asana project.
+    Returns a list of task dicts for the given Asana project.
 
     Args:
         app (App): The application object.
         asana_project (str): The gid of the Asana project.
 
     Returns:
-        list[object]: A list of task objects for the given project.
+        list[dict]: A list of task dicts for the given project.
     """
     api_instance = asana.TasksApi(app.asana_client)
     all_tasks = []
@@ -717,7 +717,7 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
         asana_workspace_gid (str): The ID of the Asana workspace to retrieve users from.
 
     Returns:
-        list: A list of user objects representing the Asana users in the specified
+        list: A list of user dicts representing the Asana users in the specified
         workspace.
     """
     users_api_instance = asana.UsersApi(app.asana_client)
