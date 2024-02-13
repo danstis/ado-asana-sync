@@ -364,8 +364,7 @@ def sync_project(app: App, project):
             else:
                 # The Asana task exists, map the tasks in the db.
                 _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
-                if asana_task is not None:
-                    existing_match.asana_gid = asana_task.gid
+                existing_match.asana_gid = asana_task["gid"]
                 update_asana_task(
                     app,
                     existing_match,
@@ -573,16 +572,16 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
         return None
 
 
-def get_asana_task_by_name(task_list: list[dict], task_name: str) -> object:
+def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict:
     """
-    Returns the entire task object for the named Asana task from the given list of tasks.
+    Returns the entire task dict for the named Asana task from the given list of tasks.
 
     :param task_list: List of Asana tasks to search in.
-    :type task_list: list[object]
+    :type task_list: list[dict]
     :param task_name: The name of the Asana task.
     :type task_name: str
-    :return: Task object or None if no task is found.
-    :rtype: object or None
+    :return: Task dict or None if no task is found.
+    :rtype: dict or None
     """
 
     for t in task_list:
