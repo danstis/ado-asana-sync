@@ -21,6 +21,8 @@ This project aims to synchronize work items between Azure DevOps (ADO) and Asana
   * `ASANA_WORKSPACE_NAME` - Name of the Asana workspace to sync with.
   * `CLOSED_STATES` - Comma separated list of states that will be considered closed.
   * `THREAD_COUNT` - Number of projects to sync in parallel.
+  * `SLEEP_TIME` - Duration in seconds to sleep between sync runs.
+  * `SYNCED_TAG_NAME` - Name of the tag in Asana to append to all synced items.
 * Run the container with the configured environment variables.
 * The application will start syncing work items between ADO and Asana based on the configured settings.
 
