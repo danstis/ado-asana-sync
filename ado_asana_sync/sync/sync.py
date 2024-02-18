@@ -57,6 +57,11 @@ def start_sync(app: App) -> None:
             projects = read_projects()
             # Use the lower of the _THREAD_COUNT and the length of projects.
             optimal_thread_count = min(len(projects), _THREAD_COUNT)
+            _LOGGER.info(
+                "Syncing %s projects using %s threads",
+                len(projects),
+                optimal_thread_count,
+            )
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=optimal_thread_count
             ) as executor:
