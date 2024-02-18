@@ -19,6 +19,8 @@ This project aims to synchronize work items between Azure DevOps (ADO) and Asana
   * `ADO_URL` - The full URL of your Azure DevOps instance.
   * `ASANA_TOKEN` - Your Personal Access Token for Asana to access the work items.
   * `ASANA_WORKSPACE_NAME` - Name of the Asana workspace to sync with.
+  * `CLOSED_STATES` - Comma separated list of states that will be considered closed.
+  * `THREAD_COUNT` - Number of projects to sync in parallel.
 * Run the container with the configured environment variables.
 * The application will start syncing work items between ADO and Asana based on the configured settings.
 
