@@ -55,7 +55,11 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             projects = read_projects()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=_THREAD_COUNT) as executor:
+            # Use the lower of the _THREAD_COUNT and the length of projects.
+            optimal_thread_count = min(len(projects), _THREAD_COUNT)
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=optimal_thread_count
+            ) as executor:
                 try:
                     executor.map(sync_project, [app] * len(projects), projects)
                 except Exception as exception:
