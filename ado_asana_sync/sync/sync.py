@@ -32,7 +32,7 @@ _CLOSED_STATES = set(
     for state in os.environ.get("CLOSED_STATES", "Closed,Removed,Done").split(",")
 )
 # _THREAD_COUNT contains the max number of project threads to execute concurrently.
-_THREAD_COUNT = int(os.environ.get("THREAD_COUNT", 8))
+_THREAD_COUNT = max(1, int(os.environ.get("THREAD_COUNT", 8)))
 
 # ADO field constants
 ADO_STATE = "System.State"
