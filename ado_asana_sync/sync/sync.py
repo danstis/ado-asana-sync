@@ -56,7 +56,10 @@ def start_sync(app: App) -> None:
             span.add_event("Start sync run")
             projects = read_projects()
             with concurrent.futures.ThreadPoolExecutor(max_workers=_THREAD_COUNT) as executor:
-                executor.map(sync_project, [app] * len(projects), projects)
+                try:
+                    executor.map(sync_project, [app] * len(projects), projects)
+                except Exception as exception:
+                    _LOGGER.error("Error in sync_project thread: %s", exception)
 
             _LOGGER.info(
                 "Sync process complete, sleeping for %s seconds", app.sleep_time
