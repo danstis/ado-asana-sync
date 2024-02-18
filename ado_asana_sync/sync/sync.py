@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 from dataclasses import dataclass
@@ -30,6 +31,8 @@ _CLOSED_STATES = set(
     state.strip()
     for state in os.environ.get("CLOSED_STATES", "Closed,Removed,Done").split(",")
 )
+# _THREAD_COUNT contains the max number of project threads to execute concurrently.
+_THREAD_COUNT = int(os.environ.get("THREAD_COUNT", 8))
 
 # ADO field constants
 ADO_STATE = "System.State"
@@ -52,6 +55,8 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             projects = read_projects()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=_THREAD_COUNT) as executor:
+                executor.map(sync_project, [app] * len(projects), projects)
             for project in projects:
                 sync_project(app, project)
 
