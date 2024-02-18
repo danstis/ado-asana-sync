@@ -23,7 +23,7 @@ ASANA_PAGE_SIZE = 100
 # ASANA_TAG_NAME defined the name of the tag to add to synced items.
 ASANA_TAG_NAME = os.environ.get("SYNCED_TAG_NAME", "synced")
 # SLEEP_TIME defines the sleep time between sync tasks in seconds.
-SLEEP_TIME = int(os.environ.get("SLEEP_TIME", 300))
+SLEEP_TIME = min(1, int(os.environ.get("SLEEP_TIME", 300)))
 
 
 class App:
