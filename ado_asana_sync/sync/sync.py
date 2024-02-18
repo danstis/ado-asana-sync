@@ -57,8 +57,6 @@ def start_sync(app: App) -> None:
             projects = read_projects()
             with concurrent.futures.ThreadPoolExecutor(max_workers=_THREAD_COUNT) as executor:
                 executor.map(sync_project, [app] * len(projects), projects)
-            for project in projects:
-                sync_project(app, project)
 
             _LOGGER.info(
                 "Sync process complete, sleeping for %s seconds", app.sleep_time
