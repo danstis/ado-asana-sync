@@ -28,11 +28,11 @@ class TestSafeGet(unittest.TestCase):
         Testing safe_get with None
         """
         obj = None
-        self.assertEqual(safe_get(obj, "a", "b", "c"), None)
+        self.assertIsNone(safe_get(obj, "a", "b", "c"))
 
     def test_safe_get_missing_key(self):
         """
         Testing safe_get with a missing key
         """
         obj = {"a": {"b": {"c": "value"}}}
-        self.assertEqual(safe_get(obj, "a", "b", "d"), None)
+        self.assertIsNone(safe_get(obj, "a", "b", "d"))
