@@ -60,7 +60,7 @@ class TestTaskItem(unittest.TestCase):
         )
         self.assertEqual(result.asana_gid, "123456")
         self.assertEqual(result.asana_updated, "2023-08-01T03:00:00.000000+00:00")
-        self.assertEqual(result.assigned_to, None)
+        self.assertIsNone(result.assigned_to)
         self.assertEqual(result.created_date, "2023-08-01T01:00:00.000000+00:00")
         self.assertEqual(result.updated_date, "2023-08-01T02:00:00.000000+00:00")
 
