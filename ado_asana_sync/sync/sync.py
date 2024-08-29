@@ -4,7 +4,7 @@ import concurrent.futures
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from time import sleep
 
 import asana  # type: ignore
@@ -39,6 +39,12 @@ ADO_STATE = "System.State"
 ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
+# Cache for custom fields
+CUSTOM_FIELDS_CACHE = {}
+CUSTOM_FIELDS_AVAILABLE = True
+LAST_CACHE_REFRESH = datetime.now(timezone.utc)
+CACHE_VALIDITY_DURATION = timedelta(hours=24)
+
 
 def start_sync(app: App) -> None:
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
@@ -54,6 +60,17 @@ def start_sync(app: App) -> None:
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
+            # Check if the cache is valid
+            global CUSTOM_FIELDS_CACHE, LAST_CACHE_REFRESH
+            now = datetime.now(timezone.utc)
+            if (
+                CUSTOM_FIELDS_AVAILABLE
+                and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
+            ):
+                CUSTOM_FIELDS_CACHE.clear()
+                LAST_CACHE_REFRESH = now
+                _LOGGER.info("Custom field cache cleared")
+
             projects = read_projects()
             # Use the lower of the _THREAD_COUNT and the length of projects.
             optimal_thread_count = min(len(projects), _THREAD_COUNT)
@@ -346,14 +363,15 @@ def sync_project(app: App, project):
 
         if existing_match is None:
             _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
+            current_utc_time = iso8601_utc(datetime.now(timezone.utc))
             existing_match = TaskItem(
                 ado_id=ado_task.id,
                 ado_rev=ado_task.rev,
                 title=ado_task.fields[ADO_TITLE],
                 item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
                 state=ado_task.fields[ADO_STATE],
-                created_date=iso8601_utc(datetime.utcnow()),
-                updated_date=iso8601_utc(datetime.utcnow()),
+                created_date=current_utc_time,
+                updated_date=current_utc_time,
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
@@ -388,6 +406,7 @@ def sync_project(app: App, project):
                     app,
                     existing_match,
                     app.asana_tag_gid,
+                    asana_project,
                 )  # type: ignore[arg-type]
                 continue
 
@@ -422,6 +441,7 @@ def sync_project(app: App, project):
             app,
             existing_match,
             app.asana_tag_gid,
+            asana_project,
         )
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
@@ -487,6 +507,7 @@ def sync_project(app: App, project):
                 app,
                 existing_match,
                 app.asana_tag_gid,
+                asana_project,
             )  # type: ignore[arg-type]
 
 
@@ -678,6 +699,12 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         None
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
+    # Find the custom field ID for 'link'
+    link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
+    link_custom_field_id = (
+        link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
+    )
+
     body = {
         "data": {
             "name": task.asana_title,
@@ -686,8 +713,12 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
             "assignee": task.assigned_to,
             "tags": [tag],
             "state": task.state in _CLOSED_STATES,
-        }
+        },
     }
+
+    if link_custom_field_id:
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
+
     try:
         result = tasks_api_instance.create_task(body, opts={})
         # add the match to the db.
@@ -699,7 +730,9 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
 
 
-def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
+def update_asana_task(
+    app: App, task: TaskItem, tag: str, asana_project_gid: str
+) -> None:
     """
     Update an Asana task with the provided task details.
 
@@ -713,6 +746,13 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
         None: The function does not return any value. The Asana task is updated with the provided details.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
+
+    # Find the custom field ID for 'link'
+    link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
+    link_custom_field_id = (
+        link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
+    )
+
     body = {
         "data": {
             "name": task.asana_title,
@@ -721,6 +761,9 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
             "completed": task.state in _CLOSED_STATES,
         }
     }
+
+    if link_custom_field_id:
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
 
     try:
         # Update the asana task item.
@@ -732,6 +775,79 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
         tag_asana_item(app, task, tag)
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
+
+
+def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
+    """
+    Retrieves all custom fields for a provided Asana project.
+
+    Args:
+        app (App): The Asana client instance.
+        project_gid (str): The GID of the Asana project.
+
+    Returns:
+        list[dict]: A list of dictionaries representing the custom fields for the project.
+    """
+    global CUSTOM_FIELDS_AVAILABLE
+    if CUSTOM_FIELDS_AVAILABLE is False:
+        return []
+
+    if project_gid in CUSTOM_FIELDS_CACHE:
+        return CUSTOM_FIELDS_CACHE[project_gid]
+
+    api_instance = asana.CustomFieldSettingsApi(app.asana_client)
+    try:
+        _LOGGER.info("Fetching custom fields for project %s", project_gid)
+        opts = {"limit": 100}
+        custom_fields = []
+        while True:
+            api_response = api_instance.get_custom_field_settings_for_project(
+                project_gid, opts
+            )
+            custom_fields.extend(api_response)
+            if "offset" in api_response:
+                opts["offset"] = api_response["offset"]
+            else:
+                break
+        CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
+        return custom_fields
+    except ApiException as exception:
+        if exception.status == 402:
+            _LOGGER.info(
+                "Custom Field Settings are not available for free users, disabling custom fields."
+            )
+            CUSTOM_FIELDS_AVAILABLE = False
+            return []
+        else:
+            _LOGGER.error(
+                "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
+                exception,
+            )
+            return []
+    except Exception as e:
+        _LOGGER.error("An unexpected error occurred: %s", str(e))
+        return []
+
+
+def find_custom_field_by_name(
+    app: App, project_gid: str, field_name: str
+) -> dict | None:
+    """
+    Finds a custom field in the project by the custom field's name.
+
+    Args:
+        app (App): The Asana client instance.
+        project_gid (str): The GID of the Asana project.
+        field_name (str): The name of the custom field to find.
+
+    Returns:
+        dict | None: A dictionary representing the custom field if found, otherwise None.
+    """
+    custom_fields = get_asana_project_custom_fields(app, project_gid)
+    for field in custom_fields:
+        if field.get("custom_field", {}).get("name") == field_name:
+            return field
+    return None
 
 
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
@@ -757,4 +873,7 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
         return list(api_response)
     except ApiException as exception:
         _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)
+        return []
+    except Exception as e:
+        _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
