@@ -688,6 +688,10 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     link_custom_field = find_custom_field_by_name(app, asana_project, "link")
     link_custom_field_id = link_custom_field["custom_field"]["gid"] if link_custom_field else None
 
+    # Find the custom field ID for 'link'
+    link_custom_field = find_custom_field_by_name(app, task.asana_gid, "link")
+    link_custom_field_id = link_custom_field["custom_field"]["gid"] if link_custom_field else None
+
     body = {
         "data": {
             "name": task.asana_title,
@@ -732,6 +736,9 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
             "completed": task.state in _CLOSED_STATES,
+            "custom_fields": {
+                link_custom_field_id: task.url
+            } if link_custom_field_id else {},
         }
     }
 
