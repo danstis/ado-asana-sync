@@ -758,6 +758,25 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
         return []
 
 
+def find_custom_field_by_name(app: App, project_gid: str, field_name: str) -> dict | None:
+    """
+    Finds a custom field in the project by the custom field's name.
+
+    Args:
+        app (App): The Asana client instance.
+        project_gid (str): The GID of the Asana project.
+        field_name (str): The name of the custom field to find.
+
+    Returns:
+        dict | None: A dictionary representing the custom field if found, otherwise None.
+    """
+    custom_fields = get_asana_project_custom_fields(app, project_gid)
+    for field in custom_fields:
+        if field.get("custom_field", {}).get("name") == field_name:
+            return field
+    return None
+
+
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
     """
     Retrieves a list of Asana users in a specific workspace.
