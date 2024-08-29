@@ -702,7 +702,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
     link_custom_field_id = (
-        link_custom_field["custom_field"]["gid"] if link_custom_field else None
+        link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
     )
 
     body = {
@@ -750,7 +750,7 @@ def update_asana_task(
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
     link_custom_field_id = (
-        link_custom_field["custom_field"]["gid"] if link_custom_field else None
+        link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
     )
 
     body = {
