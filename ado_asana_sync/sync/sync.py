@@ -428,8 +428,8 @@ def sync_project(app: App, project):
         update_asana_task(
             app,
             existing_match,
-            asana_project,
             app.asana_tag_gid,
+            asana_project,
         )
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
@@ -494,8 +494,8 @@ def sync_project(app: App, project):
             update_asana_task(
                 app,
                 existing_match,
-                asana_project,
                 app.asana_tag_gid,
+                asana_project,
             )  # type: ignore[arg-type]
 
 
