@@ -40,7 +40,13 @@ ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 
+# Cache for custom fields
+_CUSTOM_FIELDS_CACHE = {}
+
+
 def start_sync(app: App) -> None:
+    global _CUSTOM_FIELDS_CACHE
+    _CUSTOM_FIELDS_CACHE.clear()
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         app.asana_tag_gid = create_tag_if_not_existing(
@@ -745,11 +751,16 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     Returns:
         list[dict]: A list of dictionaries representing the custom fields for the project.
     """
+    if project_gid in _CUSTOM_FIELDS_CACHE:
+        return _CUSTOM_FIELDS_CACHE[project_gid]
+
     api_instance = asana.CustomFieldSettingsApi(app.asana_client)
     try:
         _LOGGER.info("Fetching custom fields for project %s", project_gid)
         api_response = api_instance.get_custom_field_settings_for_project(project_gid)
-        return list(api_response)
+        custom_fields = list(api_response)
+        _CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
+        return custom_fields
     except ApiException as exception:
         _LOGGER.error(
             "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
