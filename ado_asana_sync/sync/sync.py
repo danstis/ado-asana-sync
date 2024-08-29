@@ -684,7 +684,22 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         None
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
+    # Find the custom field ID for 'link'
+    link_custom_field = find_custom_field_by_name(app, asana_project, "link")
+    link_custom_field_id = link_custom_field["custom_field"]["gid"] if link_custom_field else None
+
     body = {
+        "data": {
+            "name": task.asana_title,
+            "html_notes": f"<body>{task.asana_notes_link}</body>",
+            "projects": [asana_project],
+            "assignee": task.assigned_to,
+            "tags": [tag],
+            "state": task.state in _CLOSED_STATES,
+            "custom_fields": {
+                link_custom_field_id: task.url
+            } if link_custom_field_id else {}
+        }
         "data": {
             "name": task.asana_title,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
