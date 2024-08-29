@@ -699,8 +699,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
             "custom_fields": {
                 link_custom_field_id: task.url
             } if link_custom_field_id else {},
-        }
-        }
+        },
     }
     try:
         result = tasks_api_instance.create_task(body, opts={})
