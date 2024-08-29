@@ -53,6 +53,8 @@ def start_sync(app: App) -> None:
             app,
             get_asana_workspace(app, app.asana_workspace_name),
             app.asana_tag_name,
+            asana_project,
+            asana_project,
         )
     except Exception as exception:
         _LOGGER.error("Failed to create or get Asana tag: %s", exception)
