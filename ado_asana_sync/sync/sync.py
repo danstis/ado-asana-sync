@@ -363,14 +363,15 @@ def sync_project(app: App, project):
 
         if existing_match is None:
             _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
+            current_utc_time = iso8601_utc(datetime.now(timezone.utc))
             existing_match = TaskItem(
                 ado_id=ado_task.id,
                 ado_rev=ado_task.rev,
                 title=ado_task.fields[ADO_TITLE],
                 item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
                 state=ado_task.fields[ADO_STATE],
-                created_date=iso8601_utc(datetime.now(timezone.utc)),
-                updated_date=iso8601_utc(datetime.now(timezone.utc)),
+                created_date=current_utc_time,
+                updated_date=current_utc_time,
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
