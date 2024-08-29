@@ -686,11 +686,9 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     tasks_api_instance = asana.TasksApi(app.asana_client)
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project, "link")
-    link_custom_field_id = link_custom_field["custom_field"]["gid"] if link_custom_field else None
-
-    # Find the custom field ID for 'link'
-    link_custom_field = find_custom_field_by_name(app, task.asana_gid, "link")
-    link_custom_field_id = link_custom_field["custom_field"]["gid"] if link_custom_field else None
+    link_custom_field_id = (
+        link_custom_field["custom_field"]["gid"] if link_custom_field else None
+    )
 
     body = {
         "data": {
@@ -700,9 +698,9 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
             "assignee": task.assigned_to,
             "tags": [tag],
             "state": task.state in _CLOSED_STATES,
-            "custom_fields": {
-                link_custom_field_id: task.url
-            } if link_custom_field_id else {},
+            "custom_fields": (
+                {link_custom_field_id: task.url} if link_custom_field_id else {}
+            ),
         },
     }
     try:
@@ -730,15 +728,22 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
         None: The function does not return any value. The Asana task is updated with the provided details.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
+
+    # Find the custom field ID for 'link'
+    link_custom_field = find_custom_field_by_name(app, task.asana_gid, "link")
+    link_custom_field_id = (
+        link_custom_field["custom_field"]["gid"] if link_custom_field else None
+    )
+
     body = {
         "data": {
             "name": task.asana_title,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
             "completed": task.state in _CLOSED_STATES,
-            "custom_fields": {
-                link_custom_field_id: task.url
-            } if link_custom_field_id else {},
+            "custom_fields": (
+                {link_custom_field_id: task.url} if link_custom_field_id else {}
+            ),
         }
     }
 
@@ -783,7 +788,9 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
         return []
 
 
-def find_custom_field_by_name(app: App, project_gid: str, field_name: str) -> dict | None:
+def find_custom_field_by_name(
+    app: App, project_gid: str, field_name: str
+) -> dict | None:
     """
     Finds a custom field in the project by the custom field's name.
 
