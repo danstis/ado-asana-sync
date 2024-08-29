@@ -701,11 +701,12 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
             "assignee": task.assigned_to,
             "tags": [tag],
             "state": task.state in _CLOSED_STATES,
-            "custom_fields": (
-                {link_custom_field_id: task.url} if link_custom_field_id else {}
-            ),
         },
     }
+
+    if link_custom_field_id:
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
+
     try:
         result = tasks_api_instance.create_task(body, opts={})
         # add the match to the db.
@@ -746,11 +747,11 @@ def update_asana_task(
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
             "completed": task.state in _CLOSED_STATES,
-            "custom_fields": (
-                {link_custom_field_id: task.url} if link_custom_field_id else {}
-            ),
         }
     }
+
+    if link_custom_field_id:
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
 
     try:
         # Update the asana task item.
@@ -781,26 +782,31 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     api_instance = asana.CustomFieldSettingsApi(app.asana_client)
     try:
         _LOGGER.info("Fetching custom fields for project %s", project_gid)
-        opts = {
-            "limit": 100
-        }
+        opts = {"limit": 100}
         custom_fields = []
         while True:
             api_response = api_instance.get_custom_field_settings_for_project(
                 project_gid, opts
             )
-            custom_fields.extend(api_response["data"])
-            if "next_page" in api_response and "offset" in api_response["next_page"]:
-                opts["offset"] = api_response["next_page"]["offset"]
+            custom_fields.extend(api_response)
+            if "offset" in api_response:
+                opts["offset"] = api_response["offset"]
             else:
                 break
         _CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
         return custom_fields
     except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
-            exception,
-        )
+        if exception.status == 402:
+            _LOGGER.info("Custom Field Settings are not available for free users.")
+            return []
+        else:
+            _LOGGER.error(
+                "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
+                exception,
+            )
+            return []
+    except Exception as e:
+        _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
 
 
@@ -848,4 +854,7 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
         return list(api_response)
     except ApiException as exception:
         _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)
+        return []
+    except Exception as e:
+        _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
