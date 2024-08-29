@@ -734,6 +734,30 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
 
 
+def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
+    """
+    Retrieves all custom fields for a provided Asana project.
+
+    Args:
+        app (App): The Asana client instance.
+        project_gid (str): The GID of the Asana project.
+
+    Returns:
+        list[dict]: A list of dictionaries representing the custom fields for the project.
+    """
+    api_instance = asana.CustomFieldSettingsApi(app.asana_client)
+    try:
+        _LOGGER.info("Fetching custom fields for project %s", project_gid)
+        api_response = api_instance.get_custom_field_settings_for_project(project_gid)
+        return list(api_response)
+    except ApiException as exception:
+        _LOGGER.error(
+            "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
+            exception,
+        )
+        return []
+
+
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
     """
     Retrieves a list of Asana users in a specific workspace.
