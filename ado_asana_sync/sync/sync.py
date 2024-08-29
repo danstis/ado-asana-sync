@@ -53,8 +53,6 @@ def start_sync(app: App) -> None:
             app,
             get_asana_workspace(app, app.asana_workspace_name),
             app.asana_tag_name,
-            asana_project,
-            asana_project,
         )
     except Exception as exception:
         _LOGGER.error("Failed to create or get Asana tag: %s", exception)
@@ -430,6 +428,7 @@ def sync_project(app: App, project):
         update_asana_task(
             app,
             existing_match,
+            asana_project,
             app.asana_tag_gid,
         )
 
@@ -495,6 +494,7 @@ def sync_project(app: App, project):
             update_asana_task(
                 app,
                 existing_match,
+                asana_project,
                 app.asana_tag_gid,
             )  # type: ignore[arg-type]
 
@@ -717,7 +717,9 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
 
 
-def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str) -> None:
+def update_asana_task(
+    app: App, task: TaskItem, tag: str, asana_project_gid: str
+) -> None:
     """
     Update an Asana task with the provided task details.
 
