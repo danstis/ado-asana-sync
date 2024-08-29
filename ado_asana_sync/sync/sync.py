@@ -688,7 +688,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
     # Find the custom field ID for 'link'
-    link_custom_field = find_custom_field_by_name(app, asana_project, "link")
+    link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
     link_custom_field_id = (
         link_custom_field["custom_field"]["gid"] if link_custom_field else None
     )
@@ -735,7 +735,7 @@ def update_asana_task(
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     # Find the custom field ID for 'link'
-    link_custom_field = find_custom_field_by_name(app, asana_project_gid, "link")
+    link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
     link_custom_field_id = (
         link_custom_field["custom_field"]["gid"] if link_custom_field else None
     )
@@ -781,8 +781,19 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     api_instance = asana.CustomFieldSettingsApi(app.asana_client)
     try:
         _LOGGER.info("Fetching custom fields for project %s", project_gid)
-        api_response = api_instance.get_custom_field_settings_for_project(project_gid)
-        custom_fields = list(api_response)
+        opts = {
+            "limit": 100
+        }
+        custom_fields = []
+        while True:
+            api_response = api_instance.get_custom_field_settings_for_project(
+                project_gid, opts
+            )
+            custom_fields.extend(api_response["data"])
+            if "next_page" in api_response and "offset" in api_response["next_page"]:
+                opts["offset"] = api_response["next_page"]["offset"]
+            else:
+                break
         _CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
         return custom_fields
     except ApiException as exception:
