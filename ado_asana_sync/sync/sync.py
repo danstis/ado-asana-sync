@@ -4,7 +4,7 @@ import concurrent.futures
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from time import sleep
 
 import asana  # type: ignore
@@ -39,14 +39,14 @@ ADO_STATE = "System.State"
 ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
-
 # Cache for custom fields
-_CUSTOM_FIELDS_CACHE = {}
+CUSTOM_FIELDS_CACHE = {}
+CUSTOM_FIELDS_AVAILABLE = True
+LAST_CACHE_REFRESH = datetime.now(timezone.utc)
+CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
 def start_sync(app: App) -> None:
-    global _CUSTOM_FIELDS_CACHE
-    _CUSTOM_FIELDS_CACHE.clear()
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         app.asana_tag_gid = create_tag_if_not_existing(
@@ -60,6 +60,17 @@ def start_sync(app: App) -> None:
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
+            # Check if the cache is valid
+            global CUSTOM_FIELDS_CACHE, LAST_CACHE_REFRESH
+            now = datetime.now(timezone.utc)
+            if (
+                CUSTOM_FIELDS_AVAILABLE
+                and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
+            ):
+                CUSTOM_FIELDS_CACHE.clear()
+                LAST_CACHE_REFRESH = now
+                _LOGGER.info("Custom field cache cleared")
+
             projects = read_projects()
             # Use the lower of the _THREAD_COUNT and the length of projects.
             optimal_thread_count = min(len(projects), _THREAD_COUNT)
@@ -358,8 +369,8 @@ def sync_project(app: App, project):
                 title=ado_task.fields[ADO_TITLE],
                 item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
                 state=ado_task.fields[ADO_STATE],
-                created_date=iso8601_utc(datetime.utcnow()),
-                updated_date=iso8601_utc(datetime.utcnow()),
+                created_date=iso8601_utc(datetime.now(timezone.utc)),
+                updated_date=iso8601_utc(datetime.now(timezone.utc)),
                 url=safe_get(
                     ado_task, "_links", "additional_properties", "html", "href"
                 ),
@@ -776,8 +787,12 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     Returns:
         list[dict]: A list of dictionaries representing the custom fields for the project.
     """
-    if project_gid in _CUSTOM_FIELDS_CACHE:
-        return _CUSTOM_FIELDS_CACHE[project_gid]
+    global CUSTOM_FIELDS_AVAILABLE
+    if CUSTOM_FIELDS_AVAILABLE is False:
+        return []
+
+    if project_gid in CUSTOM_FIELDS_CACHE:
+        return CUSTOM_FIELDS_CACHE[project_gid]
 
     api_instance = asana.CustomFieldSettingsApi(app.asana_client)
     try:
@@ -793,11 +808,14 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
                 opts["offset"] = api_response["offset"]
             else:
                 break
-        _CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
+        CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
         return custom_fields
     except ApiException as exception:
         if exception.status == 402:
-            _LOGGER.info("Custom Field Settings are not available for free users.")
+            _LOGGER.info(
+                "Custom Field Settings are not available for free users, disabling custom fields."
+            )
+            CUSTOM_FIELDS_AVAILABLE = False
             return []
         else:
             _LOGGER.error(
