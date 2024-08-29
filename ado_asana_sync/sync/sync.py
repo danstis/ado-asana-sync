@@ -730,7 +730,8 @@ def update_asana_task(app: App, task: TaskItem, tag: str) -> None:
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     # Find the custom field ID for 'link'
-    link_custom_field = find_custom_field_by_name(app, task.asana_gid, "link")
+    asana_project_gid = task.asana_project_gid  # Assuming task has a project GID attribute
+    link_custom_field = find_custom_field_by_name(app, asana_project_gid, "link")
     link_custom_field_id = (
         link_custom_field["custom_field"]["gid"] if link_custom_field else None
     )
