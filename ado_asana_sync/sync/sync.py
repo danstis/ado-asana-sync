@@ -143,8 +143,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
-        tag_config = app.config.get(doc_id=1)
-        tag_gid = tag_config.get("tag_gid") if tag_config else None
+        with app.db_lock:
+            tag_config = app.config.get(doc_id=1)
+            tag_gid = tag_config.get("tag_gid") if tag_config else None
 
         if tag_gid:
             _LOGGER.info("tag_gid found in database for '%s'", tag)
@@ -154,7 +155,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         existing_tag = get_tag_by_name(app, workspace, tag)
         if existing_tag is not None:
             # Store the tag_gid in the config table
-            app.config.upsert({"tag_gid": existing_tag["gid"]}, {"doc_id": 1})
+            with app.db_lock:
+                app.config.upsert({"tag_gid": existing_tag["gid"]}, {"doc_id": 1})
             return existing_tag["gid"]
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
@@ -163,7 +165,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             _LOGGER.info("tag '%s' not found, creating it", tag)
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
             # Store the new tag_gid in the config table
-            app.config.upsert({"tag_gid": api_response["gid"]}, {"doc_id": 1})
+            with app.db_lock:
+                app.config.upsert({"tag_gid": api_response["gid"]}, {"doc_id": 1})
             return api_response["gid"]
         except ApiException as exception:
             _LOGGER.error(
@@ -445,7 +448,8 @@ def sync_project(app: App, project):
         )
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    all_tasks = app.matches.all()
+    with app.db_lock:
+        all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
@@ -460,7 +464,8 @@ def sync_project(app: App, project):
                     wi["title"],
                     _SYNC_THRESHOLD,
                 )
-                app.matches.remove(doc_ids=[wi.doc_id])
+                with app.db_lock:
+                    app.matches.remove(doc_ids=[wi.doc_id])
                 continue
 
             # Get the work item details from ADO.
@@ -702,7 +707,9 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
     link_custom_field_id = (
-        link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
+        link_custom_field.get("custom_field", {}).get("gid")
+        if link_custom_field
+        else None
     )
 
     body = {
@@ -750,7 +757,9 @@ def update_asana_task(
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
     link_custom_field_id = (
-        link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
+        link_custom_field.get("custom_field", {}).get("gid")
+        if link_custom_field
+        else None
     )
 
     body = {
