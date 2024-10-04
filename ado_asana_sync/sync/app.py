@@ -8,6 +8,7 @@ Classes:
 
 import logging
 import os
+import threading
 from typing import Optional
 
 import asana  # type: ignore
@@ -50,6 +51,7 @@ class App:
         asana_tag_name: Defines the name of the Asana tag to add to synced items.
         asana_tag_gid: stores the tag id for the named asana tag in asana_tag_name.
         db: TinyDB database.
+        db_lock: Lock for the TinyDB database.
         matches: TinyDB table named "matches".
         config: TinyDB table named "config".
     """
@@ -84,6 +86,7 @@ class App:
         self.asana_tag_gid = None
         self.asana_tag_name = ASANA_TAG_NAME
         self.db = None
+        self.db_lock = threading.Lock()
         self.matches = None
         self.config = None
         self.sleep_time = SLEEP_TIME

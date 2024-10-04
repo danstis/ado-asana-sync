@@ -40,12 +40,17 @@ class TestTaskItem(unittest.TestCase):
     def test_returns_task_item_with_matching_ado_id(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = True
+        with app.db_lock:
+            app.matches.contains.return_value = True
         # Mock the search method of the matches table to return a mock TaskItem object
-        app.matches.search.return_value = [TEST_DB_ITEM_1]
+        with app.db_lock:
+            app.matches.search.return_value = [TEST_DB_ITEM_1]
 
         # Call the find_by_ado_id method with a valid ADO ID
         result = TaskItem.find_by_ado_id(app, 1)
@@ -68,10 +73,14 @@ class TestTaskItem(unittest.TestCase):
     def test_returns_task_item_with_no_matching_ado_id(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Mock the contains method of the matches table to return False
-        app.matches.contains.return_value = False
+        with app.db_lock:
+            app.matches.contains.return_value = False
 
         # Call the find_by_ado_id method with a non-existing ADO ID
         result = TaskItem.find_by_ado_id(app, 1)
@@ -83,7 +92,10 @@ class TestTaskItem(unittest.TestCase):
     def test_returns_none_if_ado_id_and_asana_gid_are_none(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Call the search method with None for both ado_id and asana_gid
         result = TaskItem.search(app, None, None)
@@ -95,12 +107,17 @@ class TestTaskItem(unittest.TestCase):
     def test_search_with_valid_ado_id(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = True
+        with app.db_lock:
+            app.matches.contains.return_value = True
         # Mock the search method of the matches table to return a mock TaskItem object
-        app.matches.search.return_value = [TEST_DB_ITEM_1]
+        with app.db_lock:
+            app.matches.search.return_value = [TEST_DB_ITEM_1]
 
         # Call the search method with an ado_id.
         result = TaskItem.search(app, ado_id=1)
@@ -111,12 +128,17 @@ class TestTaskItem(unittest.TestCase):
     def test_search_with_valid_asana_guid(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = True
+        with app.db_lock:
+            app.matches.contains.return_value = True
         # Mock the search method of the matches table to return a mock TaskItem object
-        app.matches.search.return_value = [TEST_DB_ITEM_1]
+        with app.db_lock:
+            app.matches.search.return_value = [TEST_DB_ITEM_1]
 
         # Call the search method with an ado_id.
         result = TaskItem.search(app, asana_gid="123456")
@@ -127,10 +149,14 @@ class TestTaskItem(unittest.TestCase):
     def test_search_with_invalid_ado_id(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = False
+        with app.db_lock:
+            app.matches.contains.return_value = False
 
         # Call the search method with an ado_id.
         result = TaskItem.search(app, ado_id=5)
@@ -141,10 +167,14 @@ class TestTaskItem(unittest.TestCase):
     def test_search_with_invalid_asana_guid(self):
         # Create a mock App instance
         app = MagicMock(App)
-        app.matches = MagicMock()
+        app.db_lock = MagicMock()
+
+        with app.db_lock:
+            app.matches = MagicMock()
 
         # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = False
+        with app.db_lock:
+            app.matches.contains.return_value = False
 
         # Call the search method with an ado_id.
         result = TaskItem.search(app, asana_gid="987654")
