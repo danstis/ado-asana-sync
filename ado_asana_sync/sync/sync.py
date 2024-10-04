@@ -563,7 +563,10 @@ def matching_user(user_list: list[dict], ado_user: ADOAssignedUser) -> dict | No
     if ado_user is None:
         return None
     for user in user_list:
-        if user["email"] == ado_user.email or user["name"] == ado_user.display_name:
+        if (
+            user["email"].lower() == ado_user.email.lower() or
+            user["name"].lower() == ado_user.display_name.lower()
+        ):
             return user
     return None
 
