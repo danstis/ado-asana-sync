@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import os
 from dataclasses import dataclass
+from typing import Tuple, Any
 from datetime import datetime, timezone, timedelta
 from time import sleep
 
@@ -97,9 +98,6 @@ def start_sync(app: App) -> None:
 def read_projects() -> list:
     """
     Read projects from JSON file and return as a list.
-
-    Returns:
-        projects (list): List of projects with specific attributes.
     """
     with _TRACER.start_as_current_span("read_projects"):
         # Initialize an empty list to store the projects
@@ -129,17 +127,6 @@ def read_projects() -> list:
 def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None:
     """
     Create a tag for a given workspace if it does not already exist.
-
-    Args:
-        app (App): The App object containing the Asana client.
-        workspace (str): The ID of the workspace to create the tag in.
-        tag (str): The name of the tag to create.
-
-    Returns:
-        str: The GUID of the tag.
-
-    Raises:
-        ApiException: If an error occurs while making the API call.
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
@@ -176,15 +163,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
 
 
 def get_tag_by_name(app: App, workspace: str, tag: str) -> dict | None:
-    """Retrieves a tag by its name from a given workspace.
-
-    Args:
-        app (App): The Asana client instance.
-        workspace (str): The ID of the workspace.
-        tag (str): The name of the tag to retrieve.
-
-    Returns:
-        dict | None: The tags GUID if found, or None if not found.
+    """
+    Retrieves a tag by its name from a given workspace.
     """
     with _TRACER.start_as_current_span("get_tag_by_name"):
         api_instance = asana.TagsApi(app.asana_client)
@@ -205,13 +185,6 @@ def get_tag_by_name(app: App, workspace: str, tag: str) -> dict | None:
 def get_asana_task_tags(app: App, task: TaskItem) -> list[dict]:
     """
     Retrieves the tags assigned to a given Asana task.
-
-    Args:
-        app (App): The Asana client instance.
-        task (TaskItem): The Asana task to retrieve the tags for.
-
-    Returns:
-        list[dict]: A list of dictionaries representing the tags assigned to the task.
     """
     with _TRACER.start_as_current_span("get_asana_task_tags"):
         api_instance = asana.TagsApi(app.asana_client)
@@ -230,14 +203,6 @@ def get_asana_task_tags(app: App, task: TaskItem) -> list[dict]:
 def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
     """
     Adds a tag to a given item if it is not already assigned.
-
-    Args:
-        app (App): The Asana client instance.
-        task (TaskItem): The Asana task to add the tag to.
-        tag (str): The name of the tag to add.
-
-    Returns:
-        None
     """
     api_instance = asana.TasksApi(app.asana_client)
     task_tags = get_asana_task_tags(app, task)
@@ -261,16 +226,6 @@ def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
 def sync_project(app: App, project):
     """
     Synchronizes a project by mapping ADO work items to Asana tasks.
-
-    Args:
-        app (App): The main application object.
-        project (dict): A dictionary containing information about the project to sync. It should have the following keys:
-            - adoProjectName (str): The name of the ADO project.
-            - adoTeamName (str): The name of the ADO team within the ADO project.
-            - asanaProjectName (str): The name of the Asana project within the Asana workspace.
-
-    Returns:
-        None
     """
     # Log the item being synced.
     _LOGGER.info(
@@ -281,54 +236,17 @@ def sync_project(app: App, project):
         project["asanaProjectName"],
     )
 
+    # Get project IDs
     try:
-        # Get the ADO project by name.
-        ado_project = app.ado_core_client.get_project(project["adoProjectName"])
-    except NameError as exception:
-        _LOGGER.error(
-            "ADO project %s not found: %s", project["adoProjectName"], exception
+        ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(
+            app, project
         )
-        return
-
-    try:
-        # Get the ADO team by name within the ADO project.
-        ado_team = app.ado_core_client.get_team(
-            project["adoProjectName"], project["adoTeamName"]
-        )
-    except NameError as exception:
-        _LOGGER.error(
-            "ADO team %s not found in project %s: %s",
-            project["adoTeamName"],
-            project["adoProjectName"],
-            exception,
-        )
-        return
-
-    try:
-        # Get the Asana workspace ID by name.
-        asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
-    except NameError as exception:
-        _LOGGER.error(
-            "Asana workspace %s not found: %s", app.asana_workspace_name, exception
-        )
+    except Exception as e:
+        _LOGGER.error("Error getting project IDs: %s", e)
         return
 
     # Get all Asana users in the workspace, this will enable user matching.
     asana_users = get_asana_users(app, asana_workspace_id)
-
-    # Get the Asana project by name within the Asana workspace.
-    try:
-        asana_project = get_asana_project(
-            app, asana_workspace_id, project["asanaProjectName"]
-        )
-    except NameError as exception:
-        _LOGGER.error(
-            "Asana project %s not found in workspace %s: %s",
-            project["asanaProjectName"],
-            app.asana_workspace_name,
-            exception,
-        )
-        return
 
     # Get all Asana Tasks in this project.
     _LOGGER.info(
@@ -344,101 +262,155 @@ def sync_project(app: App, project):
         "Microsoft.RequirementCategory",
     )
 
-    # Loop through each backlog item
+    # Process backlog items
+    process_backlog_items(
+        app, ado_items, asana_users, asana_project_tasks, asana_project
+    )
+
+    # Process any existing matched items that are no longer returned in the backlog (closed or removed).
+    all_tasks = app.matches.all()
+    processed_item_ids = set(item.target.id for item in ado_items.work_items)
+    process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
+
+
+def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
+    """
+    Get the necessary project IDs for syncing.
+    """
+    try:
+        # Get the ADO project by name.
+        ado_project = app.ado_core_client.get_project(project["adoProjectName"])
+    except NameError as exception:
+        _LOGGER.error(
+            "ADO project %s not found: %s", project["adoProjectName"], exception
+        )
+        raise exception
+
+    try:
+        # Get the ADO team by name within the ADO project.
+        ado_team = app.ado_core_client.get_team(
+            project["adoProjectName"], project["adoTeamName"]
+        )
+    except NameError as exception:
+        _LOGGER.error(
+            "ADO team %s not found in project %s: %s",
+            project["adoTeamName"],
+            project["adoProjectName"],
+            exception,
+        )
+        raise exception
+
+    try:
+        # Get the Asana workspace ID by name.
+        asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
+    except NameError as exception:
+        _LOGGER.error(
+            "Asana workspace %s not found: %s", app.asana_workspace_name, exception
+        )
+        raise exception
+
+    # Get the Asana project by name within the Asana workspace.
+    try:
+        asana_project = get_asana_project(
+            app, asana_workspace_id, project["asanaProjectName"]
+        )
+    except NameError as exception:
+        _LOGGER.error(
+            "Asana project %s not found in workspace %s: %s",
+            project["asanaProjectName"],
+            app.asana_workspace_name,
+            exception,
+        )
+        raise exception
+
+    return ado_project, ado_team, asana_workspace_id, asana_project
+
+
+def process_backlog_items(
+    app, ado_items, asana_users, asana_project_tasks, asana_project
+):
+    """
+    Processes the backlog items from ADO.
+    """
     for wi in ado_items.work_items:
         # Get the work item from the ID
         ado_task = app.ado_wit_client.get_work_item(wi.target.id)
-
-        # Skip this item if is not assigned, or the assignee does not match an Asana user,
-        # unless it has previously been matched.
-        existing_match = TaskItem.search(app, ado_id=ado_task.id)
-        ado_assigned = get_task_user(ado_task)
-        if ado_assigned is None and existing_match is None:
-            _LOGGER.debug(
-                "%s:skipping item as it is not assigned",
-                ado_task.fields[ADO_TITLE],
-            )
-            continue
-        asana_matched_user = matching_user(asana_users, ado_assigned)
-        if asana_matched_user is None and existing_match is None:
-            continue
-
-        if existing_match is None:
-            _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
-            current_utc_time = iso8601_utc(datetime.now(timezone.utc))
-            existing_match = TaskItem(
-                ado_id=ado_task.id,
-                ado_rev=ado_task.rev,
-                title=ado_task.fields[ADO_TITLE],
-                item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
-                state=ado_task.fields[ADO_STATE],
-                created_date=current_utc_time,
-                updated_date=current_utc_time,
-                url=safe_get(
-                    ado_task, "_links", "additional_properties", "html", "href"
-                ),
-                assigned_to=(
-                    asana_matched_user.get("gid", None)
-                    if asana_matched_user is not None
-                    else None
-                ),
-            )
-            # Check if there is a matching asana task with a matching title.
-            asana_task = get_asana_task_by_name(
-                asana_project_tasks, existing_match.asana_title
-            )
-            if asana_task is None:
-                # The Asana task does not exist, create it and map the tasks.
-                _LOGGER.info(
-                    "%s:no matching asana task exists, creating new task",
-                    ado_task.fields[ADO_TITLE],
-                )
-                create_asana_task(
-                    app,
-                    asana_project,
-                    existing_match,
-                    app.asana_tag_gid,
-                )  # type: ignore[arg-type]
-                continue
-            else:
-                # The Asana task exists, map the tasks in the db.
-                _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
-                existing_match.asana_gid = asana_task["gid"]
-                update_asana_task(
-                    app,
-                    existing_match,
-                    app.asana_tag_gid,
-                    asana_project,
-                )  # type: ignore[arg-type]
-                continue
-
-        # If already mapped, check if the item needs an update (ado rev is higher, or asana item is newer).
-        if existing_match.is_current(app):
-            _LOGGER.info("%s:task is already up to date", existing_match.asana_title)
-            continue
-
-        # Update the asana task, as it is not current.
-        _LOGGER.info(
-            "%s:task has been updated, updating task", existing_match.asana_title
+        process_backlog_item(
+            app, ado_task, asana_users, asana_project_tasks, asana_project
         )
-        asana_task = get_asana_task(app, existing_match.asana_gid)
-        if asana_task is None:
-            _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
-            continue
-        existing_match.ado_rev = ado_task.rev
-        existing_match.title = ado_task.fields[ADO_TITLE]
-        existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
-        existing_match.state = ado_task.fields[ADO_STATE]
-        existing_match.updated_date = iso8601_utc(datetime.now())
-        existing_match.url = safe_get(
-            ado_task, "_links", "additional_properties", "html", "href"
+
+
+def process_backlog_item(
+    app, ado_task, asana_users, asana_project_tasks, asana_project
+):
+    """
+    Processes a single backlog item.
+    """
+    existing_match = TaskItem.search(app, ado_id=ado_task.id)
+    ado_assigned = get_task_user(ado_task)
+
+    if ado_assigned is None and existing_match is None:
+        _LOGGER.debug(
+            "%s:skipping item as it is not assigned",
+            ado_task.fields[ADO_TITLE],
         )
-        existing_match.assigned_to = (
+        return
+
+    asana_matched_user = matching_user(asana_users, ado_assigned)
+    if asana_matched_user is None and existing_match is None:
+        return
+
+    if existing_match is None:
+        create_new_task_mapping(
+            app, ado_task, asana_matched_user, asana_project_tasks, asana_project
+        )
+    else:
+        update_existing_task(
+            app, ado_task, existing_match, asana_matched_user, asana_project
+        )
+
+
+def create_new_task_mapping(
+    app, ado_task, asana_matched_user, asana_project_tasks, asana_project
+):
+    """
+    Creates a new task mapping between ADO and Asana.
+    """
+    _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
+    current_utc_time = iso8601_utc(datetime.now(timezone.utc))
+    existing_match = TaskItem(
+        ado_id=ado_task.id,
+        ado_rev=ado_task.rev,
+        title=ado_task.fields[ADO_TITLE],
+        item_type=ado_task.fields[ADO_WORK_ITEM_TYPE],
+        state=ado_task.fields[ADO_STATE],
+        created_date=current_utc_time,
+        updated_date=current_utc_time,
+        url=safe_get(ado_task, "_links", "additional_properties", "html", "href"),
+        assigned_to=(
             asana_matched_user.get("gid", None)
             if asana_matched_user is not None
             else None
+        ),
+    )
+    # Check if there is a matching asana task with a matching title.
+    asana_task = get_asana_task_by_name(asana_project_tasks, existing_match.asana_title)
+    if asana_task is None:
+        # The Asana task does not exist, create it and map the tasks.
+        _LOGGER.info(
+            "%s:no matching asana task exists, creating new task",
+            ado_task.fields[ADO_TITLE],
         )
-        existing_match.asana_updated = asana_task["modified_at"]
+        create_asana_task(
+            app,
+            asana_project,
+            existing_match,
+            app.asana_tag_gid,
+        )
+    else:
+        # The Asana task exists, map the tasks in the db.
+        _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
+        existing_match.asana_gid = asana_task["gid"]
         update_asana_task(
             app,
             existing_match,
@@ -446,72 +418,137 @@ def sync_project(app: App, project):
             asana_project,
         )
 
-    # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    all_tasks = app.matches.all()
-    processed_item_ids = set(item.target.id for item in ado_items.work_items)
+
+def update_existing_task(
+    app, ado_task, existing_match, asana_matched_user, asana_project
+):
+    """
+    Updates an existing Asana task based on ADO changes.
+    """
+    if existing_match.is_current(app):
+        _LOGGER.info("%s:task is already up to date", existing_match.asana_title)
+        return
+
+    _LOGGER.info("%s:task has been updated, updating task", existing_match.asana_title)
+    asana_task = get_asana_task(app, existing_match.asana_gid)
+    if asana_task is None:
+        _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
+        return
+    existing_match.ado_rev = ado_task.rev
+    existing_match.title = ado_task.fields[ADO_TITLE]
+    existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+    existing_match.state = ado_task.fields[ADO_STATE]
+    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.url = safe_get(
+        ado_task, "_links", "additional_properties", "html", "href"
+    )
+    existing_match.assigned_to = (
+        asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+    )
+    existing_match.asana_updated = asana_task["modified_at"]
+    update_asana_task(
+        app,
+        existing_match,
+        app.asana_tag_gid,
+        asana_project,
+    )
+
+
+def process_closed_items(
+    app, all_tasks, processed_item_ids, asana_users, asana_project
+):
+    """
+    Processes items that are closed or removed from the backlog.
+    """
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
             _LOGGER.debug("Processing closed item %s", wi["ado_id"])
-            # Check if this work item is older than the threshold. If so delete the mapping.
-            if (
-                datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
-            ).days > _SYNC_THRESHOLD:
-                _LOGGER.info(
-                    "%s: %s:Task has not been updated in %s days, removing mapping",
-                    wi["item_type"],
-                    wi["title"],
-                    _SYNC_THRESHOLD,
-                )
-                with app.db_lock:
-                    app.matches.remove(doc_ids=[wi.doc_id])
+            if is_item_older_than_threshold(wi):
+                remove_mapping(app, wi)
                 continue
 
-            # Get the work item details from ADO.
-            existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+            existing_match = get_existing_match(app, wi)
             if existing_match is None:
-                _LOGGER.warning(
-                    "Task with ADO ID %s not found in database",
-                    wi["ado_id"],
-                )
                 continue
-            ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
 
-            # Check if the item is already up to date.
+            ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             if existing_match.is_current(app):
                 _LOGGER.debug(
                     "%s:Task is up to date",
                     existing_match.asana_title,
                 )
                 continue
-            # Update the asana task, as it is not current.
-            asana_task = get_asana_task(app, existing_match.asana_gid)
-            ado_assigned = get_task_user(ado_task)
-            asana_matched_user = matching_user(asana_users, ado_assigned)
-            if asana_task is None:
-                _LOGGER.error(
-                    "No Asana task found with gid: %s", existing_match.asana_gid
-                )
-                continue
-            existing_match.ado_rev = ado_task.rev
-            existing_match.title = ado_task.fields[ADO_TITLE]
-            existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
-            existing_match.state = ado_task.fields[ADO_STATE]
-            existing_match.updated_date = iso8601_utc(datetime.now())
-            existing_match.url = safe_get(
-                ado_task, "_links", "additional_properties", "html", "href"
+
+            update_task_if_needed(
+                app, ado_task, existing_match, asana_users, asana_project
             )
-            existing_match.assigned_to = (
-                asana_matched_user.get("gid", None)
-                if asana_matched_user is not None
-                else None
-            )
-            existing_match.asana_updated = asana_task["modified_at"]
-            update_asana_task(
-                app,
-                existing_match,
-                app.asana_tag_gid,
-                asana_project,
-            )  # type: ignore[arg-type]
+
+
+def is_item_older_than_threshold(wi):
+    """
+    Determines if a work item is older than a specified threshold.
+    """
+    return (
+        datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
+    ).days > _SYNC_THRESHOLD
+
+
+def remove_mapping(app, wi):
+    """
+    Removes the mapping of a work item (wi) from the application's database if it has not been updated within a specified
+    threshold.
+    """
+    _LOGGER.info(
+        "%s: %s:Task has not been updated in %s days, removing mapping",
+        wi["item_type"],
+        wi["title"],
+        _SYNC_THRESHOLD,
+    )
+    with app.db_lock:
+        app.matches.remove(doc_ids=[wi.doc_id])
+
+
+def get_existing_match(app, wi):
+    """
+    Searches for an existing match of a work item in the database.
+    """
+    existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+    if existing_match is None:
+        _LOGGER.warning(
+            "Task with ADO ID %s not found in database",
+            wi["ado_id"],
+        )
+    return existing_match
+
+
+def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project):
+    """
+    Updates an Asana task if needed based on the provided Azure DevOps (ADO) task.
+    """
+    asana_task = get_asana_task(app, existing_match.asana_gid)
+    ado_assigned = get_task_user(ado_task)
+    asana_matched_user = matching_user(asana_users, ado_assigned)
+    if asana_task is None:
+        _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
+        return
+    existing_match.ado_rev = ado_task.rev
+    existing_match.title = ado_task.fields[ADO_TITLE]
+    existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+    existing_match.state = ado_task.fields[ADO_STATE]
+    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.url = safe_get(
+        ado_task, "_links", "additional_properties", "html", "href"
+    )
+    existing_match.assigned_to = (
+        asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+    )
+    existing_match.asana_updated = asana_task["modified_at"]
+    update_asana_task(
+        app,
+        existing_match,
+        app.asana_tag_gid,
+        asana_project,
+    )
 
 
 @dataclass
@@ -528,13 +565,6 @@ def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
     """
     Return the email and display name of the user assigned to the Azure DevOps work item.
     If no user is assigned, then return None.
-
-    Args:
-        task (WorkItem): The Azure DevOps work item object.
-
-    Returns:
-        ADOAssignedUser: The details of the assigned user in ADO.
-        None: If the task is not assigned.
     """
     assigned_to = task.fields.get("System.AssignedTo", None)
     if assigned_to is not None:
@@ -549,21 +579,13 @@ def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
 def matching_user(user_list: list[dict], ado_user: ADOAssignedUser) -> dict | None:
     """
     Check if a given email exists in a list of user dicts.
-
-    Args:
-        user_list (list[dict]): A list of user dicts representing users.
-        user (ADOAssignedUser): An ADO User representation, containing display_name and email.
-
-    Returns:
-        dict: The matching asana user.
-        None: If no matching user is found.
     """
     if ado_user is None:
         return None
     for user in user_list:
         if (
-            user["email"].lower() == ado_user.email.lower() or
-            user["name"].lower() == ado_user.display_name.lower()
+            user["email"].lower() == ado_user.email.lower()
+            or user["name"].lower() == ado_user.display_name.lower()
         ):
             return user
     return None
@@ -572,13 +594,6 @@ def matching_user(user_list: list[dict], ado_user: ADOAssignedUser) -> dict | No
 def get_asana_workspace(app: App, name: str) -> str:
     """
     Returns the workspace gid for the named Asana workspace.
-
-    :param app: The application object.
-    :type app: App
-    :param name: The name of the workspace.
-    :type name: str
-    :return: Workspace gid.
-    :rtype: str
     """
     api_instance = asana.WorkspacesApi(app.asana_client)
     try:
@@ -598,15 +613,6 @@ def get_asana_workspace(app: App, name: str) -> str:
 def get_asana_project(app: App, workspace_gid, name) -> str | None:
     """
     Returns the project gid for the named Asana project.
-
-    :param app: The application object.
-    :type app: App
-    :param workspace_gid: The workspace GID.
-    :type workspace_gid: str
-    :param name: The name of the project.
-    :type name: str
-    :return: Project gid if found, None otherwise.
-    :rtype: str | None
     """
     api_instance = asana.ProjectsApi(app.asana_client)
     try:
@@ -627,13 +633,6 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
 def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict | None:
     """
     Returns the entire task dict for the named Asana task from the given list of tasks.
-
-    :param task_list: List of Asana tasks to search in.
-    :type task_list: list[dict]
-    :param task_name: The name of the Asana task.
-    :type task_name: str
-    :return: Task dict or None if no task is found.
-    :rtype: dict or None
     """
 
     for t in task_list:
@@ -645,13 +644,6 @@ def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict | None
 def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
     """
     Returns a list of task dicts for the given Asana project.
-
-    Args:
-        app (App): The application object.
-        asana_project (str): The gid of the Asana project.
-
-    Returns:
-        list[dict]: A list of task dicts for the given project.
     """
     api_instance = asana.TasksApi(app.asana_client)
     all_tasks = []
@@ -694,15 +686,6 @@ def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
 def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) -> None:
     """
     Create an Asana task in the specified project.
-
-    Args:
-        app (App): An instance of the 'App' class that provides the connection to Asana.
-        asana_project (str): The name of the Asana project to create the task in.
-        task (TaskItem): An instance of the 'TaskItem' class that contains the details of the task to be created.
-        tag (str): The Asana tag details to assign to the task.
-
-    Returns:
-        None
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
     # Find the custom field ID for 'link'
@@ -743,15 +726,6 @@ def update_asana_task(
 ) -> None:
     """
     Update an Asana task with the provided task details.
-
-    Args:
-        a (app): An instance of the app class that provides the connection to ADO and Asana.
-        asana_task_id (str): The ID of the Asana task to be updated.
-        task (work_item): An instance of the work_item class that contains the details of the task to be updated.
-        tag (TagResponse): The Asana tag details to assign to the task.
-
-    Returns:
-        None: The function does not return any value. The Asana task is updated with the provided details.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
@@ -790,13 +764,6 @@ def update_asana_task(
 def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     """
     Retrieves all custom fields for a provided Asana project.
-
-    Args:
-        app (App): The Asana client instance.
-        project_gid (str): The GID of the Asana project.
-
-    Returns:
-        list[dict]: A list of dictionaries representing the custom fields for the project.
     """
     global CUSTOM_FIELDS_AVAILABLE
     if CUSTOM_FIELDS_AVAILABLE is False:
@@ -844,14 +811,6 @@ def find_custom_field_by_name(
 ) -> dict | None:
     """
     Finds a custom field in the project by the custom field's name.
-
-    Args:
-        app (App): The Asana client instance.
-        project_gid (str): The GID of the Asana project.
-        field_name (str): The name of the custom field to find.
-
-    Returns:
-        dict | None: A dictionary representing the custom field if found, otherwise None.
     """
     custom_fields = get_asana_project_custom_fields(app, project_gid)
     for field in custom_fields:
@@ -863,14 +822,6 @@ def find_custom_field_by_name(
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
     """
     Retrieves a list of Asana users in a specific workspace.
-
-    Args:
-        a (app): An instance of the `app` class that provides the Asana API client.
-        asana_workspace_gid (str): The ID of the Asana workspace to retrieve users from.
-
-    Returns:
-        list: A list of user dicts representing the Asana users in the specified
-        workspace.
     """
     users_api_instance = asana.UsersApi(app.asana_client)
     opts = {

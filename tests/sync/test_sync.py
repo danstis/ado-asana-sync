@@ -230,7 +230,7 @@ class TestMatchingUser(unittest.TestCase):
         ]
         ado_user = None
 
-        result = matching_user(user_list, ado_user)
+        result = matching_user(user_list, ado_user)  # NOSONAR
 
         self.assertIsNone(result)
 
@@ -388,7 +388,7 @@ class TestMatchingUser(unittest.TestCase):
         ]
         ado_user = None
 
-        result = matching_user(user_list, ado_user)
+        result = matching_user(user_list, ado_user)  # NOSONAR
 
         self.assertIsNone(result)
 
