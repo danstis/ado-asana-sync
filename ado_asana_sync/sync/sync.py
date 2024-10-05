@@ -4,7 +4,7 @@ import concurrent.futures
 import json
 import os
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Any
 from datetime import datetime, timezone, timedelta
 from time import sleep
 
@@ -310,7 +310,7 @@ def sync_project(app: App, project):
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
 
-def get_project_ids(app: App, project) -> Tuple[any, any, str, str]:
+def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str]:
     """
     Get the necessary project IDs for syncing.
 
