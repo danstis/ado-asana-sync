@@ -143,9 +143,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
-        with app.db_lock:
-            tag_config = app.config.get(doc_id=1)
-            tag_gid = tag_config.get("tag_gid") if tag_config else None
+        tag_config = app.config.get(doc_id=1)
+        tag_gid = tag_config.get("tag_gid") if tag_config else None
 
         if tag_gid:
             _LOGGER.info("tag_gid found in database for '%s'", tag)
@@ -448,8 +447,7 @@ def sync_project(app: App, project):
         )
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    with app.db_lock:
-        all_tasks = app.matches.all()
+    all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
