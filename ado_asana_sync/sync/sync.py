@@ -505,66 +505,128 @@ def process_closed_items(
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
             _LOGGER.debug("Processing closed item %s", wi["ado_id"])
-            # Check if this work item is older than the threshold. If so, delete the mapping.
-            if (
-                datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
-            ).days > _SYNC_THRESHOLD:
-                _LOGGER.info(
-                    "%s: %s:Task has not been updated in %s days, removing mapping",
-                    wi["item_type"],
-                    wi["title"],
-                    _SYNC_THRESHOLD,
-                )
-                with app.db_lock:
-                    app.matches.remove(doc_ids=[wi.doc_id])
+            if is_item_older_than_threshold(wi):
+                remove_mapping(app, wi)
                 continue
 
-            # Get the work item details from ADO.
-            existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+            existing_match = get_existing_match(app, wi)
             if existing_match is None:
-                _LOGGER.warning(
-                    "Task with ADO ID %s not found in database",
-                    wi["ado_id"],
-                )
                 continue
-            ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
 
-            # Check if the item is already up to date.
+            ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             if existing_match.is_current(app):
                 _LOGGER.debug(
                     "%s:Task is up to date",
                     existing_match.asana_title,
                 )
                 continue
-            # Update the asana task, as it is not current.
-            asana_task = get_asana_task(app, existing_match.asana_gid)
-            ado_assigned = get_task_user(ado_task)
-            asana_matched_user = matching_user(asana_users, ado_assigned)
-            if asana_task is None:
-                _LOGGER.error(
-                    "No Asana task found with gid: %s", existing_match.asana_gid
-                )
-                continue
-            existing_match.ado_rev = ado_task.rev
-            existing_match.title = ado_task.fields[ADO_TITLE]
-            existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
-            existing_match.state = ado_task.fields[ADO_STATE]
-            existing_match.updated_date = iso8601_utc(datetime.now())
-            existing_match.url = safe_get(
-                ado_task, "_links", "additional_properties", "html", "href"
+
+            update_task_if_needed(
+                app, ado_task, existing_match, asana_users, asana_project
             )
-            existing_match.assigned_to = (
-                asana_matched_user.get("gid", None)
-                if asana_matched_user is not None
-                else None
-            )
-            existing_match.asana_updated = asana_task["modified_at"]
-            update_asana_task(
-                app,
-                existing_match,
-                app.asana_tag_gid,
-                asana_project,
-            )
+
+
+def is_item_older_than_threshold(wi):
+    """
+    Determines if a work item is older than a specified threshold.
+
+    Args:
+        wi (dict): A dictionary representing a work item, which must contain an "updated_date" key with an ISO format date string.
+
+    Returns:
+        bool: True if the work item is older than the threshold, False otherwise.
+    """
+    return (
+        datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
+    ).days > _SYNC_THRESHOLD
+
+
+def remove_mapping(app, wi):
+    """
+    Removes the mapping of a work item (wi) from the application's database if it has not been updated within a specified threshold.
+
+    Args:
+        app (object): The application instance containing the database and lock.
+        wi (dict): The work item dictionary containing details such as 'item_type', 'title', and 'doc_id'.
+
+    Logs:
+        Logs an informational message indicating the removal of the mapping, including the work item's type, title, and the sync threshold.
+    """
+    _LOGGER.info(
+        "%s: %s:Task has not been updated in %s days, removing mapping",
+        wi["item_type"],
+        wi["title"],
+        _SYNC_THRESHOLD,
+    )
+    with app.db_lock:
+        app.matches.remove(doc_ids=[wi.doc_id])
+
+
+def get_existing_match(app, wi):
+    """
+    Searches for an existing match of a work item in the database.
+
+    Args:
+        app: The application context or database session used for the search.
+        wi (dict): A dictionary containing the work item details, specifically the "ado_id".
+
+    Returns:
+        TaskItem or None: The matched TaskItem if found, otherwise None.
+
+    Logs:
+        Logs a warning if the task with the specified ADO ID is not found in the database.
+    """
+    existing_match = TaskItem.search(app, ado_id=wi["ado_id"])
+    if existing_match is None:
+        _LOGGER.warning(
+            "Task with ADO ID %s not found in database",
+            wi["ado_id"],
+        )
+    return existing_match
+
+
+def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project):
+    """
+    Updates an Asana task if needed based on the provided Azure DevOps (ADO) task.
+
+    This function checks if an Asana task exists that matches the given ADO task.
+    If the Asana task is found, it updates the existing match with the latest
+    information from the ADO task and updates the Asana task accordingly.
+
+    Args:
+        app: The application context containing configuration and utilities.
+        ado_task: The Azure DevOps task object containing task details.
+        existing_match: The existing match object that links ADO and Asana tasks.
+        asana_users: A list of Asana users to match against the ADO task assignee.
+        asana_project: The Asana project to which the task belongs.
+
+    Returns:
+        None
+    """
+    asana_task = get_asana_task(app, existing_match.asana_gid)
+    ado_assigned = get_task_user(ado_task)
+    asana_matched_user = matching_user(asana_users, ado_assigned)
+    if asana_task is None:
+        _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
+        return
+    existing_match.ado_rev = ado_task.rev
+    existing_match.title = ado_task.fields[ADO_TITLE]
+    existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
+    existing_match.state = ado_task.fields[ADO_STATE]
+    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.url = safe_get(
+        ado_task, "_links", "additional_properties", "html", "href"
+    )
+    existing_match.assigned_to = (
+        asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+    )
+    existing_match.asana_updated = asana_task["modified_at"]
+    update_asana_task(
+        app,
+        existing_match,
+        app.asana_tag_gid,
+        asana_project,
+    )
 
 
 @dataclass
