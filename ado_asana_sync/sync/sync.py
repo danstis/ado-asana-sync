@@ -144,9 +144,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
-        with app.db_lock:
-            tag_config = app.config.get(doc_id=1)
-            tag_gid = tag_config.get("tag_gid") if tag_config else None
+        tag_config = app.config.get(doc_id=1)
+        tag_gid = tag_config.get("tag_gid") if tag_config else None
 
         if tag_gid:
             _LOGGER.info("tag_gid found in database for '%s'", tag)
@@ -615,8 +614,8 @@ def matching_user(user_list: list[dict], ado_user: ADOAssignedUser) -> dict | No
         return None
     for user in user_list:
         if (
-            user["email"].lower() == ado_user.email.lower() or
-            user["name"].lower() == ado_user.display_name.lower()
+            user["email"].lower() == ado_user.email.lower()
+            or user["name"].lower() == ado_user.display_name.lower()
         ):
             return user
     return None

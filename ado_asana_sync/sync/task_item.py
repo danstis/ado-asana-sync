@@ -117,10 +117,9 @@ class TaskItem:
             None: If there is no matching item.
         """
         query = Query().ado_id == ado_id
-        with app.db_lock:
-            if app.matches.contains(query):
-                item = app.matches.search(query)
-                return cls(**item[0])
+        if app.matches.contains(query):
+            item = app.matches.search(query)
+            return cls(**item[0])
         return None
 
     @classmethod
@@ -146,10 +145,9 @@ class TaskItem:
         query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
 
         # return the first matching item, or return None if not found.
-        with app.db_lock:
-            if app.matches.contains(query):
-                item = app.matches.search(query)
-                return cls(**item[0])
+        if app.matches.contains(query):
+            item = app.matches.search(query)
+            return cls(**item[0])
         return None
 
     def save(self, app: App) -> None:
@@ -176,10 +174,11 @@ class TaskItem:
             "updated_date": self.updated_date,
         }
         query = Query().ado_id == task_data["ado_id"]
-        with app.db_lock:
-            if app.matches.contains(query):
+        if app.matches.contains(query):
+            with app.db_lock:
                 app.matches.update(task_data, query)
-            else:
+        else:
+            with app.db_lock:
                 app.matches.insert(task_data)
 
     def is_current(self, app: App) -> bool:
