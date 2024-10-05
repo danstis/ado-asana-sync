@@ -309,7 +309,7 @@ def sync_project(app: App, project):
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
 
-def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str]:
+def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
     """
     Get the necessary project IDs for syncing.
 
