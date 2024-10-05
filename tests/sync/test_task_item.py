@@ -98,7 +98,7 @@ class TestTaskItem(unittest.TestCase):
             app.matches = MagicMock()
 
         # Call the search method with None for both ado_id and asana_gid
-        result = TaskItem.search(app, None, None)
+        result = TaskItem.search(app, None, None)  # NOSONAR
 
         # Assert that the result is None
         self.assertIsNone(result)
