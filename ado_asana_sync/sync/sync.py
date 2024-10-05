@@ -515,7 +515,8 @@ def process_closed_items(
                     wi["title"],
                     _SYNC_THRESHOLD,
                 )
-                app.matches.remove(doc_ids=[wi.doc_id])
+                with app.db_lock:
+                    app.matches.remove(doc_ids=[wi.doc_id])
                 continue
 
             # Get the work item details from ADO.
