@@ -531,7 +531,8 @@ def is_item_older_than_threshold(wi):
     Determines if a work item is older than a specified threshold.
 
     Args:
-        wi (dict): A dictionary representing a work item, which must contain an "updated_date" key with an ISO format date string.
+        wi (dict): A dictionary representing a work item, which must contain an "updated_date" key with an ISO format date
+        string.
 
     Returns:
         bool: True if the work item is older than the threshold, False otherwise.
@@ -543,14 +544,16 @@ def is_item_older_than_threshold(wi):
 
 def remove_mapping(app, wi):
     """
-    Removes the mapping of a work item (wi) from the application's database if it has not been updated within a specified threshold.
+    Removes the mapping of a work item (wi) from the application's database if it has not been updated within a specified
+    threshold.
 
     Args:
         app (object): The application instance containing the database and lock.
         wi (dict): The work item dictionary containing details such as 'item_type', 'title', and 'doc_id'.
 
     Logs:
-        Logs an informational message indicating the removal of the mapping, including the work item's type, title, and the sync threshold.
+        Logs an informational message indicating the removal of the mapping, including the work item's type, title, and the
+        sync threshold.
     """
     _LOGGER.info(
         "%s: %s:Task has not been updated in %s days, removing mapping",
