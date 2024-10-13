@@ -1,6 +1,6 @@
 # docker compose up --build --remove-orphans
 # docker compose up --watch --build --remove-orphans
-# version: '3'
+version: '3'
 name: ado-asana-sync
 
 services:
