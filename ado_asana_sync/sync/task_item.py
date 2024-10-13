@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 from tinydb import Query
@@ -101,7 +102,7 @@ class TaskItem:
         Returns:
             str: The formatted notes of the Asana object.
         """
-        return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {self.title}'
+        return f'<a href="{self.url}">{self.item_type} {self.ado_id}</a>: {escape(self.title)}'
 
     @classmethod
     def find_by_ado_id(cls, app: App, ado_id: int) -> TaskItem | None:
