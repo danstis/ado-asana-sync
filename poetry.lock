@@ -2,13 +2,13 @@
 
 [[package]]
 name = "asana"
-version = "5.0.6"
+version = "5.0.10"
 description = "Asana"
 optional = false
 python-versions = "*"
 files = [
-    {file = "asana-5.0.6-py3-none-any.whl", hash = "sha256:eb4583959a3ac05e5f0b832cffe28fbb82dac24012d9e14a34f1785f05950d7d"},
-    {file = "asana-5.0.6.tar.gz", hash = "sha256:919c0a95f6bfea6c0df57ae9680d0f0f415b5d55461dc5e8773a34ae8832b10e"},
+    {file = "asana-5.0.10-py3-none-any.whl", hash = "sha256:a21618ffdba0b13cac9f92c93aa17553283c6442375f1038a115545747a3ca93"},
+    {file = "asana-5.0.10.tar.gz", hash = "sha256:4655d43fe78d3fee6701443cb1a2b92560b64e626e893b553f5366c68fb127c9"},
 ]
 
 [package.dependencies]
@@ -1249,13 +1249,13 @@ six = ">=1.5"
 
 [[package]]
 name = "pytz"
-version = "2024.1"
+version = "2024.2"
 description = "World timezone definitions, modern and historical"
 optional = false
 python-versions = "*"
 files = [
-    {file = "pytz-2024.1-py2.py3-none-any.whl", hash = "sha256:328171f4e3623139da4983451950b28e95ac706e13f3f2630a879749e7a8b319"},
-    {file = "pytz-2024.1.tar.gz", hash = "sha256:2a29735ea9c18baf14b448846bde5a48030ed267578472d8955cd0e7443a9812"},
+    {file = "pytz-2024.2-py2.py3-none-any.whl", hash = "sha256:31c7c1817eb7fae7ca4b8c7ee50c72f93aa2dd863de768e1ef4245d426aa0725"},
+    {file = "pytz-2024.2.tar.gz", hash = "sha256:2aa355083c50a0f93fa581709deac0c9ad65cca8a9e9beac660adcbd493c798a"},
 ]
 
 [[package]]
