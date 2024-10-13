@@ -2,12 +2,12 @@
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
   },
-  "sonarlint.connectedMode.project": {
-    "connectionId": "SonarLint",
-    "projectKey": "danstis_ado-asana-sync"
-  },
   "python.analysis.typeCheckingMode": "off",
   "cSpell.words": ["msrest", "pytz", "rtype", "timezones", "tinydb", "VSTS"],
   "git.branchProtection": ["main"],
-  "python.formatting.provider": "none"
+  "python.formatting.provider": "none",
+  "sonarlint.connectedMode.project": {
+    "connectionId": "danstis",
+    "projectKey": "danstis_ado-asana-sync"
+  }
 }
