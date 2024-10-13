@@ -1,5 +1,6 @@
 # docker compose up --build --remove-orphans
-version: '3'
+# docker compose up --watch --build --remove-orphans
+# version: '3'
 name: ado-asana-sync
 
 services:
@@ -8,6 +9,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    develop:
+      watch:
+        - action: rebuild
+          path: .
+          ignore:
+            - .devcontainer
+            - .github
+            - .vscode
+            - data
+            - tests
     volumes:
       - ./data:/app/data
     environment:
