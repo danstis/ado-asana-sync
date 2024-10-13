@@ -25,6 +25,12 @@ def setup_logging_and_tracing(module_name: str):
     Returns:
         tuple: A tuple containing the logger and tracer objects.
     """
+    logging.basicConfig(
+        format='%(asctime)s | %(levelname)-8s | %(module)s:%(funcName)s:%(lineno)d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        level=logging.INFO
+    )
+
     logger = logging.getLogger(module_name)
     tracer = trace.get_tracer(module_name)
     logging.getLogger("azure").setLevel(logging.WARNING)
