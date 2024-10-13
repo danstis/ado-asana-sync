@@ -19,6 +19,3 @@ description = """Adds or modifies GitHub Actions"""
 description = """Updates that modify python code"""
 [custom_labels."tests 🧪"]
 description = """Updates to tests"""
-
-[ignore]
-glob = ['go.mod', 'go.sum']
