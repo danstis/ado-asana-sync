@@ -90,7 +90,7 @@ jobs:
         with:
           skip-existing: true
       - name: Create Release
-        uses: softprops/action-gh-release@v2.0.8 # https://github.com/marketplace/actions/gh-release
+        uses: softprops/action-gh-release@v2.1.0 # https://github.com/marketplace/actions/gh-release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.version.outputs.FullSemVer }}
