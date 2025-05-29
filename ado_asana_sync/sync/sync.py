@@ -703,7 +703,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
             "projects": [asana_project],
             "assignee": task.assigned_to,
             "tags": [tag],
-            "state": task.state in _CLOSED_STATES,
+            "completed": task.state in _CLOSED_STATES,
         },
     }
 
