@@ -470,10 +470,6 @@ def process_closed_items(
 
             existing_match = get_existing_match(app, wi)
             if existing_match is None:
-                _LOGGER.warning(
-                    "No existing match found for ADO ID %s, skipping",
-                    wi["ado_id"],
-                )
                 continue
 
             ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
