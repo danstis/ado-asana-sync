@@ -462,23 +462,32 @@ def process_closed_items(
     """
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
-            _LOGGER.debug("Processing closed item %s", wi["ado_id"])
+            _LOGGER.info("Processing closed item %s", wi["ado_id"])
             if is_item_older_than_threshold(wi):
+                _LOGGER.info("%s:Task is older than %s days, removing mapping", wi["ado_id"], _SYNC_THRESHOLD)
                 remove_mapping(app, wi)
                 continue
 
             existing_match = get_existing_match(app, wi)
             if existing_match is None:
+                _LOGGER.warning(
+                    "No existing match found for ADO ID %s, skipping",
+                    wi["ado_id"],
+                )
                 continue
 
             ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             if existing_match.is_current(app):
-                _LOGGER.debug(
+                _LOGGER.info(
                     "%s:Task is up to date",
                     existing_match.asana_title,
                 )
                 continue
 
+            _LOGGER.info(
+                "%s:Task has been updated, updating task",
+                existing_match.asana_title,
+            )
             update_task_if_needed(
                 app, ado_task, existing_match, asana_users, asana_project
             )
