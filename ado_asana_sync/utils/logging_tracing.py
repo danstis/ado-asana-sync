@@ -17,6 +17,7 @@ from opentelemetry import trace
 
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 
+
 def setup_logging_and_tracing(module_name: str):
     """
     Initializes the logger and tracer for the specified module.
