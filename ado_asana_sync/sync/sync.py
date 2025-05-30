@@ -472,7 +472,11 @@ def process_closed_items(
             if existing_match is None:
                 continue
 
-            ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
+            try:
+                ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
+            except Exception as e:
+                _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
+                continue
             if existing_match.is_current(app):
                 _LOGGER.info(
                     "%s:Task is up to date",
