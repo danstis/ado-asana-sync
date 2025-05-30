@@ -30,7 +30,7 @@ def setup_logging_and_tracing(module_name: str):
     logging.basicConfig(
         format='%(asctime)s | %(levelname)-8s | %(module)s:%(funcName)s:%(lineno)d - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
-        level=LOGLEVEL
+        level=getattr(logging, LOGLEVEL, logging.INFO)
     )
 
     logger = logging.getLogger(module_name)
