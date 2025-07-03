@@ -9,5 +9,10 @@
   "sonarlint.connectedMode.project": {
     "connectionId": "danstis",
     "projectKey": "danstis_ado-asana-sync"
-  }
+  },
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }
