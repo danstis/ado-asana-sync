@@ -27,6 +27,7 @@ Follow these steps to set up your development environment:
 - Write all code in Python.
 - Enforce linting with `pylint` (see `.pylintrc`).
 - Adhere to formatting rules defined in `.editorconfig`.
+- Ensure all code matches `flake8` standards.
 
 ## Testing
 
@@ -34,6 +35,7 @@ Follow these steps to set up your development environment:
 - Use `pytest` as the testing framework.
 - Run the test suite with the `tox` command, as configured in `tox.ini`.
 - Ensure that test coverage remains above 60% for all changes. Add or update tests as necessary to maintain this threshold.
+- Check coverage with `pytest-cov`.
 
 ## CI/CD
 
