@@ -1,6 +1,3 @@
-
-# AGENTS.md
-
 This document provides guidance for AI agents to interact with and contribute to this project.
 
 ## Project Overview
@@ -53,3 +50,7 @@ Follow these steps to set up your development environment:
 
 - Manage all configuration through environment variables. Reference `.env.example` for required variables.
 - Configure project data in JSON format, as demonstrated in `data/projects.json.example`.
+
+## Commits
+
+- Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for all commit messages.
