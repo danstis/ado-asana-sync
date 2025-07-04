@@ -663,7 +663,7 @@ def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
                 "assignee_status,num_subtasks,modified_at,workspace,due_on"
             ),
         }
-        api_response = api_instance.get_tasks(**api_params)
+        api_response = api_instance.get_tasks(api_params)
         return list(api_response)
     except ApiException as exception:
         _LOGGER.error(
