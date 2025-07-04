@@ -651,39 +651,20 @@ def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict | None
 
 
 def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
-    """
-    Returns a list of task dicts for the given Asana project.
-    """
+    """Return a list of task dicts for the given Asana project."""
     api_instance = asana.TasksApi(app.asana_client)
-    all_tasks = []
-    offset = None
     try:
-        # Get all tasks in the project.
-        while True:
-            api_params = {
-                "project": asana_project,
-                "limit": app.asana_page_size,
-                "opt_fields": (
-                    "assignee_section,due_at,name,completed_at,tags,dependents,"
-                    "projects,completed,permalink_url,parent,assignee,"
-                    "assignee_status,num_subtasks,modified_at,workspace,due_on"
-                ),
-            }
-            if offset:
-                api_params["offset"] = offset
-
-            api_response = api_instance.get_tasks(api_params)
-
-            # Append tasks to the all_tasks list.
-            all_tasks.extend(api_response)
-
-            # Check for continuation token in the response.
-            offset = None
-            for response in api_response:
-                offset = getattr(response.get("next_page"), "offset", None)
-            if not offset:
-                break
-        return all_tasks
+        api_params = {
+            "project": asana_project,
+            "limit": app.asana_page_size,
+            "opt_fields": (
+                "assignee_section,due_at,name,completed_at,tags,dependents,"
+                "projects,completed,permalink_url,parent,assignee,"
+                "assignee_status,num_subtasks,modified_at,workspace,due_on"
+            ),
+        }
+        api_response = api_instance.get_tasks(api_params)
+        return list(api_response)
     except ApiException as exception:
         _LOGGER.error(
             "Exception in get_asana_project_tasks when calling TasksApi->get_tasks: %s",
@@ -785,16 +766,10 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     try:
         _LOGGER.info("Fetching custom fields for project %s", project_gid)
         opts = {"limit": 100}
-        custom_fields = []
-        while True:
-            api_response = api_instance.get_custom_field_settings_for_project(
-                project_gid, opts
-            )
-            custom_fields.extend(api_response)
-            if "offset" in api_response:
-                opts["offset"] = api_response["offset"]
-            else:
-                break
+        api_response = api_instance.get_custom_field_settings_for_project(
+            project_gid, opts
+        )
+        custom_fields = list(api_response)
         CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
         return custom_fields
     except ApiException as exception:
