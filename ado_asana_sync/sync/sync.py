@@ -358,6 +358,12 @@ def process_backlog_item(
 
     asana_matched_user = matching_user(asana_users, ado_assigned)
     if asana_matched_user is None and existing_match is None:
+        _LOGGER.info(
+            "%s:assigned user %s <%s> not found in Asana",
+            ado_task.fields[ADO_TITLE],
+            ado_assigned.display_name,
+            ado_assigned.email,
+        )
         return
 
     if existing_match is None:
