@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
@@ -8,6 +8,7 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     matching_user,
     get_asana_task_by_name,
+    process_backlog_item,
 )
 from ado_asana_sync.sync.task_item import TaskItem
 
@@ -233,6 +234,38 @@ class TestMatchingUser(unittest.TestCase):
         result = matching_user(user_list, ado_user)  # NOSONAR
 
         self.assertIsNone(result)
+
+
+class TestProcessBacklogItemLogging(unittest.TestCase):
+    def test_log_when_user_not_matched(self):
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = False
+        app.matches.search.return_value = []
+
+        ado_task = WorkItem()
+        ado_task.id = 1
+        ado_task.rev = 1
+        ado_task.fields = {
+            "System.Title": "Test Item",
+            "System.WorkItemType": "Task",
+            "System.State": "Active",
+            "System.AssignedTo": {
+                "uniqueName": "user@example.com",
+                "displayName": "User Example",
+            },
+        }
+
+        asana_users = [{"email": "other@example.com", "name": "Other"}]
+
+        with patch("ado_asana_sync.sync.sync._LOGGER") as mock_logger:
+            process_backlog_item(app, ado_task, asana_users, [], "proj")
+            mock_logger.info.assert_any_call(
+                "%s:assigned user %s <%s> not found in Asana",
+                "Test Item",
+                "User Example",
+                "user@example.com",
+            )
 
 
 class TestGetAsanaTaskByName(unittest.TestCase):
