@@ -117,11 +117,12 @@ class TaskItem:
             TaskItem: The TaskItem object with the matching ADO ID.
             None: If there is no matching item.
         """
-        query = Query().ado_id == ado_id
-        if app.matches.contains(query):
-            item = app.matches.search(query)
-            return cls(**item[0])
-        return None
+        with app.db_lock:
+            query = Query().ado_id == ado_id
+            if app.matches.contains(query):
+                item = app.matches.search(query)
+                return cls(**item[0])
+            return None
 
     @classmethod
     def search(
@@ -141,15 +142,16 @@ class TaskItem:
         if ado_id is None and asana_gid is None:
             return None
 
-        # Generate the query based on the input.
-        task = Query()
-        query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
+        with app.db_lock:
+            # Generate the query based on the input.
+            task = Query()
+            query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
 
-        # return the first matching item, or return None if not found.
-        if app.matches.contains(query):
-            item = app.matches.search(query)
-            return cls(**item[0])
-        return None
+            # return the first matching item, or return None if not found.
+            if app.matches.contains(query):
+                item = app.matches.search(query)
+                return cls(**item[0])
+            return None
 
     def save(self, app: App) -> None:
         """
@@ -161,25 +163,24 @@ class TaskItem:
         Returns:
             None
         """
-        task_data = {
-            "ado_id": self.ado_id,
-            "ado_rev": self.ado_rev,
-            "title": self.title,
-            "item_type": self.item_type,
-            "state": self.state,
-            "url": self.url,
-            "asana_gid": self.asana_gid,
-            "asana_updated": self.asana_updated,
-            "assigned_to": self.assigned_to,
-            "created_date": self.created_date,
-            "updated_date": self.updated_date,
-        }
-        query = Query().ado_id == task_data["ado_id"]
-        if app.matches.contains(query):
-            with app.db_lock:
+        with app.db_lock:
+            task_data = {
+                "ado_id": self.ado_id,
+                "ado_rev": self.ado_rev,
+                "title": self.title,
+                "item_type": self.item_type,
+                "state": self.state,
+                "url": self.url,
+                "asana_gid": self.asana_gid,
+                "asana_updated": self.asana_updated,
+                "assigned_to": self.assigned_to,
+                "created_date": self.created_date,
+                "updated_date": self.updated_date,
+            }
+            query = Query().ado_id == task_data["ado_id"]
+            if app.matches.contains(query):
                 app.matches.update(task_data, query)
-        else:
-            with app.db_lock:
+            else:
                 app.matches.insert(task_data)
 
     def is_current(self, app: App) -> bool:
@@ -196,16 +197,17 @@ class TaskItem:
         Returns:
             bool: True if the TaskItem is current, False otherwise.
         """
-        ado_task = app.ado_wit_client.get_work_item(self.ado_id)
-        asana_task = get_asana_task(app, self.asana_gid)
+        with app.db_lock:
+            ado_task = app.ado_wit_client.get_work_item(self.ado_id)
+            asana_task = get_asana_task(app, self.asana_gid)
 
-        if not ado_task or not asana_task:
-            return False
+            if not ado_task or not asana_task:
+                return False
 
-        if (
-            ado_task.rev != self.ado_rev
-            or asana_task["modified_at"] != self.asana_updated
-        ):
-            return False
+            if (
+                ado_task.rev != self.ado_rev
+                or asana_task["modified_at"] != self.asana_updated
+            ):
+                return False
 
-        return True
+            return True
