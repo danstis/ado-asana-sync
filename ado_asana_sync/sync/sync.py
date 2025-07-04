@@ -767,7 +767,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
         _LOGGER.info("Fetching custom fields for project %s", project_gid)
         opts = {"limit": 100}
         api_response = api_instance.get_custom_field_settings_for_project(
-            project_gid, **opts
+            project_gid, opts
         )
         custom_fields = list(api_response)
         CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
