@@ -12,7 +12,10 @@ import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
-from azure.devops.v7_0.git.models import GitPullRequestSearchCriteria  # type: ignore
+from azure.devops.v7_0.git.models import (
+    GitPullRequestSearchCriteria,
+)  # type: ignore
+from azure.devops.exceptions import AzureDevOpsAuthenticationError
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
@@ -43,7 +46,6 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 # Cache for custom fields
 CUSTOM_FIELDS_CACHE = {}
-CUSTOM_FIELDS_AVAILABLE = True
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
@@ -64,7 +66,7 @@ def start_sync(app: App) -> None:
             # Check if the cache is valid
             now = datetime.now(timezone.utc)
             if (
-                CUSTOM_FIELDS_AVAILABLE
+                app.custom_fields_available
                 and now - app.last_cache_refresh >= CACHE_VALIDITY_DURATION
             ):
                 CUSTOM_FIELDS_CACHE.clear()
@@ -783,6 +785,11 @@ def sync_pull_requests(app: App, ado_project, asana_project_gid: str | None) -> 
         return
     try:
         prs = get_open_pull_requests(app, ado_project.id)
+    except AzureDevOpsAuthenticationError as exc:  # pragma: no cover - network
+        _LOGGER.error(
+            "Failed to fetch pull requests: %s. Check ADO_PAT permissions.", exc
+        )
+        return
     except Exception as exc:  # pragma: no cover - network
         _LOGGER.error("Failed to fetch pull requests: %s", exc)
         return
@@ -807,7 +814,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     """
     Retrieves all custom fields for a provided Asana project.
     """
-    if CUSTOM_FIELDS_AVAILABLE is False:
+    if app.custom_fields_available is False:
         return []
 
     if project_gid in CUSTOM_FIELDS_CACHE:
@@ -828,7 +835,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
             _LOGGER.info(
                 "Custom Field Settings are not available for free users, disabling custom fields."
             )
-            globals()["CUSTOM_FIELDS_AVAILABLE"] = False
+            app.custom_fields_available = False
             return []
         else:
             _LOGGER.error(

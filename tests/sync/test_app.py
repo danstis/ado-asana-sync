@@ -26,6 +26,7 @@ class TestApp(unittest.TestCase):
         assert app.ado_git_client is None
         assert app.asana_client is None
         assert app.asana_page_size == 100
+        assert app.custom_fields_available is True
 
     # Tests that the Asana page size is set correctly
     def test_asana_page_size_set_correctly(self):

@@ -86,6 +86,7 @@ class App:
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid = None
+        self.custom_fields_available = True
         self.last_cache_refresh = datetime.now(timezone.utc)
         self.asana_tag_name = ASANA_TAG_NAME
         self.db = None
