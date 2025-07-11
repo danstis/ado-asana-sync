@@ -81,6 +81,7 @@ class App:
         self.ado_core_client = None
         self.ado_wit_client = None
         self.ado_work_client = None
+        self.ado_git_client = None
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid = None
@@ -120,6 +121,7 @@ class App:
         self.ado_core_client = ado_connection.clients.get_core_client()
         self.ado_work_client = ado_connection.clients.get_work_client()
         self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
+        self.ado_git_client = ado_connection.clients.get_git_client()
         # Connect Asana.
         _LOGGER.debug("Connecting to Asana")
         asana_config = asana.Configuration()

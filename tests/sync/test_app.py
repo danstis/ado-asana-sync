@@ -23,6 +23,7 @@ class TestApp(unittest.TestCase):
         assert app.ado_core_client is None
         assert app.ado_work_client is None
         assert app.ado_wit_client is None
+        assert app.ado_git_client is None
         assert app.asana_client is None
         assert app.asana_page_size == 100
 

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
+import ado_asana_sync.sync.sync as sync
 from ado_asana_sync.sync.sync import (
     ADOAssignedUser,
     get_task_user,
@@ -234,6 +235,42 @@ class TestMatchingUser(unittest.TestCase):
         result = matching_user(user_list, ado_user)  # NOSONAR
 
         self.assertIsNone(result)
+
+
+class TestPullRequestSync(unittest.TestCase):
+    def test_get_open_pull_requests(self):
+        app = MagicMock()
+        git_client = MagicMock()
+        app.ado_git_client = git_client
+        git_client.get_pull_requests_by_project.return_value = []
+
+        sync.get_open_pull_requests(app, "proj")
+
+        git_client.get_pull_requests_by_project.assert_called_once()
+        args = git_client.get_pull_requests_by_project.call_args[0]
+        self.assertEqual(args[0], "proj")
+        self.assertEqual(args[1].status, "active")
+
+    def test_sync_pull_requests_creates_task(self):
+        app = MagicMock()
+        app.asana_tag_gid = "tag"
+        pr = MagicMock()
+        pr.pull_request_id = 1
+        pr.title = "PR title"
+        pr.status = "active"
+        pr.remote_url = "url"
+
+        with patch(
+            "ado_asana_sync.sync.sync.get_open_pull_requests", return_value=[pr]
+        ):
+            with patch("ado_asana_sync.sync.sync.create_asana_task") as create_task:
+                with patch(
+                    "ado_asana_sync.sync.sync.TaskItem.search", return_value=None
+                ):
+                    sync.sync_pull_requests(app, MagicMock(id="projid"), "gid")
+                    create_task.assert_called_once()
+                    created_task = create_task.call_args[0][2]
+                    self.assertEqual(created_task.item_type, "Pull Request")
 
 
 class TestProcessBacklogItemLogging(unittest.TestCase):
