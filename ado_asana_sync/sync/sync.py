@@ -44,7 +44,6 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 # Cache for custom fields
 CUSTOM_FIELDS_CACHE = {}
 CUSTOM_FIELDS_AVAILABLE = True
-LAST_CACHE_REFRESH = datetime.now(timezone.utc)
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
@@ -63,14 +62,13 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             # Check if the cache is valid
-            global LAST_CACHE_REFRESH
             now = datetime.now(timezone.utc)
             if (
                 CUSTOM_FIELDS_AVAILABLE
-                and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
+                and now - app.last_cache_refresh >= CACHE_VALIDITY_DURATION
             ):
                 CUSTOM_FIELDS_CACHE.clear()
-                LAST_CACHE_REFRESH = now
+                app.last_cache_refresh = now
                 _LOGGER.info("Custom field cache cleared")
 
             projects = read_projects()
@@ -769,12 +767,20 @@ def update_asana_task(
 
 def get_open_pull_requests(app: App, project_id: str):
     """Return active pull requests for the given project."""
+    if app.ado_git_client is None:
+        raise ValueError("ADO git client not configured")
     criteria = GitPullRequestSearchCriteria(status="active")
     return app.ado_git_client.get_pull_requests_by_project(project_id, criteria)
 
 
-def sync_pull_requests(app: App, ado_project, asana_project_gid: str) -> None:
+def sync_pull_requests(app: App, ado_project, asana_project_gid: str | None) -> None:
     """Create Asana tasks for open pull requests."""
+    if asana_project_gid is None:
+        _LOGGER.warning("Skipping pull request sync; no Asana project gid")
+        return
+    if app.asana_tag_gid is None:
+        _LOGGER.warning("Asana tag gid not set; skipping pull request sync")
+        return
     try:
         prs = get_open_pull_requests(app, ado_project.id)
     except Exception as exc:  # pragma: no cover - network
@@ -801,7 +807,6 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     """
     Retrieves all custom fields for a provided Asana project.
     """
-    global CUSTOM_FIELDS_AVAILABLE
     if CUSTOM_FIELDS_AVAILABLE is False:
         return []
 
@@ -823,7 +828,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
             _LOGGER.info(
                 "Custom Field Settings are not available for free users, disabling custom fields."
             )
-            CUSTOM_FIELDS_AVAILABLE = False
+            globals()["CUSTOM_FIELDS_AVAILABLE"] = False
             return []
         else:
             _LOGGER.error(
