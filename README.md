@@ -9,7 +9,7 @@
 
 [![Open in Visual Studio Code](https://img.shields.io/static/v1?logo=visualstudiocode&label=&message=Open%20in%20Visual%20Studio%20Code&labelColor=2c2c32&color=007acc&logoColor=007acc)](https://open.vscode.dev/danstis/ado-asana-sync)
 
-This project aims to synchronize work items between Azure DevOps (ADO) and Asana. It's currently in development and not ready for use. Breaking changes will occur as needed.
+This project aims to synchronize work items and pull requests between Azure DevOps (ADO) and Asana. It's currently in development and not ready for use. Breaking changes will occur as needed.
 
 ## How to use
 
@@ -24,7 +24,31 @@ This project aims to synchronize work items between Azure DevOps (ADO) and Asana
   * `SLEEP_TIME` - Duration in seconds to sleep between sync runs. Must be a positive integer.
   * `SYNCED_TAG_NAME` - Name of the tag in Asana to append to all synced items. Must be a valid Asana tag name.
 * Run the container with the configured environment variables.
-* The application will start syncing work items between ADO and Asana based on the configured settings.
+* The application will start syncing work items and pull requests between ADO and Asana based on the configured settings.
+
+## Features
+
+### Work Item Synchronization
+* Synchronizes Azure DevOps work items (User Stories, Bugs, Tasks, etc.) to Asana tasks
+* Maintains bidirectional sync for updates, assignments, and status changes
+* Automatic user matching between ADO and Asana based on email addresses
+* Configurable closed states mapping
+
+### Pull Request Synchronization
+* Synchronizes active Pull Requests from Azure DevOps to Asana
+* Creates separate reviewer tasks for each assigned reviewer
+* Task titles follow the format: "Pull Request 5: Update readme (Reviewer Name)"
+* Automatic status management:
+  - Approved reviews (approve/approve with suggestions) → Close Asana task
+  - Other review states (waiting for author, reject, no vote) → Keep task open
+  - PR completion/abandonment → Close all reviewer tasks
+  - Reviewer removal → Close reviewer's task
+* Handles reviewer additions, removals, and approval resets
+* Syncs PR title changes to Asana task titles
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes and new features.
 
 ## Development
 
@@ -36,6 +60,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) to e
 
 To test the application manually, you can use the following steps:
 
+#### Work Item Testing
 1. Create new ADO work item and ensure it is synced to Asana.
 1. Rename Asana task and ensure it is reverted back to the ADO name. 
 1. Rename ADO task and ensure it is synced to Asana.
@@ -44,6 +69,18 @@ To test the application manually, you can use the following steps:
 1. Mark Asana task as complete and ensure it is re-opened.
 1. Mark ADO task as complete and ensure it is marked as complete in Asana.
 1. Re-open ADO task and ensure it is re-opened in Asana.
+
+#### Pull Request Testing
+1. Create new Pull Request in ADO with reviewers and ensure reviewer tasks are created in Asana.
+1. Change the PR title in ADO and ensure the title updates in Asana tasks on next sync.
+1. Add a reviewer to the PR and ensure a new task is created for them.
+1. Remove a reviewer from the PR and ensure their task is closed.
+1. Remove all reviewers from the PR and ensure all tasks are closed.
+1. Approve the PR as a reviewer and ensure the reviewer's task is closed.
+1. Approve with suggestions and ensure the reviewer's task is closed.
+1. Reject or request changes and ensure the reviewer's task remains open.
+1. Reset approval and ensure the reviewer's task is reopened.
+1. Complete/abandon the PR and ensure all reviewer tasks are closed.
 
 ### Reference
 
