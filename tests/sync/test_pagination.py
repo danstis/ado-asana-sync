@@ -25,7 +25,7 @@ class TestPaginationFunctions(unittest.TestCase):
 
     def test_get_asana_project_custom_fields_uses_iterator(self):
         sync.CUSTOM_FIELDS_CACHE.clear()
-        sync.CUSTOM_FIELDS_AVAILABLE = True
+        self.app.custom_fields_available = True
         mock_api = MagicMock()
         mock_api.get_custom_field_settings_for_project.return_value = iter([{"gid": "cf"}])
         with patch(

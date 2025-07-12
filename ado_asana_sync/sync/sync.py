@@ -12,6 +12,10 @@ import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
+from azure.devops.v7_0.git.models import (
+    GitPullRequestSearchCriteria,
+)  # type: ignore
+from azure.devops.exceptions import AzureDevOpsAuthenticationError
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
@@ -42,8 +46,6 @@ ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 # Cache for custom fields
 CUSTOM_FIELDS_CACHE = {}
-CUSTOM_FIELDS_AVAILABLE = True
-LAST_CACHE_REFRESH = datetime.now(timezone.utc)
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
@@ -62,14 +64,13 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             # Check if the cache is valid
-            global CUSTOM_FIELDS_CACHE, LAST_CACHE_REFRESH
             now = datetime.now(timezone.utc)
             if (
-                CUSTOM_FIELDS_AVAILABLE
-                and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
+                app.custom_fields_available
+                and now - app.last_cache_refresh >= CACHE_VALIDITY_DURATION
             ):
                 CUSTOM_FIELDS_CACHE.clear()
-                LAST_CACHE_REFRESH = now
+                app.last_cache_refresh = now
                 _LOGGER.info("Custom field cache cleared")
 
             projects = read_projects()
@@ -272,6 +273,9 @@ def sync_project(app: App, project):
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
+    # Sync open pull requests for this project
+    sync_pull_requests(app, ado_project, asana_project, asana_users)
+
 
 def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
     """
@@ -470,7 +474,11 @@ def process_closed_items(
         if wi["ado_id"] not in processed_item_ids:
             _LOGGER.info("Processing closed item %s", wi["ado_id"])
             if is_item_older_than_threshold(wi):
-                _LOGGER.info("%s:Task is older than %s days, removing mapping", wi["ado_id"], _SYNC_THRESHOLD)
+                _LOGGER.info(
+                    "%s:Task is older than %s days, removing mapping",
+                    wi["ado_id"],
+                    _SYNC_THRESHOLD,
+                )
                 remove_mapping(app, wi)
                 continue
 
@@ -481,7 +489,9 @@ def process_closed_items(
             try:
                 ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             except Exception as e:
-                _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
+                _LOGGER.warning(
+                    "Failed to fetch work item %s: %s", existing_match.ado_id, e
+                )
                 continue
             if existing_match.is_current(app):
                 _LOGGER.info(
@@ -757,12 +767,131 @@ def update_asana_task(
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
 
 
+def get_open_pull_requests(app: App, project_id: str):
+    """Return active pull requests for the given project."""
+    if app.ado_git_client is None:
+        raise ValueError("ADO git client not configured")
+    criteria = GitPullRequestSearchCriteria(status="active")
+    return app.ado_git_client.get_pull_requests_by_project(project_id, criteria)
+
+
+def _process_reviewer(
+    app: App,
+    pr,
+    reviewer,
+    asana_project_gid: str,
+    asana_users: list[dict],
+    active_ids: set[str],
+) -> None:
+    """Handle a single reviewer for a pull request."""
+    reviewer_user = ADOAssignedUser(
+        display_name=getattr(reviewer, "display_name", ""),
+        email=getattr(reviewer, "unique_name", ""),
+    )
+    asana_user = matching_user(asana_users, reviewer_user)
+    pr_task_id = f"pr-{pr.pull_request_id}-{reviewer.id}"
+    active_ids.add(pr_task_id)
+    if asana_user is None:
+        _LOGGER.info(
+            "%s:assigned reviewer %s <%s> not found in Asana",
+            pr.title,
+            reviewer_user.display_name,
+            reviewer_user.email,
+        )
+        return
+
+    state = "Closed" if reviewer.vote in (10, 5) else "Active"
+    existing = TaskItem.search(app, ado_id=pr_task_id)
+    current_time = iso8601_utc(datetime.now(timezone.utc))
+    if existing is None:
+        _LOGGER.info(
+            "%s:unmapped pull request reviewer %s",
+            pr.title,
+            reviewer_user.display_name,
+        )
+        item = TaskItem(
+            ado_id=pr_task_id,
+            ado_rev=0,
+            title=pr.title,
+            item_type="Pull Request",
+            state=state,
+            created_date=current_time,
+            updated_date=current_time,
+            url=pr.remote_url,
+            assigned_to=asana_user.get("gid"),
+        )
+        create_asana_task(app, asana_project_gid, item, app.asana_tag_gid)
+    else:
+        if (
+            existing.state != state
+            or existing.title != pr.title
+            or existing.assigned_to != asana_user.get("gid")
+        ):
+            existing.state = state
+            existing.title = pr.title
+            existing.assigned_to = asana_user.get("gid")
+            existing.updated_date = current_time
+            update_asana_task(app, existing, app.asana_tag_gid, asana_project_gid)
+
+
+def _close_removed_pr_tasks(
+    app: App, active_ids: set[str], asana_project_gid: str
+) -> None:
+    """Close tasks for reviewers removed or PRs no longer active."""
+    for wi in app.matches.all():
+        if wi["item_type"] != "Pull Request":
+            continue
+        if wi["ado_id"] not in active_ids:
+            task = TaskItem(**wi)
+            if task.state != "Closed":
+                task.state = "Closed"
+                update_asana_task(app, task, app.asana_tag_gid, asana_project_gid)
+
+
+def sync_pull_requests(
+    app: App,
+    ado_project,
+    asana_project_gid: str | None,
+    asana_users: list[dict],
+) -> None:
+    """Synchronize open pull requests with Asana tasks."""
+    if asana_project_gid is None:
+        _LOGGER.warning("Skipping pull request sync; no Asana project gid")
+        return
+    if app.asana_tag_gid is None:
+        _LOGGER.warning("Asana tag gid not set; skipping pull request sync")
+        return
+    try:
+        prs = get_open_pull_requests(app, ado_project.id)
+    except AzureDevOpsAuthenticationError as exc:  # pragma: no cover - network
+        _LOGGER.error(
+            "Failed to fetch pull requests: %s. Check ADO_PAT permissions.", exc
+        )
+        return
+    except Exception as exc:  # pragma: no cover - network
+        _LOGGER.error("Failed to fetch pull requests: %s", exc)
+        return
+
+    active_ids: set[str] = set()
+    for pr in prs:
+        for reviewer in getattr(pr, "reviewers", []):
+            _process_reviewer(
+                app,
+                pr,
+                reviewer,
+                asana_project_gid,
+                asana_users,
+                active_ids,
+            )
+
+    _close_removed_pr_tasks(app, active_ids, asana_project_gid)
+
+
 def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     """
     Retrieves all custom fields for a provided Asana project.
     """
-    global CUSTOM_FIELDS_AVAILABLE
-    if CUSTOM_FIELDS_AVAILABLE is False:
+    if app.custom_fields_available is False:
         return []
 
     if project_gid in CUSTOM_FIELDS_CACHE:
@@ -783,7 +912,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
             _LOGGER.info(
                 "Custom Field Settings are not available for free users, disabling custom fields."
             )
-            CUSTOM_FIELDS_AVAILABLE = False
+            app.custom_fields_available = False
             return []
         else:
             _LOGGER.error(

@@ -10,6 +10,7 @@ import logging
 import os
 import threading
 from typing import Optional
+from datetime import datetime, timezone
 
 import asana  # type: ignore
 from azure.devops.connection import Connection  # type: ignore
@@ -81,9 +82,12 @@ class App:
         self.ado_core_client = None
         self.ado_wit_client = None
         self.ado_work_client = None
+        self.ado_git_client = None
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid = None
+        self.custom_fields_available = True
+        self.last_cache_refresh = datetime.now(timezone.utc)
         self.asana_tag_name = ASANA_TAG_NAME
         self.db = None
         self.db_lock = threading.Lock()
@@ -120,6 +124,7 @@ class App:
         self.ado_core_client = ado_connection.clients.get_core_client()
         self.ado_work_client = ado_connection.clients.get_work_client()
         self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
+        self.ado_git_client = ado_connection.clients.get_git_client()
         # Connect Asana.
         _LOGGER.debug("Connecting to Asana")
         asana_config = asana.Configuration()

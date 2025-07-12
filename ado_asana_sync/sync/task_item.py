@@ -1,5 +1,4 @@
-""" This module contains the TaskItem class, which represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
-"""
+"""TaskItem definition for ADO to Asana synchronization."""
 
 from __future__ import annotations
 
