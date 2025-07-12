@@ -19,10 +19,14 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
   - `ado_asana_sync/sync/sync.py`: Core sync logic.
   - `ado_asana_sync/sync/asana.py`: Handles Asana API.
   - `ado_asana_sync/sync/task_item.py`: Task data structure.
+  - `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
+  - `ado_asana_sync/sync/pull_request_sync.py`: Pull request sync logic.
   - `data/projects.json.example`: Example project configuration.
 - Write all code in Python.
 - Enforce linting with `pylint` and `flake8` (see `.pylintrc` and `.editorconfig`).
 - Add dependencies only with `poetry add <dependency>`.
+- Run tools using `poetry run`.
+- Always update the readme and other documentation based on the changes made.
 
 ## Testing Requirements
 

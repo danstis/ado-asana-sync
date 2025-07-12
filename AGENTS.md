@@ -4,7 +4,7 @@ This document provides guidance for AI agents to interact with and contribute to
 
 ## Project Overview
 
-This repository implements a robust synchronization tool between Azure DevOps (ADO) and Asana. All core logic resides in the `ado_asana_sync` directory, with a primary focus on synchronizing tasks between these platforms.
+This repository implements a robust synchronization tool between Azure DevOps (ADO) and Asana. All core logic resides in the `ado_asana_sync` directory, with a primary focus on synchronizing tasks and pull requests between these platforms.
 
 ## Getting Started
 
@@ -22,6 +22,8 @@ Follow these steps to set up your development environment:
 - `ado_asana_sync/sync/sync.py`: Contains the core synchronization logic between ADO and Asana.
 - `ado_asana_sync/sync/asana.py`: Manages all interactions with the Asana API.
 - `ado_asana_sync/sync/task_item.py`: Defines the `TaskItem` data structure for task representation.
+- `ado_asana_sync/sync/pull_request_item.py`: Defines the `PullRequestItem` data structure for PR-reviewer relationships.
+- `ado_asana_sync/sync/pull_request_sync.py`: Contains the pull request synchronization logic.
 - `data/projects.json.example`: Provides an example of the project data structure required for configuration.
 
 ### Coding Conventions
@@ -30,6 +32,8 @@ Follow these steps to set up your development environment:
 - Enforce linting with `pylint` (see `.pylintrc`).
 - Adhere to formatting rules defined in `.editorconfig`.
 - Ensure all code matches `flake8` standards.
+- Run tools using `poetry run`.
+- Always update the readme and other documentation based on the changes made.
 
 ## Testing
 

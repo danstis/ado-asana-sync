@@ -22,6 +22,8 @@
 - Write Python code only.
 - Use `pylint`, `flake8`, and `.editorconfig` for linting and formatting.
 - Add dependencies with `poetry add <dependency>`.
+- Run tools using `poetry run`.
+- Always update the readme and other documentation based on the changes made.
 
 ## Testing
 

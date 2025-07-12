@@ -46,6 +46,7 @@ class App:
         ado_core_client: ADO core client.
         ado_work_client: ADO work client.
         ado_wit_client: ADO work item tracking client.
+        ado_git_client: ADO git client.
         asana_client: Asana client.
         asana_page_size: The default page size for API calls, can be between 1-100.
         asana_tag_name: Defines the name of the Asana tag to add to synced items.
@@ -53,6 +54,7 @@ class App:
         db: TinyDB database.
         db_lock: Lock for the TinyDB database.
         matches: TinyDB table named "matches".
+        pr_matches: TinyDB table named "pr_matches".
         config: TinyDB table named "config".
     """
 
@@ -81,6 +83,7 @@ class App:
         self.ado_core_client = None
         self.ado_wit_client = None
         self.ado_work_client = None
+        self.ado_git_client = None
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid = None
@@ -88,6 +91,7 @@ class App:
         self.db = None
         self.db_lock = threading.Lock()
         self.matches = None
+        self.pr_matches = None
         self.config = None
         self.sleep_time = SLEEP_TIME
 
@@ -120,6 +124,7 @@ class App:
         self.ado_core_client = ado_connection.clients.get_core_client()
         self.ado_work_client = ado_connection.clients.get_work_client()
         self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
+        self.ado_git_client = ado_connection.clients.get_git_client()
         # Connect Asana.
         _LOGGER.debug("Connecting to Asana")
         asana_config = asana.Configuration()
@@ -135,4 +140,5 @@ class App:
             os.path.join(os.path.dirname(__package__), "data", "appdata.json")
         )
         self.matches = self.db.table("matches")
+        self.pr_matches = self.db.table("pr_matches")
         self.config = self.db.table("config")

@@ -267,10 +267,20 @@ def sync_project(app: App, project):
         app, ado_items, asana_users, asana_project_tasks, asana_project
     )
 
+    # Clean up any invalid entries that may have gotten mixed between tables
+    cleanup_invalid_work_items(app)
+    
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
     all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
+
+    # Sync pull requests for this project
+    try:
+        from .pull_request_sync import sync_pull_requests
+        sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
+    except Exception as e:
+        _LOGGER.error("Error syncing pull requests for project %s: %s", project["adoProjectName"], e)
 
 
 def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
@@ -469,6 +479,14 @@ def process_closed_items(
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
             _LOGGER.info("Processing closed item %s", wi["ado_id"])
+            
+            # Skip items that don't look like valid work item IDs (might be PR IDs that got mixed in)
+            try:
+                int(wi["ado_id"])  # Work item IDs should be integers
+            except (ValueError, TypeError):
+                _LOGGER.debug("Skipping non-work-item ID %s (likely a PR or other item)", wi["ado_id"])
+                continue
+                
             if is_item_older_than_threshold(wi):
                 _LOGGER.info("%s:Task is older than %s days, removing mapping", wi["ado_id"], _SYNC_THRESHOLD)
                 remove_mapping(app, wi)
@@ -807,6 +825,28 @@ def find_custom_field_by_name(
         if field.get("custom_field", {}).get("name") == field_name:
             return field
     return None
+
+
+def cleanup_invalid_work_items(app: App) -> None:
+    """
+    Clean up invalid work item entries that may have gotten mixed with PR data.
+    """
+    all_tasks = app.matches.all()
+    invalid_items = []
+    
+    for task in all_tasks:
+        try:
+            # Work item IDs should be integers
+            int(task["ado_id"])
+        except (ValueError, TypeError):
+            invalid_items.append(task.doc_id)
+            _LOGGER.info("Removing invalid work item entry with ID: %s", task["ado_id"])
+    
+    # Remove invalid items
+    if invalid_items:
+        with app.db_lock:
+            app.matches.remove(doc_ids=invalid_items)
+        _LOGGER.info("Cleaned up %d invalid work item entries", len(invalid_items))
 
 
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
