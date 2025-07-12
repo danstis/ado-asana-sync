@@ -274,7 +274,7 @@ def sync_project(app: App, project):
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
     # Sync open pull requests for this project
-    sync_pull_requests(app, ado_project, asana_project)
+    sync_pull_requests(app, ado_project, asana_project, asana_users)
 
 
 def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
@@ -775,8 +775,86 @@ def get_open_pull_requests(app: App, project_id: str):
     return app.ado_git_client.get_pull_requests_by_project(project_id, criteria)
 
 
-def sync_pull_requests(app: App, ado_project, asana_project_gid: str | None) -> None:
-    """Create Asana tasks for open pull requests."""
+def _process_reviewer(
+    app: App,
+    pr,
+    reviewer,
+    asana_project_gid: str,
+    asana_users: list[dict],
+    active_ids: set[str],
+) -> None:
+    """Handle a single reviewer for a pull request."""
+    reviewer_user = ADOAssignedUser(
+        display_name=getattr(reviewer, "display_name", ""),
+        email=getattr(reviewer, "unique_name", ""),
+    )
+    asana_user = matching_user(asana_users, reviewer_user)
+    pr_task_id = f"pr-{pr.pull_request_id}-{reviewer.id}"
+    active_ids.add(pr_task_id)
+    if asana_user is None:
+        _LOGGER.info(
+            "%s:assigned reviewer %s <%s> not found in Asana",
+            pr.title,
+            reviewer_user.display_name,
+            reviewer_user.email,
+        )
+        return
+
+    state = "Closed" if reviewer.vote in (10, 5) else "Active"
+    existing = TaskItem.search(app, ado_id=pr_task_id)
+    current_time = iso8601_utc(datetime.now(timezone.utc))
+    if existing is None:
+        _LOGGER.info(
+            "%s:unmapped pull request reviewer %s",
+            pr.title,
+            reviewer_user.display_name,
+        )
+        item = TaskItem(
+            ado_id=pr_task_id,
+            ado_rev=0,
+            title=pr.title,
+            item_type="Pull Request",
+            state=state,
+            created_date=current_time,
+            updated_date=current_time,
+            url=pr.remote_url,
+            assigned_to=asana_user.get("gid"),
+        )
+        create_asana_task(app, asana_project_gid, item, app.asana_tag_gid)
+    else:
+        if (
+            existing.state != state
+            or existing.title != pr.title
+            or existing.assigned_to != asana_user.get("gid")
+        ):
+            existing.state = state
+            existing.title = pr.title
+            existing.assigned_to = asana_user.get("gid")
+            existing.updated_date = current_time
+            update_asana_task(app, existing, app.asana_tag_gid, asana_project_gid)
+
+
+def _close_removed_pr_tasks(
+    app: App, active_ids: set[str], asana_project_gid: str
+) -> None:
+    """Close tasks for reviewers removed or PRs no longer active."""
+    for wi in app.matches.all():
+        if wi["item_type"] != "Pull Request":
+            continue
+        if wi["ado_id"] not in active_ids:
+            task = TaskItem(**wi)
+            if task.state != "Closed":
+                task.state = "Closed"
+                update_asana_task(app, task, app.asana_tag_gid, asana_project_gid)
+
+
+def sync_pull_requests(
+    app: App,
+    ado_project,
+    asana_project_gid: str | None,
+    asana_users: list[dict],
+) -> None:
+    """Synchronize open pull requests with Asana tasks."""
     if asana_project_gid is None:
         _LOGGER.warning("Skipping pull request sync; no Asana project gid")
         return
@@ -793,21 +871,20 @@ def sync_pull_requests(app: App, ado_project, asana_project_gid: str | None) -> 
     except Exception as exc:  # pragma: no cover - network
         _LOGGER.error("Failed to fetch pull requests: %s", exc)
         return
+
+    active_ids: set[str] = set()
     for pr in prs:
-        if TaskItem.search(app, ado_id=pr.pull_request_id) is not None:
-            continue
-        current_time = iso8601_utc(datetime.now(timezone.utc))
-        item = TaskItem(
-            ado_id=pr.pull_request_id,
-            ado_rev=0,
-            title=pr.title,
-            item_type="Pull Request",
-            state=pr.status,
-            created_date=current_time,
-            updated_date=current_time,
-            url=pr.remote_url,
-        )
-        create_asana_task(app, asana_project_gid, item, app.asana_tag_gid)
+        for reviewer in getattr(pr, "reviewers", []):
+            _process_reviewer(
+                app,
+                pr,
+                reviewer,
+                asana_project_gid,
+                asana_users,
+                active_ids,
+            )
+
+    _close_removed_pr_tasks(app, active_ids, asana_project_gid)
 
 
 def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:

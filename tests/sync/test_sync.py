@@ -259,6 +259,16 @@ class TestPullRequestSync(unittest.TestCase):
         pr.title = "PR title"
         pr.status = "active"
         pr.remote_url = "url"
+        reviewer = MagicMock()
+        reviewer.id = 2
+        reviewer.unique_name = "user@example.com"
+        reviewer.display_name = "User"
+        reviewer.vote = 0
+        pr.reviewers = [reviewer]
+
+        asana_users = [
+            {"gid": "gid1", "email": "user@example.com", "name": "User"}
+        ]
 
         with patch(
             "ado_asana_sync.sync.sync.get_open_pull_requests", return_value=[pr]
@@ -267,10 +277,87 @@ class TestPullRequestSync(unittest.TestCase):
                 with patch(
                     "ado_asana_sync.sync.sync.TaskItem.search", return_value=None
                 ):
-                    sync.sync_pull_requests(app, MagicMock(id="projid"), "gid")
+                    sync.sync_pull_requests(app, MagicMock(id="projid"), "gid", asana_users)
                     create_task.assert_called_once()
                     created_task = create_task.call_args[0][2]
                     self.assertEqual(created_task.item_type, "Pull Request")
+
+    def test_sync_pull_requests_updates_task_on_approve(self):
+        app = MagicMock()
+        app.asana_tag_gid = "tag"
+        pr = MagicMock()
+        pr.pull_request_id = 5
+        pr.title = "Update"
+        pr.status = "active"
+        pr.remote_url = "url"
+        reviewer = MagicMock()
+        reviewer.id = 3
+        reviewer.unique_name = "user2@example.com"
+        reviewer.display_name = "User2"
+        reviewer.vote = 10
+        pr.reviewers = [reviewer]
+
+        existing = TaskItem(
+            ado_id="pr-5-3",
+            ado_rev=0,
+            title="Old",
+            item_type="Pull Request",
+            url="url",
+            state="Active",
+        )
+
+        asana_users = [
+            {"gid": "gid2", "email": "user2@example.com", "name": "User2"}
+        ]
+
+        with patch(
+            "ado_asana_sync.sync.sync.get_open_pull_requests", return_value=[pr]
+        ):
+            with patch("ado_asana_sync.sync.sync.update_asana_task") as upd_task:
+                with patch(
+                    "ado_asana_sync.sync.sync.TaskItem.search", return_value=existing
+                ):
+                    sync.sync_pull_requests(app, MagicMock(id="projid"), "gid", asana_users)
+                    upd_task.assert_called_once()
+                    self.assertEqual(existing.state, "Closed")
+
+    def test_sync_pull_requests_closes_removed_reviewer(self):
+        app = MagicMock()
+        app.asana_tag_gid = "tag"
+        pr = MagicMock()
+        pr.pull_request_id = 6
+        pr.title = "Change"
+        pr.status = "active"
+        pr.remote_url = "url"
+        pr.reviewers = []
+
+        app.matches.all.return_value = [
+            {
+                "ado_id": "pr-6-7",
+                "ado_rev": 0,
+                "title": "Change",
+                "item_type": "Pull Request",
+                "state": "Active",
+                "url": "url",
+                "asana_gid": "gidtask",
+                "asana_updated": None,
+                "assigned_to": "gid7",
+                "created_date": "now",
+                "updated_date": "now",
+            }
+        ]
+
+        with patch(
+            "ado_asana_sync.sync.sync.get_open_pull_requests", return_value=[pr]
+        ):
+            with patch("ado_asana_sync.sync.sync.update_asana_task") as upd_task:
+                with patch(
+                    "ado_asana_sync.sync.sync.TaskItem.search", return_value=None
+                ):
+                    sync.sync_pull_requests(app, MagicMock(id="projid"), "gid", [])
+                    upd_task.assert_called_once()
+                    closed_task = upd_task.call_args[0][1]
+                    self.assertEqual(closed_task.state, "Closed")
 
 
 class TestProcessBacklogItemLogging(unittest.TestCase):
