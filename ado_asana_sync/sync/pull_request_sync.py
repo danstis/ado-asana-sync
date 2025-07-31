@@ -408,7 +408,7 @@ def update_existing_pr_reviewer_task(
             "Updated reviewer name for PR task: %s", existing_match.asana_title
         )
 
-    if existing_match.is_current(app, pr) and not reviewer_name_updated:
+    if existing_match.is_current(app, pr, reviewer) and not reviewer_name_updated:
         _LOGGER.info(
             "PR reviewer task is already up to date: %s", existing_match.asana_title
         )
@@ -443,10 +443,16 @@ def update_existing_pr_reviewer_task(
             new_status,
         )
 
-        # Check if this change means the task should be completed
+        # Check if this change means the task should be completed or reopened
         if new_status in _REVIEWER_APPROVED_STATES:
             _LOGGER.info(
                 "Reviewer %s approved PR %s, task will be closed",
+                existing_match.reviewer_name or existing_match.reviewer_gid,
+                pr.pull_request_id,
+            )
+        elif old_status in _REVIEWER_APPROVED_STATES and new_status not in _REVIEWER_APPROVED_STATES:
+            _LOGGER.info(
+                "Reviewer %s approval reset on PR %s, task will be reopened",
                 existing_match.reviewer_name or existing_match.reviewer_gid,
                 pr.pull_request_id,
             )
@@ -475,6 +481,14 @@ def create_asana_pr_task(
         or pr_item.review_status in _REVIEWER_APPROVED_STATES
         or pr_item.status == "reviewer_removed"
         or pr_item.review_status == "removed"
+    )
+    
+    _LOGGER.debug(
+        "Creating Asana task %s: completed=%s (review_status='%s', pr_status='%s')",
+        pr_item.asana_title,
+        is_completed,
+        pr_item.review_status or "none",
+        pr_item.status or "none"
     )
 
     tasks_api_instance = asana.TasksApi(app.asana_client)
@@ -529,6 +543,14 @@ def update_asana_pr_task(
         or pr_item.review_status in _REVIEWER_APPROVED_STATES
         or pr_item.status == "reviewer_removed"
         or pr_item.review_status == "removed"
+    )
+    
+    _LOGGER.debug(
+        "Updating Asana task %s: completed=%s (review_status='%s', pr_status='%s')",
+        pr_item.asana_title,
+        is_completed,
+        pr_item.review_status or "none",
+        pr_item.status or "none"
     )
 
     tasks_api_instance = asana.TasksApi(app.asana_client)

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - **Pull Request Synchronization**: Implemented comprehensive Pull Request sync from Azure DevOps to Asana
   - Creates separate Asana tasks for each Pull Request reviewer
   - Task titles follow format: "Pull Request 5: Update readme (Reviewer Name)"
@@ -25,11 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive unit tests for Pull Request functionality
 
 ### Changed
+
 - Updated project description to include pull request synchronization
 - Extended main sync workflow to include Pull Request processing
 - Enhanced documentation with Pull Request feature details and testing procedures
 
 ### Fixed
+
 - **Pull Request Approval Detection**: Fixed reviewer approval status not properly closing Asana tasks
   - Now correctly handles both "approved" and "approvedWithSuggestions" votes
   - Properly maps ADO integer vote values (10, 5, 0, -5, -10) to string equivalents
@@ -41,8 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added automatic detection of reviewer removal
   - Closes Asana tasks when reviewers are removed from PRs
   - Handles edge case where all reviewers are removed
+- **Pull Request Approval Reset**: Fixed approval reset not reopening Asana tasks
+  - Now properly reopens tasks when reviewer approval is reset from approved to no vote
+  - Fixed `is_current()` method to detect review status changes
+  - Added comprehensive logging for approval reset scenarios
+  - Includes debug logging for task completion state changes
+  - Enhanced test coverage for review status change detection
 
 ### Technical Details
+
 - Added Azure DevOps Git API integration for Pull Request data retrieval
 - Implemented proper error handling and fallback mechanisms for Git API
 - Maintained compatibility with existing work item sync patterns

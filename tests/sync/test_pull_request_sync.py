@@ -253,6 +253,44 @@ class TestPullRequestSync(unittest.TestCase):
             # Verify no update
             mock_update_task.assert_not_called()
 
+    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.iso8601_utc')
+    def test_update_existing_pr_reviewer_task_approval_reset(self, mock_iso8601, mock_get_task, mock_update_task):
+        """Test updating a PR reviewer task when approval is reset."""
+        # Setup mocks
+        mock_iso8601.return_value = "2023-12-01T10:00:00Z"
+        mock_get_task.return_value = {"modified_at": "2023-12-01T09:00:00Z"}
+        mock_asana_user = {"gid": "user-123", "name": "John Doe"}
+
+        # Create a mock reviewer that changes from approved to noVote
+        mock_reviewer_reset = Mock()
+        mock_reviewer_reset.vote = "noVote"  # Approval reset
+
+        mock_pr_item = Mock(spec=PullRequestItem)
+        mock_pr_item.is_current.return_value = False  # Needs update
+        mock_pr_item.asana_gid = "task-123"
+        mock_pr_item.reviewer_name = "John Doe"
+        mock_pr_item.title = "Test PR Title"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "approved"  # Previously approved
+        mock_pr_item.asana_title = "Pull Request 789: Test PR Title (John Doe)"
+
+        # Set up PR mock
+        self.mock_pr.title = "Test PR Title"
+        self.mock_pr.status = "active"
+        
+        update_existing_pr_reviewer_task(
+            self.mock_app, self.mock_pr, self.mock_repository, mock_reviewer_reset, 
+            mock_pr_item, mock_asana_user, "project-456"
+        )
+
+        # Verify task update was called (task should be reopened)
+        mock_update_task.assert_called_once()
+        
+        # Verify the PR item's review status was updated to noVote
+        self.assertEqual(mock_pr_item.review_status, "noVote")
+
     def test_create_ado_user_from_reviewer_success(self):
         """Test creating ADO user from reviewer successfully."""
         result = create_ado_user_from_reviewer(self.mock_reviewer)

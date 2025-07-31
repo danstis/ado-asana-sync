@@ -205,7 +205,7 @@ class PullRequestItem:
             with app.db_lock:
                 app.pr_matches.insert(pr_data)
 
-    def is_current(self, app: App, ado_pr) -> bool:
+    def is_current(self, app: App, ado_pr, reviewer=None) -> bool:
         """
         Check if the current PullRequestItem is up-to-date with its corresponding PR in Azure DevOps (ADO) and Asana.
 
@@ -215,6 +215,7 @@ class PullRequestItem:
         Args:
             app (App): The App instance.
             ado_pr: The ADO pull request object.
+            reviewer: The ADO reviewer object (optional, for checking review status changes).
 
         Returns:
             bool: True if the PullRequestItem is current, False otherwise.
@@ -234,5 +235,12 @@ class PullRequestItem:
         # Check if Asana task has been updated
         if asana_task and asana_task["modified_at"] != self.asana_updated:
             return False
+
+        # Check if reviewer's vote status has changed
+        if reviewer is not None:
+            from .pull_request_sync import extract_reviewer_vote
+            current_review_status = extract_reviewer_vote(reviewer)
+            if current_review_status != self.review_status:
+                return False
 
         return True

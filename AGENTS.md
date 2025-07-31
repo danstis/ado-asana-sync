@@ -11,8 +11,8 @@ This repository implements a robust synchronization tool between Azure DevOps (A
 Follow these steps to set up your development environment:
 
 1. Install [Poetry](https://python-poetry.org/).
-2. Run `poetry install` to install all project dependencies.
-3. Copy `.env.example` to `.env` and provide the required environment variable values.
+1. Run `poetry install` to install all project dependencies.
+1. Copy `.env.example` to `.env` and provide the required environment variable values.
 
 ## Development
 

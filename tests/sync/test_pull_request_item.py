@@ -240,6 +240,46 @@ class TestPullRequestItem(unittest.TestCase):
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr)
         self.assertFalse(result)
 
+    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    def test_is_current_false_review_status_changed(self, mock_get_asana_task):
+        """Test is_current returns False when reviewer's vote status has changed."""
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "Update documentation"  # Match the PR item title
+        mock_ado_pr.status = "active"  # Match the PR item status
+        
+        mock_reviewer = Mock()
+        mock_reviewer.vote = "approved"  # Current reviewer vote is approved
+        
+        # Mock Asana task as not updated
+        mock_get_asana_task.return_value = {"modified_at": "2023-12-01T10:00:00Z"}
+        
+        # Set up PR item with different review status
+        self.pr_item.review_status = "noVote"  # Stored status is noVote
+        self.pr_item.asana_updated = "2023-12-01T10:00:00Z"
+        
+        result = self.pr_item.is_current(self.mock_app, mock_ado_pr, mock_reviewer)
+        self.assertFalse(result)  # Should return False because review status changed
+
+    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    def test_is_current_true_with_matching_review_status(self, mock_get_asana_task):
+        """Test is_current returns True when reviewer's vote status matches."""
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "Update documentation"  # Match the PR item title
+        mock_ado_pr.status = "active"  # Match the PR item status
+        
+        mock_reviewer = Mock()
+        mock_reviewer.vote = "approved"  # Current reviewer vote is approved
+        
+        # Mock Asana task as not updated
+        mock_get_asana_task.return_value = {"modified_at": "2023-12-01T10:00:00Z"}
+        
+        # Set up PR item with matching review status
+        self.pr_item.review_status = "approved"  # Stored status matches current
+        self.pr_item.asana_updated = "2023-12-01T10:00:00Z"
+        
+        result = self.pr_item.is_current(self.mock_app, mock_ado_pr, mock_reviewer)
+        self.assertTrue(result)  # Should return True because everything matches
+
 
 if __name__ == "__main__":
     unittest.main()

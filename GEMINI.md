@@ -8,8 +8,8 @@
 ## Setup Steps
 
 1. Install Poetry: [https://python-poetry.org/](https://python-poetry.org/)
-2. Run `poetry install` to install dependencies.
-3. Copy `.env.example` to `.env` and fill in required environment variables.
+1. Run `poetry install` to install dependencies.
+1. Copy `.env.example` to `.env` and fill in required environment variables.
 
 ## Development Guidelines
 

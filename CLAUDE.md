@@ -24,20 +24,41 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
   - `data/projects.json.example`: Example project configuration.
 - Write all code in Python.
 - Enforce linting with `pylint` and `flake8` (see `.pylintrc` and `.editorconfig`).
+- Enforce markdown formatting with `mdformat` for all `.md` files.
 - Add dependencies only with `poetry add <dependency>`.
 - Run tools using `poetry run`.
 - Always update the readme and other documentation based on the changes made.
 
-## Testing Requirements
+## Code Quality Requirements
 
-- Place all tests in the `tests/` directory.
-- Use `pytest` for testing and run the suite with `tox`.
-- Ensure test coverage remains above 60% for all changes. Use `pytest-cov` to check coverage.
+- **Python Code**: Use `pylint` and `flake8` for linting
+- **Markdown Files**: Use `mdformat` to ensure consistent formatting
+- **Testing**: Place all tests in the `tests/` directory and use `pytest`
+- **Coverage**: Ensure test coverage remains above 60% for all changes
+
+### Markdown Linting Workflow
+
+When editing markdown files (`.md`), always run the markdown formatter:
+
+1. **Check formatting**: `poetry run mdformat --check *.md`
+1. **Auto-fix formatting**: `poetry run mdformat *.md`
+1. **Verify changes**: Review any changes made by the formatter before committing
+
+The markdown formatter ensures:
+
+- Consistent heading styles
+- Proper list formatting
+- Table formatting (with GitHub Flavored Markdown support)
+- Line ending consistency
 
 ## CI/CD Workflow
 
 - All CI/CD is managed with GitHub Actions, defined in `.github/workflows/`.
 - Workflows must build, analyze (CodeQL), and release the code.
+- **IMPORTANT**: When you modify any markdown files (including README.md, CHANGELOG.md, etc.), you MUST run markdown formatting before completing your work:
+  - Use `poetry run mdformat --check *.md` to check formatting
+  - Use `poetry run mdformat *.md` to fix any formatting issues
+  - Commit the formatted files
 
 ## Configuration
 
