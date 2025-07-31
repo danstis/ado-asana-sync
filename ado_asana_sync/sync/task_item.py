@@ -175,7 +175,8 @@ class TaskItem:
             "updated_date": self.updated_date,
         }
         query = Query().ado_id == task_data["ado_id"]
-        assert app.matches is not None, "app.matches is None"
+        if app.matches is None:
+            raise ValueError("app.matches is None")
         if app.matches.contains(query):
             with app.db_lock:
                 app.matches.update(task_data, query)

@@ -130,7 +130,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
-        assert app.config is not None, "app.config is None"
+        if app.config is None:
+            raise ValueError("app.config is None")
         tag_config = app.config.get(doc_id=1)
         tag_gid = tag_config.get("tag_gid") if tag_config else None
 
@@ -142,7 +143,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         existing_tag = get_tag_by_name(app, workspace, tag)
         if existing_tag is not None:
             # Store the tag_gid in the config table
-            assert app.config is not None, "app.config is None"
+            if app.config is None:
+                raise ValueError("app.config is None")
             with app.db_lock:
                 app.config.upsert({"tag_gid": existing_tag["gid"]}, {"doc_id": 1})
             return existing_tag["gid"]
@@ -273,7 +275,8 @@ def sync_project(app: App, project):
     cleanup_invalid_work_items(app)
 
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    assert app.matches is not None, "app.matches is None"
+    if app.matches is None:
+        raise ValueError("app.matches is None")
     all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
@@ -848,7 +851,8 @@ def cleanup_invalid_work_items(app: App) -> None:
     """
     Clean up invalid work item entries that may have gotten mixed with PR data.
     """
-    assert app.matches is not None, "app.matches is None"
+    if app.matches is None:
+        raise ValueError("app.matches is None")
     all_tasks = app.matches.all()
     invalid_items = []
 

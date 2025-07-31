@@ -196,8 +196,10 @@ class PullRequestItem:
             query.reviewer_gid == pr_data["reviewer_gid"]
         )
 
-        assert app.pr_matches is not None, "app.pr_matches is None"
-        assert app.db_lock is not None, "app.db_lock is None"
+        if app.pr_matches is None:
+            raise ValueError("app.pr_matches is None")
+        if app.db_lock is None:
+            raise ValueError("app.db_lock is None")
         if app.pr_matches.contains(unique_query):
             with app.db_lock:
                 app.pr_matches.update(pr_data, unique_query)
