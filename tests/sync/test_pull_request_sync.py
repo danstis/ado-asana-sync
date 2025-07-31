@@ -25,8 +25,12 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_app.ado_git_client = Mock()
         self.mock_app.pr_matches = Mock()
         self.mock_app.db_lock = Mock()
+        self.mock_app.db_lock.__enter__ = Mock(return_value=self.mock_app.db_lock)
+        self.mock_app.db_lock.__exit__ = Mock(return_value=None)
         self.mock_app.asana_tag_gid = "test-tag-gid"
         self.mock_app.ado_url = "https://dev.azure.com/test"
+        self.mock_app.asana_workspace_name = "test-workspace"
+        self.mock_app.asana_client = Mock()
 
         self.mock_ado_project = Mock()
         self.mock_ado_project.name = "Test Project"

@@ -16,6 +16,7 @@ from azure.devops.connection import Connection  # type: ignore
 from azure.monitor.opentelemetry import configure_azure_monitor
 from msrest.authentication import BasicAuthentication
 from tinydb import TinyDB
+from tinydb.table import Table
 
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
@@ -88,11 +89,11 @@ class App:
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid = None
         self.asana_tag_name = ASANA_TAG_NAME
-        self.db = None
+        self.db: Optional[TinyDB] = None
         self.db_lock = threading.Lock()
-        self.matches = None
-        self.pr_matches = None
-        self.config = None
+        self.matches: Optional[Table] = None
+        self.pr_matches: Optional[Table] = None
+        self.config: Optional[Table] = None
         self.sleep_time = SLEEP_TIME
 
         if not self.ado_pat:

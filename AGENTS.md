@@ -29,10 +29,10 @@ Follow these steps to set up your development environment:
 ### Coding Conventions
 
 - Write all code in Python.
+- Run tools using `poetry run`.
 - Enforce linting with `pylint` (see `.pylintrc`).
 - Adhere to formatting rules defined in `.editorconfig`.
 - Ensure all code matches `flake8` standards.
-- Run tools using `poetry run`.
 - Always update the readme and other documentation based on the changes made.
 
 ## Testing

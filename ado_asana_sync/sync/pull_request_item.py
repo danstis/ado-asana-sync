@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from html import escape
-from typing import Any
+from typing import Any, Optional
 
 from tinydb import Query
 
@@ -41,12 +41,12 @@ class PullRequestItem:
         status: str,
         url: str,
         reviewer_gid: str,
-        reviewer_name: str = None,
-        asana_gid: str = None,
-        asana_updated: str = None,
-        created_date: str = None,
-        updated_date: str = None,
-        review_status: str = None,
+        reviewer_name: Optional[str] = None,
+        asana_gid: Optional[str] = None,
+        asana_updated: Optional[str] = None,
+        created_date: Optional[str] = None,
+        updated_date: Optional[str] = None,
+        review_status: Optional[str] = None,
     ) -> None:
         self.ado_pr_id = ado_pr_id
         self.ado_repository_id = ado_repository_id
@@ -153,7 +153,7 @@ class PullRequestItem:
                 query = query | condition
 
         # return the first matching item, or return None if not found.
-        if app.pr_matches.contains(query):
+        if app.pr_matches and app.pr_matches.contains(query):
             item = app.pr_matches.search(query)
             return cls(**item[0])
         return None
@@ -187,6 +187,8 @@ class PullRequestItem:
         query = Query()
         unique_query = (query.ado_pr_id == pr_data["ado_pr_id"]) & (query.reviewer_gid == pr_data["reviewer_gid"])
         
+        assert app.pr_matches is not None, "app.pr_matches is None"
+        assert app.db_lock is not None, "app.db_lock is None"
         if app.pr_matches.contains(unique_query):
             with app.db_lock:
                 app.pr_matches.update(pr_data, unique_query)

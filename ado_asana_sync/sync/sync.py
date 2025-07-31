@@ -41,9 +41,9 @@ ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 # Cache for custom fields
-CUSTOM_FIELDS_CACHE = {}
+CUSTOM_FIELDS_CACHE: dict[str, Any] = {}
 CUSTOM_FIELDS_AVAILABLE = True
-LAST_CACHE_REFRESH = datetime.now(timezone.utc)
+LAST_CACHE_REFRESH: datetime = datetime.now(timezone.utc)
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
@@ -130,6 +130,7 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
+        assert app.config is not None, "app.config is None"
         tag_config = app.config.get(doc_id=1)
         tag_gid = tag_config.get("tag_gid") if tag_config else None
 
@@ -141,6 +142,7 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         existing_tag = get_tag_by_name(app, workspace, tag)
         if existing_tag is not None:
             # Store the tag_gid in the config table
+            assert app.config is not None, "app.config is None"
             with app.db_lock:
                 app.config.upsert({"tag_gid": existing_tag["gid"]}, {"doc_id": 1})
             return existing_tag["gid"]
@@ -269,8 +271,9 @@ def sync_project(app: App, project):
 
     # Clean up any invalid entries that may have gotten mixed between tables
     cleanup_invalid_work_items(app)
-    
+
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
+    assert app.matches is not None, "app.matches is None"
     all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
@@ -278,9 +281,14 @@ def sync_project(app: App, project):
     # Sync pull requests for this project
     try:
         from .pull_request_sync import sync_pull_requests
+
         sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
     except Exception as e:
-        _LOGGER.error("Error syncing pull requests for project %s: %s", project["adoProjectName"], e)
+        _LOGGER.error(
+            "Error syncing pull requests for project %s: %s",
+            project["adoProjectName"],
+            e,
+        )
 
 
 def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
@@ -479,16 +487,23 @@ def process_closed_items(
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
             _LOGGER.info("Processing closed item %s", wi["ado_id"])
-            
+
             # Skip items that don't look like valid work item IDs (might be PR IDs that got mixed in)
             try:
                 int(wi["ado_id"])  # Work item IDs should be integers
             except (ValueError, TypeError):
-                _LOGGER.debug("Skipping non-work-item ID %s (likely a PR or other item)", wi["ado_id"])
+                _LOGGER.debug(
+                    "Skipping non-work-item ID %s (likely a PR or other item)",
+                    wi["ado_id"],
+                )
                 continue
-                
+
             if is_item_older_than_threshold(wi):
-                _LOGGER.info("%s:Task is older than %s days, removing mapping", wi["ado_id"], _SYNC_THRESHOLD)
+                _LOGGER.info(
+                    "%s:Task is older than %s days, removing mapping",
+                    wi["ado_id"],
+                    _SYNC_THRESHOLD,
+                )
                 remove_mapping(app, wi)
                 continue
 
@@ -499,7 +514,9 @@ def process_closed_items(
             try:
                 ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             except Exception as e:
-                _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
+                _LOGGER.warning(
+                    "Failed to fetch work item %s: %s", existing_match.ado_id, e
+                )
                 continue
             if existing_match.is_current(app):
                 _LOGGER.info(
@@ -831,9 +848,10 @@ def cleanup_invalid_work_items(app: App) -> None:
     """
     Clean up invalid work item entries that may have gotten mixed with PR data.
     """
+    assert app.matches is not None, "app.matches is None"
     all_tasks = app.matches.all()
     invalid_items = []
-    
+
     for task in all_tasks:
         try:
             # Work item IDs should be integers
@@ -841,7 +859,7 @@ def cleanup_invalid_work_items(app: App) -> None:
         except (ValueError, TypeError):
             invalid_items.append(task.doc_id)
             _LOGGER.info("Removing invalid work item entry with ID: %s", task["ado_id"])
-    
+
     # Remove invalid items
     if invalid_items:
         with app.db_lock:

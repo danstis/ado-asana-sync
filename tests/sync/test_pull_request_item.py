@@ -15,6 +15,10 @@ class TestPullRequestItem(unittest.TestCase):
         self.mock_app = Mock(spec=App)
         self.mock_app.pr_matches = Mock()
         self.mock_app.db_lock = Mock()
+        self.mock_app.db_lock.__enter__ = Mock(return_value=self.mock_app.db_lock)
+        self.mock_app.db_lock.__exit__ = Mock(return_value=None)
+        self.mock_app.asana_workspace_name = "test-workspace"
+        self.mock_app.asana_client = Mock()
 
         self.pr_item = PullRequestItem(
             ado_pr_id=123,
@@ -196,10 +200,12 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(call_args["reviewer_gid"], "asana-user-789")
         self.assertEqual(call_args["reviewer_name"], "Dan Anstis")
 
-    @patch('ado_asana_sync.sync.asana.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
     def test_is_current_true(self, mock_get_asana_task):
         """Test is_current returns True when item is up to date."""
         mock_ado_pr = Mock()
+        mock_ado_pr.title = "Update documentation"  # Match the PR item title
+        mock_ado_pr.status = "active"  # Match the PR item status
         mock_ado_pr.last_merge_commit = Mock()
         mock_ado_pr.last_merge_commit.date = "2023-12-01T10:00:00Z"
 
@@ -212,13 +218,13 @@ class TestPullRequestItem(unittest.TestCase):
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr)
         self.assertTrue(result)
 
-    @patch('ado_asana_sync.sync.asana.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
     def test_is_current_false_no_ado_pr(self, mock_get_asana_task):
         """Test is_current returns False when ADO PR is None."""
         result = self.pr_item.is_current(self.mock_app, None)
         self.assertFalse(result)
 
-    @patch('ado_asana_sync.sync.asana.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
     def test_is_current_false_asana_updated(self, mock_get_asana_task):
         """Test is_current returns False when Asana task has been updated."""
         mock_ado_pr = Mock()
