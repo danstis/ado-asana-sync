@@ -31,6 +31,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_app.ado_url = "https://dev.azure.com/test"
         self.mock_app.asana_workspace_name = "test-workspace"
         self.mock_app.asana_client = Mock()
+        self.mock_app.asana_page_size = 100
 
         self.mock_ado_project = Mock()
         self.mock_ado_project.name = "Test Project"
@@ -383,6 +384,210 @@ class TestPullRequestSync(unittest.TestCase):
         
         result = extract_reviewer_vote(mock_reviewer)
         self.assertEqual(result, 'noVote')
+
+    def test_sync_pull_requests_access_denied(self):
+        """Test repository access error handling with permission issues."""
+        from ado_asana_sync.sync.pull_request_sync import sync_pull_requests
+        
+        # Reset and mock the git client to raise exception with "permission" in message
+        self.mock_app.ado_git_client.reset_mock()
+        self.mock_app.ado_git_client.get_repositories.side_effect = Exception("permission denied")
+        
+        with patch('ado_asana_sync.sync.sync.get_asana_users') as mock_get_users:
+            with patch('ado_asana_sync.sync.sync.get_asana_project_tasks') as mock_get_tasks:
+                mock_get_users.return_value = []
+                mock_get_tasks.return_value = []
+                
+                # Should return early without processing
+                sync_pull_requests(
+                    self.mock_app, self.mock_ado_project, "workspace-id", "project-gid"
+                )
+                
+                # Verify it didn't try to process PRs
+                self.mock_app.ado_git_client.get_pull_requests.assert_not_called()
+
+    def test_process_repository_pull_requests_not_exist_error(self):
+        """Test pull request retrieval error handling with 'does not exist' message."""
+        from ado_asana_sync.sync.pull_request_sync import process_repository_pull_requests
+        
+        # Reset and mock the git client to raise exception with "does not exist" in message when getting PRs
+        self.mock_app.ado_git_client.reset_mock()
+        self.mock_app.ado_git_client.get_pull_requests.side_effect = Exception("project does not exist")
+        
+        # Should handle error gracefully and return early
+        process_repository_pull_requests(
+            self.mock_app, self.mock_repository, [], [], "project-gid"
+        )
+        
+        # Verify it tried to get PRs but handled the error
+        self.mock_app.ado_git_client.get_pull_requests.assert_called_once()
+
+    def test_process_repository_pull_requests_other_error(self):
+        """Test pull request retrieval error handling with other exceptions."""
+        from ado_asana_sync.sync.pull_request_sync import process_repository_pull_requests
+        
+        # Reset and mock the git client to raise a different exception when getting PRs
+        self.mock_app.ado_git_client.reset_mock()
+        self.mock_app.ado_git_client.get_pull_requests.side_effect = Exception("network error")
+        
+        # Should handle error gracefully and return early
+        process_repository_pull_requests(
+            self.mock_app, self.mock_repository, [], [], "project-gid"
+        )
+        
+        # Verify it tried to get PRs but handled the error
+        self.mock_app.ado_git_client.get_pull_requests.assert_called_once()
+
+    def test_process_pull_request_retrieval_error(self):
+        """Test pull request retrieval error handling."""
+        from ado_asana_sync.sync.pull_request_sync import process_repository_pull_requests
+        
+        # Reset and mock successful repository access but failed PR retrieval
+        self.mock_app.ado_git_client.reset_mock()
+        self.mock_app.ado_git_client.get_repositories.return_value = [self.mock_repository]
+        self.mock_app.ado_git_client.get_pull_requests.side_effect = Exception("API error")
+        
+        with patch('ado_asana_sync.sync.sync.get_asana_users') as mock_get_users:
+            with patch('ado_asana_sync.sync.sync.get_asana_project_tasks') as mock_get_tasks:
+                mock_get_users.return_value = []
+                mock_get_tasks.return_value = []
+                
+                # Should handle error gracefully and continue
+                process_repository_pull_requests(
+                    self.mock_app, self.mock_repository, [], [], "project-gid"
+                )
+                
+                # Verify it tried to get PRs but handled the error
+                self.mock_app.ado_git_client.get_pull_requests.assert_called_once()
+
+    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('asana.TasksApi')
+    def test_create_asana_pr_task_success(self, mock_tasks_api_class, mock_find_custom_field):
+        """Test successful creation of Asana PR task."""
+        from ado_asana_sync.sync.pull_request_sync import create_asana_pr_task
+        
+        # Setup mocks
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.create_task.return_value = {"gid": "new-task-123", "modified_at": "2023-12-01T10:00:00Z"}
+        
+        mock_find_custom_field.return_value = {"custom_field": {"gid": "link-field-123"}}
+        
+        mock_asana_project = {"gid": "project-456"}
+        mock_pr_item = Mock()
+        mock_pr_item.asana_title = "PR 123: Test Title"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 123</a>: Test Title"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "waiting_for_author"
+        mock_pr_item.url = "http://test.com/pr/123"
+        
+        # Call function
+        result = create_asana_pr_task(self.mock_app, mock_asana_project, mock_pr_item, "tag-gid")
+        
+        # Verify task creation
+        self.assertIsNone(result)  # Function doesn't return anything
+        mock_tasks_api.create_task.assert_called_once()
+        
+        # Verify task data
+        create_call_args = mock_tasks_api.create_task.call_args[0][0]
+        self.assertEqual(create_call_args["data"]["name"], "PR 123: Test Title")
+        self.assertEqual(create_call_args["data"]["projects"], [{"gid": "project-456"}])
+        self.assertFalse(create_call_args["data"]["completed"])  # Should not be completed for active PR
+
+    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('asana.TasksApi')
+    def test_create_asana_pr_task_completed_pr(self, mock_tasks_api_class, mock_find_custom_field):
+        """Test creation of Asana PR task for completed PR."""
+        from ado_asana_sync.sync.pull_request_sync import create_asana_pr_task
+        
+        # Setup mocks
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.create_task.return_value = {"gid": "new-task-456", "modified_at": "2023-12-01T10:00:00Z"}
+        
+        mock_find_custom_field.return_value = {"custom_field": {"gid": "link-field-123"}}
+        
+        mock_asana_project = {"gid": "project-456"}
+        mock_pr_item = Mock()
+        mock_pr_item.asana_title = "PR 456: Completed PR"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 456</a>: Completed PR"
+        mock_pr_item.status = "completed"  # Completed PR
+        mock_pr_item.review_status = "approved"
+        mock_pr_item.url = "http://test.com/pr/456"
+        
+        # Call function
+        result = create_asana_pr_task(self.mock_app, mock_asana_project, mock_pr_item, "tag-gid")
+        
+        # Verify task creation
+        self.assertIsNone(result)  # Function doesn't return anything
+        create_call_args = mock_tasks_api.create_task.call_args[0][0]
+        self.assertTrue(create_call_args["data"]["completed"])  # Should be completed
+
+    @patch('ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task')
+    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('asana.TasksApi')
+    def test_update_asana_pr_task_success(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag):
+        """Test successful update of Asana PR task."""
+        from ado_asana_sync.sync.pull_request_sync import update_asana_pr_task
+        
+        # Setup mocks
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.update_task.return_value = {"modified_at": "2023-12-01T11:00:00Z"}
+        
+        mock_find_custom_field.return_value = {"custom_field": {"gid": "link-field-123"}}
+        
+        mock_asana_project = {"gid": "project-456"}
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "existing-task-789"
+        mock_pr_item.asana_title = "PR 789: Updated Title"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 789</a>: Updated Title"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "approved"
+        mock_pr_item.url = "http://test.com/pr/789"
+        
+        # Call function
+        update_asana_pr_task(self.mock_app, mock_pr_item, "tag-gid", mock_asana_project)
+        
+        # Verify task update
+        mock_tasks_api.update_task.assert_called_once()
+        update_call_args = mock_tasks_api.update_task.call_args[0]
+        self.assertEqual(update_call_args[1], "existing-task-789")  # Task GID is second parameter
+        self.assertEqual(update_call_args[0]["data"]["name"], "PR 789: Updated Title")
+        self.assertTrue(update_call_args[0]["data"]["completed"])  # Should be completed for approved
+
+    @patch('ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task')
+    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('asana.TasksApi')
+    def test_update_asana_pr_task_no_custom_field(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag):
+        """Test update of Asana PR task when custom field is not found."""
+        from ado_asana_sync.sync.pull_request_sync import update_asana_pr_task
+        
+        # Setup mocks
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.update_task.return_value = {"modified_at": "2023-12-01T11:00:00Z"}
+        
+        mock_find_custom_field.return_value = None  # No custom field found
+        
+        mock_asana_project = {"gid": "project-456"}
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "existing-task-789"
+        mock_pr_item.asana_title = "PR 789: Updated Title"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 789</a>: Updated Title"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "waiting_for_author"
+        mock_pr_item.url = "http://test.com/pr/789"
+        
+        # Call function
+        update_asana_pr_task(self.mock_app, mock_pr_item, "tag-gid", mock_asana_project)
+        
+        # Verify task update (should still work without custom field)
+        mock_tasks_api.update_task.assert_called_once()
+        update_call_args = mock_tasks_api.update_task.call_args[0]
+        self.assertEqual(update_call_args[1], "existing-task-789")  # Task GID is second parameter
+        # Should not have custom_fields in the update data
+        self.assertNotIn("custom_fields", update_call_args[0]["data"])
 
 
 if __name__ == "__main__":
