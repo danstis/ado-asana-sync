@@ -52,8 +52,8 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_reviewer.unique_name = "john.doe@example.com"
         self.mock_reviewer.vote = "waiting_for_author"
 
-    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_users')
-    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_project_tasks')
+    @patch('ado_asana_sync.sync.sync.get_asana_users')
+    @patch('ado_asana_sync.sync.sync.get_asana_project_tasks')
     @patch('ado_asana_sync.sync.pull_request_sync.process_closed_pull_requests')
     def test_sync_pull_requests(self, mock_process_closed, mock_get_tasks, mock_get_users):
         """Test the main sync_pull_requests function."""
@@ -122,7 +122,7 @@ class TestPullRequestSync(unittest.TestCase):
             mock_handle_removed.assert_called_once_with(self.mock_app, self.mock_pr, set(), "project-456")
 
     @patch('ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer')
-    @patch('ado_asana_sync.sync.pull_request_sync.matching_user')
+    @patch('ado_asana_sync.sync.sync.matching_user')
     @patch('ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task')
     def test_process_pr_reviewer_new_task(self, mock_create_task, mock_matching_user, mock_create_user):
         """Test processing a reviewer when no existing task exists."""
@@ -147,7 +147,7 @@ class TestPullRequestSync(unittest.TestCase):
             mock_create_task.assert_called_once()
 
     @patch('ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer')
-    @patch('ado_asana_sync.sync.pull_request_sync.matching_user')
+    @patch('ado_asana_sync.sync.sync.matching_user')
     @patch('ado_asana_sync.sync.pull_request_sync.update_existing_pr_reviewer_task')
     def test_process_pr_reviewer_existing_task(self, mock_update_task, mock_matching_user, mock_create_user):
         """Test processing a reviewer when an existing task exists."""
@@ -182,7 +182,7 @@ class TestPullRequestSync(unittest.TestCase):
         mock_ado_user.email = "john.doe@example.com"
         mock_create_user.return_value = mock_ado_user
 
-        with patch('ado_asana_sync.sync.pull_request_sync.matching_user', return_value=None):
+        with patch('ado_asana_sync.sync.sync.matching_user', return_value=None):
             with patch('ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task') as mock_create_task:
                 process_pr_reviewer(
                     self.mock_app, self.mock_pr, self.mock_repository, self.mock_reviewer, [], [], "project-456"
@@ -191,7 +191,7 @@ class TestPullRequestSync(unittest.TestCase):
                 # Verify no task creation
                 mock_create_task.assert_not_called()
 
-    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name')
+    @patch('ado_asana_sync.sync.sync.get_asana_task_by_name')
     @patch('ado_asana_sync.sync.pull_request_sync.create_asana_pr_task')
     @patch('ado_asana_sync.sync.pull_request_sync.iso8601_utc')
     def test_create_new_pr_reviewer_task(self, mock_iso8601, mock_create_task, mock_get_task_by_name):
@@ -221,7 +221,15 @@ class TestPullRequestSync(unittest.TestCase):
         mock_pr_item = Mock(spec=PullRequestItem)
         mock_pr_item.is_current.return_value = False  # Needs update
         mock_pr_item.asana_gid = "task-123"
+        mock_pr_item.reviewer_name = "John Doe"
+        mock_pr_item.title = "Test PR Title"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "waiting_for_author"
 
+        # Set up PR mock to match the PR item
+        self.mock_pr.title = "Test PR Title"
+        self.mock_pr.status = "active"
+        
         update_existing_pr_reviewer_task(
             self.mock_app, self.mock_pr, self.mock_repository, self.mock_reviewer, mock_pr_item, mock_asana_user, "project-456"
         )
@@ -234,6 +242,7 @@ class TestPullRequestSync(unittest.TestCase):
         mock_asana_user = {"gid": "user-123", "name": "John Doe"}
         mock_pr_item = Mock(spec=PullRequestItem)
         mock_pr_item.is_current.return_value = True  # Already current
+        mock_pr_item.reviewer_name = "John Doe"
 
         with patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task') as mock_update_task:
             update_existing_pr_reviewer_task(
@@ -255,15 +264,23 @@ class TestPullRequestSync(unittest.TestCase):
         """Test creating ADO user from reviewer with missing data."""
         mock_reviewer = Mock()
         mock_reviewer.display_name = None
+        mock_reviewer.displayName = None  # Check both attribute names
+        mock_reviewer.name = None
         mock_reviewer.unique_name = "john.doe@example.com"
+        # Ensure no user fallback
+        mock_reviewer.user = None
 
         result = create_ado_user_from_reviewer(mock_reviewer)
         self.assertIsNone(result)
 
     def test_create_ado_user_from_reviewer_exception(self):
         """Test creating ADO user from reviewer with exception."""
-        mock_reviewer = Mock()
-        mock_reviewer.display_name = Mock(side_effect=Exception("Test error"))
+        # Create a custom class that raises exceptions on attribute access
+        class FailingReviewer:
+            def __getattr__(self, name):
+                raise Exception("Test error")
+        
+        mock_reviewer = FailingReviewer()
 
         result = create_ado_user_from_reviewer(mock_reviewer)
         self.assertIsNone(result)
