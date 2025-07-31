@@ -1,5 +1,5 @@
-""" This module contains the TaskItem class, which represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
-"""
+"""This module contains the TaskItem class, which represents a task item in the synchronization process between
+Azure DevOps (ADO) and Asana."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ class TaskItem:
 
     @classmethod
     def search(
-        cls, app: App, ado_id: int = None, asana_gid: str = None
+        cls, app: App, ado_id: Optional[int] = None, asana_gid: Optional[str] = None
     ) -> TaskItem | None:
         """
         Search for a task item in the App object based on the given ADO ID or Asana GID.

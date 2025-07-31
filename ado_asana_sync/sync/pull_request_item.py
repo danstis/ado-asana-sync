@@ -1,4 +1,5 @@
-"""This module contains the PullRequestItem class, which represents a pull request item in the synchronization process between Azure DevOps (ADO) and Asana."""
+"""This module contains the PullRequestItem class, which represents a pull request item in the synchronization process between
+Azure DevOps (ADO) and Asana."""
 
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ class PullRequestItem:
     """
     Represents a pull request item in the synchronization process between Azure DevOps (ADO) and Asana.
 
-    Each PullRequestItem object corresponds to a pull request in ADO and reviewer tasks in Asana. It contains information 
+    Each PullRequestItem object corresponds to a pull request in ADO and reviewer tasks in Asana. It contains information
     about the PR such as its ID, title, and the IDs of the corresponding Asana tasks for each reviewer.
 
     Attributes:
@@ -113,7 +114,11 @@ class PullRequestItem:
 
     @classmethod
     def search(
-        cls, app: App, ado_pr_id: int = None, reviewer_gid: str = None, asana_gid: str = None
+        cls,
+        app: App,
+        ado_pr_id: Optional[int] = None,
+        reviewer_gid: Optional[str] = None,
+        asana_gid: Optional[str] = None,
     ) -> PullRequestItem | None:
         """
         Search for a pull request item in the App object based on the given ADO PR ID, reviewer GID, or Asana GID.
@@ -133,14 +138,16 @@ class PullRequestItem:
         # Generate the query based on the input.
         pr = Query()
         conditions = []
-        
+
         if ado_pr_id is not None and reviewer_gid is not None:
-            conditions.append((pr.ado_pr_id == ado_pr_id) & (pr.reviewer_gid == reviewer_gid))
+            conditions.append(
+                (pr.ado_pr_id == ado_pr_id) & (pr.reviewer_gid == reviewer_gid)
+            )
         elif ado_pr_id is not None:
             conditions.append(pr.ado_pr_id == ado_pr_id)
         elif reviewer_gid is not None:
             conditions.append(pr.reviewer_gid == reviewer_gid)
-        
+
         if asana_gid is not None:
             conditions.append(pr.asana_gid == asana_gid)
 
@@ -182,11 +189,13 @@ class PullRequestItem:
             "updated_date": self.updated_date,
             "review_status": self.review_status,
         }
-        
+
         # Query for unique combination of PR ID and reviewer
         query = Query()
-        unique_query = (query.ado_pr_id == pr_data["ado_pr_id"]) & (query.reviewer_gid == pr_data["reviewer_gid"])
-        
+        unique_query = (query.ado_pr_id == pr_data["ado_pr_id"]) & (
+            query.reviewer_gid == pr_data["reviewer_gid"]
+        )
+
         assert app.pr_matches is not None, "app.pr_matches is None"
         assert app.db_lock is not None, "app.db_lock is None"
         if app.pr_matches.contains(unique_query):
@@ -218,7 +227,7 @@ class PullRequestItem:
         # Check if PR has been updated - compare title and basic properties
         if ado_pr.title != self.title:
             return False
-        
+
         if ado_pr.status != self.status:
             return False
 

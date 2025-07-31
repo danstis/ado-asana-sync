@@ -62,7 +62,7 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             # Check if the cache is valid
-            global CUSTOM_FIELDS_CACHE, LAST_CACHE_REFRESH
+            global LAST_CACHE_REFRESH
             now = datetime.now(timezone.utc)
             if (
                 CUSTOM_FIELDS_AVAILABLE
