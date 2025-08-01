@@ -139,6 +139,7 @@ class App:
         # Setup SQLite database.
         _LOGGER.debug("Opening local database")
         data_dir = os.path.join(os.path.dirname(__package__), "data")
+        os.makedirs(data_dir, exist_ok=True)
         db_path = os.path.join(data_dir, "appdata.db")
         appdata_json_path = os.path.join(data_dir, "appdata.json")
 

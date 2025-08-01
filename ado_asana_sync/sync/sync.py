@@ -56,6 +56,7 @@ def start_sync(app: App) -> None:
     Args:
         app: The App instance containing configuration and clients.
     """
+    global LAST_CACHE_REFRESH
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         workspace = get_asana_workspace(app, app.asana_workspace_name)
@@ -73,7 +74,6 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             # Check if the cache is valid
-            global LAST_CACHE_REFRESH
             now = datetime.now(timezone.utc)
             if (
                 CUSTOM_FIELDS_AVAILABLE
