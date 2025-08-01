@@ -219,16 +219,17 @@ def handle_removed_reviewers(
     """
     Handle reviewers that have been removed from the PR by closing their Asana tasks.
     """
-    from tinydb import Query
-
     # Find all existing PR tasks for this PR
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
-    query = Query()
-    existing_pr_tasks = app.pr_matches.search(query.ado_pr_id == pr.pull_request_id)
+    def query_func(record):
+        return record.get("ado_pr_id") == pr.pull_request_id
+    existing_pr_tasks = app.pr_matches.search(query_func)
 
     for task_data in existing_pr_tasks:
-        pr_item = PullRequestItem(**task_data)
+        # Remove doc_id before creating PullRequestItem
+        clean_task_data = {k: v for k, v in task_data.items() if k != 'doc_id'}
+        pr_item = PullRequestItem(**clean_task_data)
 
         # If this reviewer is no longer in the current reviewers list, close their task
         if pr_item.reviewer_gid not in current_reviewer_gids:
@@ -643,7 +644,9 @@ def process_closed_pull_requests(  # noqa: C901
     all_pr_tasks = app.pr_matches.all()
 
     for pr_task_data in all_pr_tasks:
-        pr_item = PullRequestItem(**pr_task_data)
+        # Remove doc_id before creating PullRequestItem
+        clean_pr_task_data = {k: v for k, v in pr_task_data.items() if k != 'doc_id'}
+        pr_item = PullRequestItem(**clean_pr_task_data)
 
         try:
             # Try to get the current PR from ADO

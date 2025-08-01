@@ -6,8 +6,6 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Optional
 
-from tinydb import Query
-
 from .app import App
 from .asana import get_asana_task
 
@@ -134,34 +132,31 @@ class PullRequestItem:
         if ado_pr_id is None and reviewer_gid is None and asana_gid is None:
             return None
 
-        # Generate the query based on the input.
-        pr = Query()
-        conditions = []
-
-        if ado_pr_id is not None and reviewer_gid is not None:
-            conditions.append(
-                (pr.ado_pr_id == ado_pr_id) & (pr.reviewer_gid == reviewer_gid)
-            )
-        elif ado_pr_id is not None:
-            conditions.append(pr.ado_pr_id == ado_pr_id)
-        elif reviewer_gid is not None:
-            conditions.append(pr.reviewer_gid == reviewer_gid)
-
-        if asana_gid is not None:
-            conditions.append(pr.asana_gid == asana_gid)
-
-        # Combine conditions with OR
-        if len(conditions) == 1:
-            query = conditions[0]
-        else:
-            query = conditions[0]
-            for condition in conditions[1:]:
-                query = query | condition
+        # Generate the query function based on the input.
+        def query_func(record):
+            # Check for PR ID and reviewer GID combination
+            if ado_pr_id is not None and reviewer_gid is not None:
+                if (record.get("ado_pr_id") == ado_pr_id and 
+                    record.get("reviewer_gid") == reviewer_gid):
+                    return True
+            
+            # Check individual conditions
+            if ado_pr_id is not None and record.get("ado_pr_id") == ado_pr_id:
+                return True
+            if reviewer_gid is not None and record.get("reviewer_gid") == reviewer_gid:
+                return True
+            if asana_gid is not None and record.get("asana_gid") == asana_gid:
+                return True
+            
+            return False
 
         # return the first matching item, or return None if not found.
-        if app.pr_matches and app.pr_matches.contains(query):
-            item = app.pr_matches.search(query)
-            return cls(**item[0])
+        if app.pr_matches and app.pr_matches.contains(query_func):
+            items = app.pr_matches.search(query_func)
+            if items:
+                # Remove doc_id before creating PullRequestItem
+                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                return cls(**item_data)
         return None
 
     def save(self, app: App) -> None:
@@ -190,18 +185,17 @@ class PullRequestItem:
         }
 
         # Query for unique combination of PR ID and reviewer
-        query = Query()
-        unique_query = (query.ado_pr_id == pr_data["ado_pr_id"]) & (
-            query.reviewer_gid == pr_data["reviewer_gid"]
-        )
+        def unique_query_func(record):
+            return (record.get("ado_pr_id") == pr_data["ado_pr_id"] and 
+                    record.get("reviewer_gid") == pr_data["reviewer_gid"])
 
         if app.pr_matches is None:
             raise ValueError("app.pr_matches is None")
         if app.db_lock is None:
             raise ValueError("app.db_lock is None")
-        if app.pr_matches.contains(unique_query):
+        if app.pr_matches.contains(unique_query_func):
             with app.db_lock:
-                app.pr_matches.update(pr_data, unique_query)
+                app.pr_matches.update(pr_data, unique_query_func)
         else:
             with app.db_lock:
                 app.pr_matches.insert(pr_data)

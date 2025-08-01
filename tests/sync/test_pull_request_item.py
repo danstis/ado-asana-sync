@@ -120,12 +120,9 @@ class TestPullRequestItem(unittest.TestCase):
         expected = '<a href="https://dev.azure.com/test/project/_git/repo/pullrequest/123">Pull Request 123</a>: Fix &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; vulnerability'
         self.assertEqual(pr_item.asana_notes_link, expected)
 
-    @patch('ado_asana_sync.sync.pull_request_item.Query')
-    def test_search_by_pr_id_and_reviewer(self, mock_query):
+    def test_search_by_pr_id_and_reviewer(self):
         """Test searching by PR ID and reviewer GID."""
         # Setup mocks
-        mock_query_instance = Mock()
-        mock_query.return_value = mock_query_instance
         self.mock_app.pr_matches.contains.return_value = True
         self.mock_app.pr_matches.search.return_value = [
             {
@@ -150,11 +147,8 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(result.ado_pr_id, 123)
         self.assertEqual(result.reviewer_gid, "asana-user-789")
 
-    @patch('ado_asana_sync.sync.pull_request_item.Query')
-    def test_search_not_found(self, mock_query):
+    def test_search_not_found(self):
         """Test searching when no match is found."""
-        mock_query_instance = Mock()
-        mock_query.return_value = mock_query_instance
         self.mock_app.pr_matches.contains.return_value = False
 
         result = PullRequestItem.search(self.mock_app, ado_pr_id=999)
@@ -166,12 +160,9 @@ class TestPullRequestItem(unittest.TestCase):
         result = PullRequestItem.search(self.mock_app)
         self.assertIsNone(result)
 
-    @patch('ado_asana_sync.sync.pull_request_item.Query')
-    def test_save_new_item(self, mock_query):
+    def test_save_new_item(self):
         """Test saving a new PullRequestItem."""
         # Setup mocks
-        mock_query_instance = Mock()
-        mock_query.return_value = mock_query_instance
         self.mock_app.pr_matches.contains.return_value = False
 
         self.pr_item.save(self.mock_app)
@@ -183,12 +174,9 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(call_args["reviewer_gid"], "asana-user-789")
         self.assertEqual(call_args["reviewer_name"], "Dan Anstis")
 
-    @patch('ado_asana_sync.sync.pull_request_item.Query')
-    def test_save_existing_item(self, mock_query):
+    def test_save_existing_item(self):
         """Test saving an existing PullRequestItem."""
         # Setup mocks
-        mock_query_instance = Mock()
-        mock_query.return_value = mock_query_instance
         self.mock_app.pr_matches.contains.return_value = True
 
         self.pr_item.save(self.mock_app)
@@ -279,6 +267,70 @@ class TestPullRequestItem(unittest.TestCase):
         
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr, mock_reviewer)
         self.assertTrue(result)  # Should return True because everything matches
+
+    def test_search_filters_doc_id_from_database_results(self):
+        """Regression test: Ensure doc_id is filtered out when creating PullRequestItem from database results."""
+        # Setup mocks
+        self.mock_app.pr_matches.contains.return_value = True
+        
+        # Mock database result that includes doc_id (this would cause constructor error if not filtered)
+        mock_db_result = {
+            "ado_pr_id": 789,
+            "ado_repository_id": "repo-789",
+            "title": "Test PR",
+            "status": "active",
+            "url": "https://example.com/pr/789",
+            "reviewer_gid": "reviewer-123",
+            "reviewer_name": "Test Reviewer",
+            "asana_gid": "asana-789",
+            "asana_updated": "2023-12-01T10:00:00Z",
+            "created_date": "2023-12-01T09:00:00Z",
+            "updated_date": "2023-12-01T10:00:00Z",
+            "review_status": "waiting_for_author",
+            "doc_id": 888  # This should be filtered out
+        }
+        self.mock_app.pr_matches.search.return_value = [mock_db_result]
+        
+        # This should not raise an error about unexpected doc_id argument
+        result = PullRequestItem.search(self.mock_app, ado_pr_id=789)
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ado_pr_id, 789)
+        self.assertEqual(result.title, "Test PR")
+        # Verify doc_id is not present in the created object
+        self.assertFalse(hasattr(result, 'doc_id'))
+
+    def test_search_with_multiple_criteria_filters_doc_id(self):
+        """Regression test: Ensure doc_id filtering works with multiple search criteria."""
+        # Setup mocks
+        self.mock_app.pr_matches.contains.return_value = True
+        
+        # Mock database result with doc_id
+        mock_db_result = {
+            "ado_pr_id": 999,
+            "ado_repository_id": "repo-999",
+            "title": "Another Test PR",
+            "status": "completed",
+            "url": "https://example.com/pr/999",
+            "reviewer_gid": "reviewer-456",
+            "reviewer_name": "Another Reviewer",
+            "asana_gid": "asana-999",
+            "doc_id": 111  # This should be filtered out
+        }
+        self.mock_app.pr_matches.search.return_value = [mock_db_result]
+        
+        # Test search with both PR ID and reviewer GID
+        result = PullRequestItem.search(
+            self.mock_app, 
+            ado_pr_id=999, 
+            reviewer_gid="reviewer-456"
+        )
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ado_pr_id, 999)
+        self.assertEqual(result.reviewer_gid, "reviewer-456")
+        # Verify doc_id is not present in the created object
+        self.assertFalse(hasattr(result, 'doc_id'))
 
 
 if __name__ == "__main__":
