@@ -157,3 +157,60 @@ class TestTaskItem(unittest.TestCase):
         result = TaskItem.search(app, asana_gid="987654")
 
         self.assertIsNone(result)
+
+    def test_search_filters_doc_id_from_database_results(self):
+        """Regression test: Ensure doc_id is filtered out when creating TaskItem from database results."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        
+        # Mock database result that includes doc_id (this would cause constructor error if not filtered)
+        mock_db_result = {
+            "ado_id": 123,
+            "ado_rev": 5,
+            "title": "Test Task",
+            "item_type": "Bug",
+            "url": "https://example.com/123",
+            "asana_gid": "asana-123",
+            "asana_updated": "2023-12-01T10:00:00Z",
+            "assigned_to": "user-456",
+            "created_date": "2023-12-01T09:00:00Z",
+            "updated_date": "2023-12-01T10:00:00Z",
+            "doc_id": 999  # This should be filtered out
+        }
+        app.matches.search.return_value = [mock_db_result]
+        
+        # This should not raise an error about unexpected doc_id argument
+        result = TaskItem.search(app, ado_id=123)
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ado_id, 123)
+        self.assertEqual(result.title, "Test Task")
+        # Verify doc_id is not present in the created object
+        self.assertFalse(hasattr(result, 'doc_id'))
+
+    def test_find_by_ado_id_filters_doc_id_from_database_results(self):
+        """Regression test: Ensure doc_id is filtered out in find_by_ado_id method."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        
+        # Mock database result with doc_id
+        mock_db_result = {
+            "ado_id": 456,
+            "ado_rev": 3,
+            "title": "Another Test Task",
+            "item_type": "User Story",
+            "url": "https://example.com/456",
+            "doc_id": 777  # This should be filtered out
+        }
+        app.matches.search.return_value = [mock_db_result]
+        
+        # This should not raise an error about unexpected doc_id argument
+        result = TaskItem.find_by_ado_id(app, 456)
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ado_id, 456)
+        self.assertEqual(result.title, "Another Test Task")
+        # Verify doc_id is not present in the created object
+        self.assertFalse(hasattr(result, 'doc_id'))

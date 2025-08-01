@@ -121,7 +121,9 @@ class TaskItem:
         if app.matches and app.matches.contains(query_func):
             items = app.matches.search(query_func)
             if items:
-                return cls(**items[0])
+                # Remove doc_id before creating TaskItem
+                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                return cls(**item_data)
         return None
 
     @classmethod
@@ -150,7 +152,9 @@ class TaskItem:
         if app.matches and app.matches.contains(query_func):
             items = app.matches.search(query_func)
             if items:
-                return cls(**items[0])
+                # Remove doc_id before creating TaskItem
+                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                return cls(**item_data)
         return None
 
     def save(self, app: App) -> None:
