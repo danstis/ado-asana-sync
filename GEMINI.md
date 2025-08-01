@@ -8,8 +8,8 @@
 ## Setup Steps
 
 1. Install Poetry: [https://python-poetry.org/](https://python-poetry.org/)
-2. Run `poetry install` to install dependencies.
-3. Copy `.env.example` to `.env` and fill in required environment variables.
+1. Run `poetry install` to install dependencies.
+1. Copy `.env.example` to `.env` and fill in required environment variables.
 
 ## Development Guidelines
 
@@ -19,15 +19,17 @@
   - `ado_asana_sync/sync/asana.py`: Asana API interactions.
   - `ado_asana_sync/sync/task_item.py`: Task data structure.
   - `data/projects.json.example`: Project config example.
+- Run tools using `poetry run <tool and args>`.
 - Write Python code only.
-- Use `pylint`, `flake8`, and `.editorconfig` for linting and formatting.
+- Use `poetry run pylint`, `poetry run flake8`, and `.editorconfig` for linting and formatting.
 - Add dependencies with `poetry add <dependency>`.
+- Always update the readme and other documentation based on the changes made.
 
 ## Testing
 
 - Place tests in `tests/`.
-- Use `pytest` and run tests with `tox`.
-- Maintain >60% coverage. Check with `pytest-cov`.
+- Use `pytest` and run tests with `poetry run pytest`.
+- Maintain >60% coverage.
 
 ## CI/CD
 

@@ -1,3 +1,5 @@
+"""This module contains the core synchronization logic between Azure DevOps and Asana."""
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -41,18 +43,27 @@ ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
 
 # Cache for custom fields
-CUSTOM_FIELDS_CACHE = {}
+CUSTOM_FIELDS_CACHE: dict[str, Any] = {}
 CUSTOM_FIELDS_AVAILABLE = True
-LAST_CACHE_REFRESH = datetime.now(timezone.utc)
+LAST_CACHE_REFRESH: datetime = datetime.now(timezone.utc)
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
 def start_sync(app: App) -> None:
+    """
+    Start the synchronization process between Azure DevOps and Asana.
+    
+    Args:
+        app: The App instance containing configuration and clients.
+    """
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
+        workspace = get_asana_workspace(app, app.asana_workspace_name)
+        if workspace is None:
+            raise ValueError("Could not find Asana workspace")
         app.asana_tag_gid = create_tag_if_not_existing(
             app,
-            get_asana_workspace(app, app.asana_workspace_name),
+            workspace,
             app.asana_tag_name,
         )
     except Exception as exception:
@@ -62,7 +73,7 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             # Check if the cache is valid
-            global CUSTOM_FIELDS_CACHE, LAST_CACHE_REFRESH
+            global LAST_CACHE_REFRESH
             now = datetime.now(timezone.utc)
             if (
                 CUSTOM_FIELDS_AVAILABLE
@@ -130,7 +141,14 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
     """
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
         # Check if the tag_gid is stored in the config table
-        tag_config = app.config.get(doc_id=1)
+        if app.config is None:
+            raise ValueError("app.config is None")
+        tag_config_result = app.config.get(doc_id=1)
+        tag_config = (
+            tag_config_result
+            if not isinstance(tag_config_result, list)
+            else (tag_config_result[0] if tag_config_result else None)
+        )
         tag_gid = tag_config.get("tag_gid") if tag_config else None
 
         if tag_gid:
@@ -141,8 +159,12 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         existing_tag = get_tag_by_name(app, workspace, tag)
         if existing_tag is not None:
             # Store the tag_gid in the config table
+            if app.config is None:
+                raise ValueError("app.config is None")
             with app.db_lock:
-                app.config.upsert({"tag_gid": existing_tag["gid"]}, {"doc_id": 1})
+                from tinydb import Query
+                doc_query = Query()
+                app.config.upsert({"tag_gid": existing_tag["gid"]}, doc_query.doc_id == 1)
             return existing_tag["gid"]
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
@@ -152,7 +174,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
             # Store the new tag_gid in the config table
             with app.db_lock:
-                app.config.upsert({"tag_gid": api_response["gid"]}, {"doc_id": 1})
+                from tinydb import Query
+                doc_query = Query()
+                app.config.upsert({"tag_gid": api_response["gid"]}, doc_query.doc_id == 1)
             return api_response["gid"]
         except ApiException as exception:
             _LOGGER.error(
@@ -257,6 +281,8 @@ def sync_project(app: App, project):
     asana_project_tasks = get_asana_project_tasks(app, asana_project)
 
     # Get the backlog items for the ADO project and team.
+    if app.ado_work_client is None:
+        raise ValueError("app.ado_work_client is None")
     ado_items = app.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
@@ -267,18 +293,40 @@ def sync_project(app: App, project):
         app, ado_items, asana_users, asana_project_tasks, asana_project
     )
 
+    # Clean up any invalid entries that may have gotten mixed between tables
+    cleanup_invalid_work_items(app)
+
     # Process any existing matched items that are no longer returned in the backlog (closed or removed).
+    if app.matches is None:
+        raise ValueError("app.matches is None")
     all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
+    # Sync pull requests for this project
+    try:
+        from .pull_request_sync import sync_pull_requests
 
-def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
+        if asana_project is not None:
+            sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
+    except Exception as e:
+        _LOGGER.error(
+            "Error syncing pull requests for project %s: %s",
+            project["adoProjectName"],
+            e,
+        )
+
+
+def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # noqa: C901
     """
     Get the necessary project IDs for syncing.
+
+    Note: Complexity justified by necessary error handling and project/team resolution logic.
     """
     try:
         # Get the ADO project by name.
+        if app.ado_core_client is None:
+            raise ValueError("app.ado_core_client is None")
         ado_project = app.ado_core_client.get_project(project["adoProjectName"])
     except NameError as exception:
         _LOGGER.error(
@@ -288,6 +336,8 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
 
     try:
         # Get the ADO team by name within the ADO project.
+        if app.ado_core_client is None:
+            raise ValueError("app.ado_core_client is None")
         ado_team = app.ado_core_client.get_team(
             project["adoProjectName"], project["adoTeamName"]
         )
@@ -469,8 +519,23 @@ def process_closed_items(
     for wi in all_tasks:
         if wi["ado_id"] not in processed_item_ids:
             _LOGGER.info("Processing closed item %s", wi["ado_id"])
+
+            # Skip items that don't look like valid work item IDs (might be PR IDs that got mixed in)
+            try:
+                int(wi["ado_id"])  # Work item IDs should be integers
+            except (ValueError, TypeError):
+                _LOGGER.debug(
+                    "Skipping non-work-item ID %s (likely a PR or other item)",
+                    wi["ado_id"],
+                )
+                continue
+
             if is_item_older_than_threshold(wi):
-                _LOGGER.info("%s:Task is older than %s days, removing mapping", wi["ado_id"], _SYNC_THRESHOLD)
+                _LOGGER.info(
+                    "%s:Task is older than %s days, removing mapping",
+                    wi["ado_id"],
+                    _SYNC_THRESHOLD,
+                )
                 remove_mapping(app, wi)
                 continue
 
@@ -481,7 +546,9 @@ def process_closed_items(
             try:
                 ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             except Exception as e:
-                _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
+                _LOGGER.warning(
+                    "Failed to fetch work item %s: %s", existing_match.ado_id, e
+                )
                 continue
             if existing_match.is_current(app):
                 _LOGGER.info(
@@ -704,7 +771,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
 
     try:
         result = tasks_api_instance.create_task(body, opts={})
@@ -743,7 +810,7 @@ def update_asana_task(
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
 
     try:
         # Update the asana task item.
@@ -785,12 +852,11 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
             )
             CUSTOM_FIELDS_AVAILABLE = False
             return []
-        else:
-            _LOGGER.error(
-                "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
-                exception,
-            )
-            return []
+        _LOGGER.error(
+            "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
+            exception,
+        )
+        return []
     except Exception as e:
         _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
@@ -807,6 +873,30 @@ def find_custom_field_by_name(
         if field.get("custom_field", {}).get("name") == field_name:
             return field
     return None
+
+
+def cleanup_invalid_work_items(app: App) -> None:
+    """
+    Clean up invalid work item entries that may have gotten mixed with PR data.
+    """
+    if app.matches is None:
+        raise ValueError("app.matches is None")
+    all_tasks = app.matches.all()
+    invalid_items = []
+
+    for task in all_tasks:
+        try:
+            # Work item IDs should be integers
+            int(task["ado_id"])
+        except (ValueError, TypeError):
+            invalid_items.append(task.doc_id)
+            _LOGGER.info("Removing invalid work item entry with ID: %s", task["ado_id"])
+
+    # Remove invalid items
+    if invalid_items:
+        with app.db_lock:
+            app.matches.remove(doc_ids=invalid_items)
+        _LOGGER.info("Cleaned up %d invalid work item entries", len(invalid_items))
 
 
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:

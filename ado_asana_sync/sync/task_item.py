@@ -1,10 +1,10 @@
-""" This module contains the TaskItem class, which represents a task item in the synchronization process between Azure DevOps (ADO) and Asana.
-"""
+"""This module contains the TaskItem class, which represents a task item in the synchronization process between
+Azure DevOps (ADO) and Asana."""
 
 from __future__ import annotations
 
 from html import escape
-from typing import Any
+from typing import Any, Optional
 
 from tinydb import Query
 
@@ -40,12 +40,12 @@ class TaskItem:
         title: str,
         item_type: str,
         url: str,
-        asana_gid: str = None,
-        asana_updated: str = None,
-        assigned_to: str = None,
-        created_date: str = None,
-        updated_date: str = None,
-        state: str = None,
+        asana_gid: Optional[str] = None,
+        asana_updated: Optional[str] = None,
+        assigned_to: Optional[str] = None,
+        created_date: Optional[str] = None,
+        updated_date: Optional[str] = None,
+        state: Optional[str] = None,
     ) -> None:
         self.ado_id = ado_id
         self.ado_rev = ado_rev
@@ -118,14 +118,14 @@ class TaskItem:
             None: If there is no matching item.
         """
         query = Query().ado_id == ado_id
-        if app.matches.contains(query):
+        if app.matches and app.matches.contains(query):
             item = app.matches.search(query)
             return cls(**item[0])
         return None
 
     @classmethod
     def search(
-        cls, app: App, ado_id: int = None, asana_gid: str = None
+        cls, app: App, ado_id: Optional[int] = None, asana_gid: Optional[str] = None
     ) -> TaskItem | None:
         """
         Search for a task item in the App object based on the given ADO ID or Asana GID.
@@ -146,7 +146,7 @@ class TaskItem:
         query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
 
         # return the first matching item, or return None if not found.
-        if app.matches.contains(query):
+        if app.matches and app.matches.contains(query):
             item = app.matches.search(query)
             return cls(**item[0])
         return None
@@ -175,6 +175,8 @@ class TaskItem:
             "updated_date": self.updated_date,
         }
         query = Query().ado_id == task_data["ado_id"]
+        if app.matches is None:
+            raise ValueError("app.matches is None")
         if app.matches.contains(query):
             with app.db_lock:
                 app.matches.update(task_data, query)
@@ -196,8 +198,10 @@ class TaskItem:
         Returns:
             bool: True if the TaskItem is current, False otherwise.
         """
+        if app.ado_wit_client is None:
+            return False
         ado_task = app.ado_wit_client.get_work_item(self.ado_id)
-        asana_task = get_asana_task(app, self.asana_gid)
+        asana_task = get_asana_task(app, self.asana_gid) if self.asana_gid else None
 
         if not ado_task or not asana_task:
             return False

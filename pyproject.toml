@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "ado-asana-sync"
 version = "0.0.0-dev"
-description = "Tool to sync work items from Azure DevOps to Asana"
+description = "Tool to sync work items and pull requests from Azure DevOps to Asana"
 authors = ["Dan Anstis <dan@bsod.co.nz>"]
 license = "MIT"
 readme = "README.md"
@@ -24,6 +24,11 @@ pytest-cov = ">=4.1,<7.0"
 pytest = ">=7.4,<9.0"
 tox = "^4.9"
 black = ">=23.7,<26.0"
+mdformat = "^0.7.0"
+mdformat-gfm = "^0.3.0"
+
+[tool.black]
+line-length = 127
 
 [build-system]
 requires = ["poetry-core"]
