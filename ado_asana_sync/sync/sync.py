@@ -50,9 +50,12 @@ CACHE_VALIDITY_DURATION = timedelta(hours=24)
 def start_sync(app: App) -> None:
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
+        workspace = get_asana_workspace(app, app.asana_workspace_name)
+        if workspace is None:
+            raise ValueError("Could not find Asana workspace")
         app.asana_tag_gid = create_tag_if_not_existing(
             app,
-            get_asana_workspace(app, app.asana_workspace_name),
+            workspace,
             app.asana_tag_name,
         )
     except Exception as exception:
@@ -132,7 +135,12 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         # Check if the tag_gid is stored in the config table
         if app.config is None:
             raise ValueError("app.config is None")
-        tag_config = app.config.get(doc_id=1)
+        tag_config_result = app.config.get(doc_id=1)
+        tag_config = (
+            tag_config_result
+            if not isinstance(tag_config_result, list)
+            else (tag_config_result[0] if tag_config_result else None)
+        )
         tag_gid = tag_config.get("tag_gid") if tag_config else None
 
         if tag_gid:
@@ -146,7 +154,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             if app.config is None:
                 raise ValueError("app.config is None")
             with app.db_lock:
-                app.config.upsert({"tag_gid": existing_tag["gid"]}, {"doc_id": 1})
+                from tinydb import Query
+                doc_query = Query()
+                app.config.upsert({"tag_gid": existing_tag["gid"]}, doc_query.doc_id == 1)
             return existing_tag["gid"]
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
@@ -156,7 +166,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
             # Store the new tag_gid in the config table
             with app.db_lock:
-                app.config.upsert({"tag_gid": api_response["gid"]}, {"doc_id": 1})
+                from tinydb import Query
+                doc_query = Query()
+                app.config.upsert({"tag_gid": api_response["gid"]}, doc_query.doc_id == 1)
             return api_response["gid"]
         except ApiException as exception:
             _LOGGER.error(
@@ -261,6 +273,8 @@ def sync_project(app: App, project):
     asana_project_tasks = get_asana_project_tasks(app, asana_project)
 
     # Get the backlog items for the ADO project and team.
+    if app.ado_work_client is None:
+        raise ValueError("app.ado_work_client is None")
     ado_items = app.ado_work_client.get_backlog_level_work_items(
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
@@ -285,7 +299,8 @@ def sync_project(app: App, project):
     try:
         from .pull_request_sync import sync_pull_requests
 
-        sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
+        if asana_project is not None:
+            sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
     except Exception as e:
         _LOGGER.error(
             "Error syncing pull requests for project %s: %s",
@@ -294,12 +309,16 @@ def sync_project(app: App, project):
         )
 
 
-def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
+def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # noqa: C901
     """
     Get the necessary project IDs for syncing.
+
+    Note: Complexity justified by necessary error handling and project/team resolution logic.
     """
     try:
         # Get the ADO project by name.
+        if app.ado_core_client is None:
+            raise ValueError("app.ado_core_client is None")
         ado_project = app.ado_core_client.get_project(project["adoProjectName"])
     except NameError as exception:
         _LOGGER.error(
@@ -309,6 +328,8 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:
 
     try:
         # Get the ADO team by name within the ADO project.
+        if app.ado_core_client is None:
+            raise ValueError("app.ado_core_client is None")
         ado_team = app.ado_core_client.get_team(
             project["adoProjectName"], project["adoTeamName"]
         )
@@ -742,7 +763,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
 
     try:
         result = tasks_api_instance.create_task(body, opts={})
@@ -781,7 +802,7 @@ def update_asana_task(
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: task.url}
+        body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
 
     try:
         # Update the asana task item.

@@ -198,8 +198,10 @@ class TaskItem:
         Returns:
             bool: True if the TaskItem is current, False otherwise.
         """
+        if app.ado_wit_client is None:
+            return False
         ado_task = app.ado_wit_client.get_work_item(self.ado_id)
-        asana_task = get_asana_task(app, self.asana_gid)
+        asana_task = get_asana_task(app, self.asana_gid) if self.asana_gid else None
 
         if not ado_task or not asana_task:
             return False

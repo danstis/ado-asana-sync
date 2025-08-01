@@ -39,15 +39,15 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 
 ### Code Quality Tool Configuration
 
-All linting and code quality tools are configured in `tox.ini` with specific settings:
+All linting and code quality tools are configured in `tox.ini` with specific settings and individual environments:
 
-- **flake8**: Uses `--max-line-length=127` and `--max-complexity=10`
-- **pylint**: Configured for recursive checking
-- **pytest**: Includes coverage reporting with branch coverage
-- **bandit**: Security scanning with recursive mode
-- **mypy**: Static type checking
+- **flake8**: Uses `--max-line-length=127` and `--max-complexity=10` - Run with `poetry run tox -e flake8`
+- **pylint**: Configured for recursive checking - Run with `poetry run tox -e pylint`
+- **pytest**: Includes coverage reporting with branch coverage - Run with `poetry run tox -e pytest`
+- **bandit**: Security scanning with recursive mode - Run with `poetry run tox -e bandit`
+- **mypy**: Static type checking with missing import ignoring - Run with `poetry run tox -e mypy`
 
-**IMPORTANT**: When running linting tools manually, use the exact same settings as defined in `tox.ini` to ensure consistency with CI/CD pipelines.
+**IMPORTANT**: Always use `poetry run tox -e <environment>` to run each tool individually, or `poetry run tox -e flake8,pylint,bandit,mypy` to run multiple tools. This ensures exact consistency with CI/CD pipelines and uses the precise settings defined in `tox.ini`.
 
 ### Markdown Linting Workflow
 
@@ -69,9 +69,13 @@ The markdown formatter ensures:
 - All CI/CD is managed with GitHub Actions, defined in `.github/workflows/`.
 - Workflows must build, analyze (CodeQL), and release the code.
 - **IMPORTANT**: When you modify any code or markdown files, you MUST run quality checks before completing your work:
-  - **Code Quality**: Use `poetry run tox -e flake8,bandit,pylint` to run all linting tools with correct settings
-  - **Markdown**: Use `poetry run mdformat --check *.md` to check formatting, `poetry run mdformat *.md` to fix
-  - **Testing**: Use `poetry run tox -e pytest` to run tests with coverage
+  - **Individual Code Quality Tools**: 
+    - Linting: `poetry run tox -e flake8` and `poetry run tox -e pylint`
+    - Security: `poetry run tox -e bandit`
+    - Type Checking: `poetry run tox -e mypy`
+    - All Together: `poetry run tox -e flake8,pylint,bandit,mypy`
+  - **Testing**: `poetry run tox -e pytest` to run tests with coverage
+  - **Markdown**: `poetry run mdformat --check *.md` to check formatting, `poetry run mdformat *.md` to fix
   - All tools use the exact settings defined in `tox.ini` for consistency with CI/CD
 
 ## Configuration

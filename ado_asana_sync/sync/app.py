@@ -87,7 +87,7 @@ class App:
         self.ado_git_client = None
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
-        self.asana_tag_gid = None
+        self.asana_tag_gid: Optional[str] = None
         self.asana_tag_name = ASANA_TAG_NAME
         self.db: Optional[TinyDB] = None
         self.db_lock = threading.Lock()
