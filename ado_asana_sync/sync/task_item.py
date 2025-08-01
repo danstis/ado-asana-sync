@@ -6,8 +6,6 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Optional
 
-from tinydb import Query
-
 from .app import App
 from .asana import get_asana_task
 
@@ -117,10 +115,13 @@ class TaskItem:
             TaskItem: The TaskItem object with the matching ADO ID.
             None: If there is no matching item.
         """
-        query = Query().ado_id == ado_id
-        if app.matches and app.matches.contains(query):
-            item = app.matches.search(query)
-            return cls(**item[0])
+        def query_func(record):
+            return record.get("ado_id") == ado_id
+
+        if app.matches and app.matches.contains(query_func):
+            items = app.matches.search(query_func)
+            if items:
+                return cls(**items[0])
         return None
 
     @classmethod
@@ -141,14 +142,15 @@ class TaskItem:
         if ado_id is None and asana_gid is None:
             return None
 
-        # Generate the query based on the input.
-        task = Query()
-        query = (task.ado_id == ado_id) | (task.asana_gid == asana_gid)
+        # Generate the query function based on the input.
+        def query_func(record):
+            return (record.get("ado_id") == ado_id) or (record.get("asana_gid") == asana_gid)
 
         # return the first matching item, or return None if not found.
-        if app.matches and app.matches.contains(query):
-            item = app.matches.search(query)
-            return cls(**item[0])
+        if app.matches and app.matches.contains(query_func):
+            items = app.matches.search(query_func)
+            if items:
+                return cls(**items[0])
         return None
 
     def save(self, app: App) -> None:
@@ -174,14 +176,18 @@ class TaskItem:
             "created_date": self.created_date,
             "updated_date": self.updated_date,
         }
-        query = Query().ado_id == task_data["ado_id"]
+
+        def query_func(record):
+            return record.get("ado_id") == task_data["ado_id"]
+
         if app.matches is None:
             raise ValueError("app.matches is None")
-        if app.matches.contains(query):
-            with app.db_lock:
-                app.matches.update(task_data, query)
-        else:
-            with app.db_lock:
+
+        # SQLite database handles its own locking, but we maintain db_lock for compatibility
+        with app.db_lock:
+            if app.matches.contains(query_func):
+                app.matches.update(task_data, query_func)
+            else:
                 app.matches.insert(task_data)
 
     def is_current(self, app: App) -> bool:

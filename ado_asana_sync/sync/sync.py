@@ -52,7 +52,7 @@ CACHE_VALIDITY_DURATION = timedelta(hours=24)
 def start_sync(app: App) -> None:
     """
     Start the synchronization process between Azure DevOps and Asana.
-    
+
     Args:
         app: The App instance containing configuration and clients.
     """
@@ -83,7 +83,7 @@ def start_sync(app: App) -> None:
                 LAST_CACHE_REFRESH = now
                 _LOGGER.info("Custom field cache cleared")
 
-            projects = read_projects()
+            projects = read_projects(app)
             # Use the lower of the _THREAD_COUNT and the length of projects.
             optimal_thread_count = min(len(projects), _THREAD_COUNT)
             _LOGGER.info(
@@ -106,12 +106,24 @@ def start_sync(app: App) -> None:
         sleep(app.sleep_time)
 
 
-def read_projects() -> list:
+def read_projects(app: App) -> list:
     """
-    Read projects from JSON file and return as a list.
+    Read projects from database and return as a list.
+    Falls back to JSON file if database is not available.
     """
     with _TRACER.start_as_current_span("read_projects"):
-        # Initialize an empty list to store the projects
+        # Try to read from database first
+        if app.db:
+            try:
+                projects = app.db.get_projects()
+                if projects:
+                    _LOGGER.debug("Read %d projects from database", len(projects))
+                    return projects
+            except Exception as e:
+                _LOGGER.warning("Failed to read projects from database: %s", e)
+
+        # Fallback to JSON file
+        _LOGGER.info("Reading projects from JSON file as fallback")
         projects = []
 
         # Open the JSON file and load the data
@@ -162,9 +174,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             if app.config is None:
                 raise ValueError("app.config is None")
             with app.db_lock:
-                from tinydb import Query
-                doc_query = Query()
-                app.config.upsert({"tag_gid": existing_tag["gid"]}, doc_query.doc_id == 1)
+                def config_query_func(record):
+                    return record.get("doc_id") == 1
+                app.config.upsert({"tag_gid": existing_tag["gid"]}, config_query_func)
             return existing_tag["gid"]
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
@@ -174,9 +186,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
             # Store the new tag_gid in the config table
             with app.db_lock:
-                from tinydb import Query
-                doc_query = Query()
-                app.config.upsert({"tag_gid": api_response["gid"]}, doc_query.doc_id == 1)
+                def new_config_query_func(record):
+                    return record.get("doc_id") == 1
+                app.config.upsert({"tag_gid": api_response["gid"]}, new_config_query_func)
             return api_response["gid"]
         except ApiException as exception:
             _LOGGER.error(
