@@ -99,8 +99,7 @@ class PullRequestItem:
         """
         if self.reviewer_name:
             return f"Pull Request {self.ado_pr_id}: {self.title} ({self.reviewer_name})"
-        else:
-            return f"Pull Request {self.ado_pr_id}: {self.title}"
+        return f"Pull Request {self.ado_pr_id}: {self.title}"
 
     @property
     def asana_notes_link(self) -> str:

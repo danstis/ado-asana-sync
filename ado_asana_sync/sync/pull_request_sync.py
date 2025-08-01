@@ -63,11 +63,10 @@ def sync_pull_requests(
                     ado_project.name,
                 )
                 return
-            else:
-                _LOGGER.error(
-                    "Failed to get repositories for project %s: %s", ado_project.name, e
-                )
-                return
+            _LOGGER.error(
+                "Failed to get repositories for project %s: %s", ado_project.name, e
+            )
+            return
 
         # Process pull requests for each repository
         for repo in repositories:
@@ -402,7 +401,7 @@ def create_new_pr_reviewer_task(
 def update_existing_pr_reviewer_task(
     app: App,
     pr,
-    repository,
+    _repository,
     reviewer,
     existing_match: PullRequestItem,
     asana_matched_user: dict,
@@ -632,7 +631,7 @@ def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
 
 
 def process_closed_pull_requests(  # noqa: C901
-    app: App, asana_users: List[dict], asana_project: str
+    app: App, _asana_users: List[dict], asana_project: str
 ) -> None:
     """
     Process pull requests that are no longer active but still have tasks in the database.

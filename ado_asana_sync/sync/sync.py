@@ -1,3 +1,5 @@
+"""This module contains the core synchronization logic between Azure DevOps and Asana."""
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -48,6 +50,12 @@ CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
 
 def start_sync(app: App) -> None:
+    """
+    Start the synchronization process between Azure DevOps and Asana.
+    
+    Args:
+        app: The App instance containing configuration and clients.
+    """
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         workspace = get_asana_workspace(app, app.asana_workspace_name)
@@ -844,12 +852,11 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
             )
             CUSTOM_FIELDS_AVAILABLE = False
             return []
-        else:
-            _LOGGER.error(
-                "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
-                exception,
-            )
-            return []
+        _LOGGER.error(
+            "Exception when calling CustomFieldSettingsApi->get_custom_field_settings_for_project: %s\n",
+            exception,
+        )
+        return []
     except Exception as e:
         _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
