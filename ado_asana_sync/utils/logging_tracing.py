@@ -11,11 +11,12 @@ Example usage:
     # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
     _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 """
+
 import os
 import logging
 from opentelemetry import trace
 
-LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
+LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
 
 
 def setup_logging_and_tracing(module_name: str):
@@ -29,9 +30,9 @@ def setup_logging_and_tracing(module_name: str):
         tuple: A tuple containing the logger and tracer objects.
     """
     logging.basicConfig(
-        format='%(asctime)s | %(levelname)-8s | %(module)s:%(funcName)s:%(lineno)d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        level=getattr(logging, LOGLEVEL, logging.INFO)
+        format="%(asctime)s | %(levelname)-8s | %(module)s:%(funcName)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=getattr(logging, LOGLEVEL, logging.INFO),
     )
 
     logger = logging.getLogger(module_name)

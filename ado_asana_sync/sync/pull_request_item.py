@@ -241,6 +241,7 @@ class PullRequestItem:
         # Check if reviewer's vote status has changed
         if reviewer is not None:
             from .pull_request_sync import extract_reviewer_vote
+
             current_review_status = extract_reviewer_vote(reviewer)
             if current_review_status != self.review_status:
                 return False

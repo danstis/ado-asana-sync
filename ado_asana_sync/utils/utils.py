@@ -1,5 +1,5 @@
-""" The util module contains utility functions that are used throughout the application.
-"""
+"""The util module contains utility functions that are used throughout the application."""
+
 from typing import Any
 
 

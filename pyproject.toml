@@ -27,6 +27,9 @@ black = ">=23.7,<26.0"
 mdformat = "^0.7.0"
 mdformat-gfm = "^0.3.0"
 
+[tool.black]
+line-length = 127
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

@@ -62,7 +62,7 @@ class App:
     def __init__(
         self,
         ado_pat: str = "",  # nosec B107
-        ado_url: str = "",  # nosec B107  
+        ado_url: str = "",  # nosec B107
         asana_token: str = "",  # nosec B107
         asana_workspace_name: str = "",  # nosec B107
         applicationinsights_connection_string: Optional[str] = None,

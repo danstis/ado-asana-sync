@@ -35,6 +35,19 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 - **Markdown Files**: Use `mdformat` to ensure consistent formatting
 - **Testing**: Place all tests in the `tests/` directory and use `pytest`
 - **Coverage**: Ensure test coverage remains above 60% for all changes
+- **Tool Configuration**: **ALWAYS** use the settings defined in `tox.ini` for all code quality and linting tools
+
+### Code Quality Tool Configuration
+
+All linting and code quality tools are configured in `tox.ini` with specific settings:
+
+- **flake8**: Uses `--max-line-length=127` and `--max-complexity=10`
+- **pylint**: Configured for recursive checking
+- **pytest**: Includes coverage reporting with branch coverage
+- **bandit**: Security scanning with recursive mode
+- **mypy**: Static type checking
+
+**IMPORTANT**: When running linting tools manually, use the exact same settings as defined in `tox.ini` to ensure consistency with CI/CD pipelines.
 
 ### Markdown Linting Workflow
 
@@ -55,10 +68,11 @@ The markdown formatter ensures:
 
 - All CI/CD is managed with GitHub Actions, defined in `.github/workflows/`.
 - Workflows must build, analyze (CodeQL), and release the code.
-- **IMPORTANT**: When you modify any markdown files (including README.md, CHANGELOG.md, etc.), you MUST run markdown formatting before completing your work:
-  - Use `poetry run mdformat --check *.md` to check formatting
-  - Use `poetry run mdformat *.md` to fix any formatting issues
-  - Commit the formatted files
+- **IMPORTANT**: When you modify any code or markdown files, you MUST run quality checks before completing your work:
+  - **Code Quality**: Use `poetry run tox -e flake8,bandit,pylint` to run all linting tools with correct settings
+  - **Markdown**: Use `poetry run mdformat --check *.md` to check formatting, `poetry run mdformat *.md` to fix
+  - **Testing**: Use `poetry run tox -e pytest` to run tests with coverage
+  - All tools use the exact settings defined in `tox.ini` for consistency with CI/CD
 
 ## Configuration
 
