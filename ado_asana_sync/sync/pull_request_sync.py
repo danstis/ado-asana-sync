@@ -222,6 +222,7 @@ def handle_removed_reviewers(
     # Find all existing PR tasks for this PR
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
+
     def query_func(record):
         return record.get("ado_pr_id") == pr.pull_request_id
     existing_pr_tasks = app.pr_matches.search(query_func)

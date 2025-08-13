@@ -136,10 +136,10 @@ class PullRequestItem:
         def query_func(record):
             # Check for PR ID and reviewer GID combination
             if ado_pr_id is not None and reviewer_gid is not None:
-                if (record.get("ado_pr_id") == ado_pr_id and 
-                    record.get("reviewer_gid") == reviewer_gid):
+                if (record.get("ado_pr_id") == ado_pr_id and
+                        record.get("reviewer_gid") == reviewer_gid):
                     return True
-            
+
             # Check individual conditions
             if ado_pr_id is not None and record.get("ado_pr_id") == ado_pr_id:
                 return True
@@ -147,7 +147,7 @@ class PullRequestItem:
                 return True
             if asana_gid is not None and record.get("asana_gid") == asana_gid:
                 return True
-            
+
             return False
 
         # return the first matching item, or return None if not found.
@@ -186,7 +186,7 @@ class PullRequestItem:
 
         # Query for unique combination of PR ID and reviewer
         def unique_query_func(record):
-            return (record.get("ado_pr_id") == pr_data["ado_pr_id"] and 
+            return (record.get("ado_pr_id") == pr_data["ado_pr_id"] and
                     record.get("reviewer_gid") == pr_data["reviewer_gid"])
 
         if app.pr_matches is None:
