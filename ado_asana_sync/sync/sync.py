@@ -57,6 +57,7 @@ def start_sync(app: App) -> None:
         app: The App instance containing configuration and clients.
     """
     global LAST_CACHE_REFRESH
+    LAST_CACHE_REFRESH = datetime.now(timezone.utc)
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         workspace = get_asana_workspace(app, app.asana_workspace_name)
@@ -326,7 +327,6 @@ def sync_project(app: App, project):
     all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
 
-    db_item_ids = [t["ado_id"] for t in all_tasks]
     _LOGGER.info("Found %d existing matched items in database", len(all_tasks))
     items_not_in_backlog = [t for t in all_tasks if t["ado_id"] not in processed_item_ids]
     _LOGGER.info("Processing %d items that are no longer in backlog", len(items_not_in_backlog))
