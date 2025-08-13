@@ -7,9 +7,13 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, assigned]
+    types: [opened, assigned, labeled]
   pull_request_review:
     types: [submitted]
+  # Events for agent mode (only these work with agent mode)
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0" # Weekly on Sunday
 
 jobs:
   claude-code-action:
@@ -20,9 +24,9 @@ jobs:
       (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write
+      pull-requests: write
+      issues: write
       id-token: write
     steps:
       - name: Checkout repository
@@ -40,9 +44,9 @@ jobs:
           # Optional: add custom trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
           # Optional: add assignee trigger for issues
-          assignee_trigger: "claude"
+          # assignee_trigger: "claude"
           # Optional: add label trigger for issues
-          label_trigger: "claude"
+          # label_trigger: "claude"
           # Optional: add custom environment variables (YAML format)
           # claude_env: |
           #   NODE_ENV: test
@@ -55,3 +59,26 @@ jobs:
           #   actions: read
           # Optional: allow bot users to trigger the action
           # allowed_bots: "dependabot[bot],renovate[bot]"
+
+  # Agent Mode - Automation for workflow_dispatch and schedule events
+  agent-mode-scheduled-task:
+    # Only works with workflow_dispatch or schedule events
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: anthropics/claude-code-action@beta
+        with:
+          mode: agent
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          override_prompt: |
+            Check for outdated dependencies and security vulnerabilities.
+            Create an issue if any critical problems are found.
+          # Agent mode behavior:
+          # - ONLY works with workflow_dispatch and schedule events
+          # - Does NOT work with pull_request, issues, or issue_comment events
+          # - No @claude mention needed for supported events
+          # - Perfect for: scheduled maintenance, manual automation runs
