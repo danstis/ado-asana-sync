@@ -160,6 +160,84 @@ class TestPullRequestItem(unittest.TestCase):
         result = PullRequestItem.search(self.mock_app)
         self.assertIsNone(result)
 
+    def test_search_by_pr_id_only(self):
+        """Test searching by PR ID only."""
+        self.mock_app.pr_matches.contains.return_value = True
+        self.mock_app.pr_matches.search.return_value = [
+            {
+                "ado_pr_id": 456,
+                "ado_repository_id": "repo-789",
+                "title": "Feature addition",
+                "status": "active",
+                "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/456",
+                "reviewer_gid": "asana-user-111",
+                "reviewer_name": "Jane Doe",
+                "asana_gid": "asana-task-202",
+                "asana_updated": "2023-12-02T10:00:00Z",
+                "created_date": "2023-12-02T09:00:00Z",
+                "updated_date": "2023-12-02T10:00:00Z",
+                "review_status": "approved",
+            }
+        ]
+        
+        result = PullRequestItem.search(self.mock_app, ado_pr_id=456)
+        
+        self.assertIsInstance(result, PullRequestItem)
+        self.assertEqual(result.ado_pr_id, 456)
+        self.assertEqual(result.title, "Feature addition")
+
+    def test_search_by_reviewer_gid_only(self):
+        """Test searching by reviewer GID only."""
+        self.mock_app.pr_matches.contains.return_value = True
+        self.mock_app.pr_matches.search.return_value = [
+            {
+                "ado_pr_id": 789,
+                "ado_repository_id": "repo-123",
+                "title": "Bug fix",
+                "status": "completed",
+                "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/789",
+                "reviewer_gid": "asana-user-333",
+                "reviewer_name": "Bob Smith",
+                "asana_gid": "asana-task-303",
+                "asana_updated": "2023-12-03T10:00:00Z",
+                "created_date": "2023-12-03T09:00:00Z",
+                "updated_date": "2023-12-03T10:00:00Z",
+                "review_status": "rejected",
+            }
+        ]
+        
+        result = PullRequestItem.search(self.mock_app, reviewer_gid="asana-user-333")
+        
+        self.assertIsInstance(result, PullRequestItem)
+        self.assertEqual(result.reviewer_gid, "asana-user-333")
+        self.assertEqual(result.reviewer_name, "Bob Smith")
+
+    def test_search_by_asana_gid_only(self):
+        """Test searching by Asana GID only."""
+        self.mock_app.pr_matches.contains.return_value = True
+        self.mock_app.pr_matches.search.return_value = [
+            {
+                "ado_pr_id": 999,
+                "ado_repository_id": "repo-555",
+                "title": "Documentation update",
+                "status": "active",
+                "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/999",
+                "reviewer_gid": "asana-user-444",
+                "reviewer_name": "Alice Johnson",
+                "asana_gid": "asana-task-404",
+                "asana_updated": "2023-12-04T10:00:00Z",
+                "created_date": "2023-12-04T09:00:00Z",
+                "updated_date": "2023-12-04T10:00:00Z",
+                "review_status": "waiting_for_author",
+            }
+        ]
+        
+        result = PullRequestItem.search(self.mock_app, asana_gid="asana-task-404")
+        
+        self.assertIsInstance(result, PullRequestItem)
+        self.assertEqual(result.asana_gid, "asana-task-404")
+        self.assertEqual(result.title, "Documentation update")
+
     def test_save_new_item(self):
         """Test saving a new PullRequestItem."""
         # Setup mocks

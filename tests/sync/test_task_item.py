@@ -214,3 +214,25 @@ class TestTaskItem(unittest.TestCase):
         self.assertEqual(result.title, "Another Test Task")
         # Verify doc_id is not present in the created object
         self.assertFalse(hasattr(result, 'doc_id'))
+
+    def test_search_returns_none_when_items_list_empty(self):
+        """Test that search returns None when matches.search returns empty list."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        app.matches.search.return_value = []  # Empty list
+        
+        result = TaskItem.search(app, ado_id=123)
+        
+        self.assertIsNone(result)
+
+    def test_find_by_ado_id_returns_none_when_items_list_empty(self):
+        """Test that find_by_ado_id returns None when matches.search returns empty list."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        app.matches.search.return_value = []  # Empty list
+        
+        result = TaskItem.find_by_ado_id(app, 123)
+        
+        self.assertIsNone(result)

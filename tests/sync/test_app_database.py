@@ -47,11 +47,15 @@ class TestAppDatabase(unittest.TestCase):
                              'ASANA_TOKEN': 'test_token', 'ASANA_WORKSPACE_NAME': 'test_workspace'})
     @patch('ado_asana_sync.sync.app.configure_azure_monitor')
     @patch('ado_asana_sync.sync.app.os.path.dirname')
-    def test_connect_creates_data_directory(self, mock_dirname, mock_configure):
+    @patch('ado_asana_sync.sync.app.Connection')
+    @patch('ado_asana_sync.sync.app.asana.ApiClient')
+    def test_connect_creates_data_directory(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
         """Test that connect() creates the data directory if it doesn't exist."""
         # Setup mocks
         mock_dirname.return_value = self.test_dir
         mock_configure.return_value = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
         
         # Create app and connect
         app = App()
@@ -90,11 +94,15 @@ class TestAppDatabase(unittest.TestCase):
                              'ASANA_TOKEN': 'test_token', 'ASANA_WORKSPACE_NAME': 'test_workspace'})
     @patch('ado_asana_sync.sync.app.configure_azure_monitor')
     @patch('ado_asana_sync.sync.app.os.path.dirname')
-    def test_connect_migrates_existing_tinydb(self, mock_dirname, mock_configure):
+    @patch('ado_asana_sync.sync.app.Connection')
+    @patch('ado_asana_sync.sync.app.asana.ApiClient')
+    def test_connect_migrates_existing_tinydb(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
         """Test that connect() migrates existing TinyDB data."""
         # Setup mocks
         mock_dirname.return_value = self.test_dir
         mock_configure.return_value = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
         
         # Create existing appdata.json file
         data_dir = os.path.join(self.test_dir, "data")
@@ -149,11 +157,15 @@ class TestAppDatabase(unittest.TestCase):
                              'ASANA_TOKEN': 'test_token', 'ASANA_WORKSPACE_NAME': 'test_workspace'})
     @patch('ado_asana_sync.sync.app.configure_azure_monitor')
     @patch('ado_asana_sync.sync.app.os.path.dirname')
-    def test_sync_projects_from_json(self, mock_dirname, mock_configure):
+    @patch('ado_asana_sync.sync.app.Connection')
+    @patch('ado_asana_sync.sync.app.asana.ApiClient')
+    def test_sync_projects_from_json(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
         """Test that projects are synced from JSON on connect."""
         # Setup mocks
         mock_dirname.return_value = self.test_dir
         mock_configure.return_value = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
         
         # Create projects.json
         data_dir = os.path.join(self.test_dir, "data")
@@ -193,11 +205,15 @@ class TestAppDatabase(unittest.TestCase):
                              'ASANA_TOKEN': 'test_token', 'ASANA_WORKSPACE_NAME': 'test_workspace'})
     @patch('ado_asana_sync.sync.app.configure_azure_monitor')
     @patch('ado_asana_sync.sync.app.os.path.dirname')
-    def test_close_cleans_up_database(self, mock_dirname, mock_configure):
+    @patch('ado_asana_sync.sync.app.Connection')
+    @patch('ado_asana_sync.sync.app.asana.ApiClient')
+    def test_close_cleans_up_database(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
         """Test that close() properly cleans up database resources."""
         # Setup mocks
         mock_dirname.return_value = self.test_dir
         mock_configure.return_value = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
         
         # Create minimal projects.json
         data_dir = os.path.join(self.test_dir, "data")
@@ -222,11 +238,15 @@ class TestAppDatabase(unittest.TestCase):
                              'ASANA_TOKEN': 'test_token', 'ASANA_WORKSPACE_NAME': 'test_workspace'})
     @patch('ado_asana_sync.sync.app.configure_azure_monitor')
     @patch('ado_asana_sync.sync.app.os.path.dirname')
-    def test_sync_projects_handles_missing_file(self, mock_dirname, mock_configure):
+    @patch('ado_asana_sync.sync.app.Connection')
+    @patch('ado_asana_sync.sync.app.asana.ApiClient')
+    def test_sync_projects_handles_missing_file(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
         """Test that missing projects.json is handled gracefully."""
         # Setup mocks
         mock_dirname.return_value = self.test_dir
         mock_configure.return_value = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
         
         # Create data directory but no projects.json
         data_dir = os.path.join(self.test_dir, "data")

@@ -359,6 +359,74 @@ class TestDatabaseWrapper(unittest.TestCase):
         # These files may or may not exist depending on SQLite's internal state
         # The important thing is that close() doesn't crash
 
+    def test_upsert_update_existing_record(self):
+        """Test that upsert updates an existing record."""
+        db = Database(self.db_path)
+        table = db.table('matches')  # Use existing table
+        
+        # Insert initial record
+        test_data = {"name": "John", "age": 25}
+        record_id = table.insert(test_data)
+        
+        # Update via upsert
+        updated_data = {"name": "John", "age": 26}
+        def query_func(record):
+            return record.get("name") == "John"
+        
+        result_id = table.upsert(updated_data, query_func)
+        
+        # Should return the same ID (updated, not inserted)
+        self.assertEqual(result_id, record_id)
+        
+        # Verify the record was updated
+        all_records = table.all()
+        self.assertEqual(len(all_records), 1)
+        self.assertEqual(all_records[0]["age"], 26)
+        
+        db.close()
+
+    def test_search_with_query_function(self):
+        """Test searching records with a query function."""
+        db = Database(self.db_path)
+        table = db.table('matches')  # Use existing table
+        
+        # Insert test data
+        table.insert({"name": "Alice", "age": 30})
+        table.insert({"name": "Bob", "age": 25})
+        table.insert({"name": "Charlie", "age": 35})
+        
+        # Search for people over 30
+        def query_func(record):
+            return record.get("age", 0) > 30
+        
+        results = table.search(query_func)
+        
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Charlie")
+        self.assertEqual(results[0]["age"], 35)
+        
+        db.close()
+
+    def test_contains_method(self):
+        """Test the contains method with query function."""
+        db = Database(self.db_path)
+        table = db.table('matches')  # Use existing table
+        
+        # Insert test data
+        table.insert({"name": "Diana", "status": "active"})
+        
+        # Test contains with existing record
+        def query_exists(record):
+            return record.get("name") == "Diana"
+        
+        def query_not_exists(record):
+            return record.get("name") == "Frank"
+        
+        self.assertTrue(table.contains(query_exists))
+        self.assertFalse(table.contains(query_not_exists))
+        
+        db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
