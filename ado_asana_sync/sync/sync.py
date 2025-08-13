@@ -957,7 +957,7 @@ def cleanup_invalid_work_items(app: App) -> None:
             # Work item IDs should be integers
             int(task["ado_id"])
         except (ValueError, TypeError):
-            invalid_items.append(task.doc_id)
+            invalid_items.append(task["doc_id"])
             _LOGGER.info("Removing invalid work item entry with ID: %s", task["ado_id"])
 
     # Remove invalid items

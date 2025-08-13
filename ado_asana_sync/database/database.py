@@ -103,7 +103,7 @@ class DatabaseTable:
         """Check if any record matches the query function."""
         return len(self.search(query_func)) > 0
 
-    def get(self, doc_id: int = None, **kwargs) -> Optional[Dict[str, Any]]:
+    def get(self, doc_id: Optional[int] = None, **kwargs) -> Optional[Dict[str, Any]]:
         """Get a record by doc_id or other criteria."""
         with self.db.get_connection() as conn:
             if doc_id is not None:
@@ -144,7 +144,7 @@ class DatabaseTable:
 
             return results
 
-    def remove(self, doc_ids: List[int] = None, query_func=None) -> List[int]:
+    def remove(self, doc_ids: Optional[List[int]] = None, query_func=None) -> List[int]:
         """Remove records by doc_ids or query function."""
         with self.db.get_connection() as conn:
             removed_ids = []
@@ -188,7 +188,7 @@ class Database:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._local = threading.local()
-        self._connections = set()  # Track all connections for cleanup
+        self._connections: set[sqlite3.Connection] = set()  # Track all connections for cleanup
         self._lock = threading.Lock()
         self._init_database()
 
