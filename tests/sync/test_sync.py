@@ -1,7 +1,9 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, Mock
+from datetime import datetime, timezone, timedelta
 
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
+from asana.rest import ApiException
 
 from ado_asana_sync.sync.sync import (
     ADOAssignedUser,
@@ -9,6 +11,31 @@ from ado_asana_sync.sync.sync import (
     matching_user,
     get_asana_task_by_name,
     process_backlog_item,
+    read_projects,
+    get_asana_workspace,
+    get_asana_project,
+    create_tag_if_not_existing,
+    get_tag_by_name,
+    get_asana_task_tags,
+    tag_asana_item,
+    get_project_ids,
+    process_backlog_items,
+    create_new_task_mapping,
+    update_existing_task,
+    process_closed_items,
+    is_item_older_than_threshold,
+    remove_mapping,
+    get_existing_match,
+    update_task_if_needed,
+    get_asana_project_tasks,
+    create_asana_task,
+    update_asana_task,
+    get_asana_project_custom_fields,
+    find_custom_field_by_name,
+    cleanup_invalid_work_items,
+    get_asana_users,
+    start_sync,
+    sync_project,
 )
 from ado_asana_sync.sync.task_item import TaskItem
 
@@ -300,130 +327,456 @@ class TestGetAsanaTaskByName(unittest.TestCase):
         self.assertIsNone(result)
 
 
-class TestMatchingUser(unittest.TestCase):
-    # Tests that matching_user returns the matching user when the email exists in the user_list.
-    def test_matching_user_matching_email_exists(self):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
-            {"email": "user2@example.com", "name": "User 2"},
-            {"email": "user3@example.com", "name": "User 3"},
+
+
+class TestReadProjects(unittest.TestCase):
+    """Test read_projects function."""
+
+    @patch('ado_asana_sync.sync.sync.json.load')
+    @patch('builtins.open')
+    @patch('os.path.join')
+    @patch('os.path.dirname')
+    def test_read_projects_from_json_fallback(self, mock_dirname, mock_join, mock_open, mock_json_load):
+        """Test reading projects from JSON file when database is unavailable."""
+        app = MagicMock()
+        app.db = None
+        
+        mock_dirname.return_value = "/base/path"
+        mock_join.return_value = "/base/path/data/projects.json"
+        mock_json_load.return_value = [
+            {
+                "adoProjectName": "TestProject",
+                "adoTeamName": "TestTeam", 
+                "asanaProjectName": "TestAsanaProject"
+            }
         ]
-        ado_user = ADOAssignedUser(display_name="User Two", email="user2@example.com")
+        
+        result = read_projects(app)
+        
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["adoProjectName"], "TestProject")
+        self.assertEqual(result[0]["adoTeamName"], "TestTeam")
+        self.assertEqual(result[0]["asanaProjectName"], "TestAsanaProject")
 
-        result = matching_user(user_list, ado_user)
-
-        self.assertEqual(result, {"email": "user2@example.com", "name": "User 2"})
-
-    # Tests that matching_user returns the matching user when the display name exists in the user_list.
-    def test_matching_user_matching_display_name_exists(self):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
-            {"email": "user2@example.com", "name": "User 2"},
-            {"email": "user3@example.com", "name": "User 3"},
+    def test_read_projects_from_database(self):
+        """Test reading projects from database when available."""
+        app = MagicMock()
+        app.db = MagicMock()
+        app.db.get_projects.return_value = [
+            {
+                "adoProjectName": "DBProject",
+                "adoTeamName": "DBTeam",
+                "asanaProjectName": "DBAsanaProject"
+            }
         ]
-        ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.co.uk")
+        
+        result = read_projects(app)
+        
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["adoProjectName"], "DBProject")
 
-        result = matching_user(user_list, ado_user)
-
-        self.assertEqual(result, {"email": "user2@example.com", "name": "User 2"})
-
-    # Tests that matching_user returns the matching user when the email exists in another case in the user_list.
-    def test_matching_user_matching_email_exists_other_case(self):
-        user_list = [
-            {"email": "USER1@EXAMPLE.COM", "name": "USER 1"},
-            {"email": "USER2@EXAMPLE.COM", "name": "USER 2"},
-            {"email": "USER3@EXAMPLE.COM", "name": "USER 3"},
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    @patch('ado_asana_sync.sync.sync.json.load')
+    @patch('builtins.open')
+    def test_read_projects_database_fallback_on_exception(self, mock_open, mock_json_load, mock_logger):
+        """Test fallback to JSON when database read fails."""
+        app = MagicMock()
+        app.db = MagicMock()
+        app.db.get_projects.side_effect = Exception("DB error")
+        
+        mock_json_load.return_value = [
+            {
+                "adoProjectName": "FallbackProject",
+                "adoTeamName": "FallbackTeam",
+                "asanaProjectName": "FallbackAsanaProject"
+            }
         ]
-        ado_user = ADOAssignedUser(display_name="User Two", email="user2@example.com")
+        
+        result = read_projects(app)
+        
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["adoProjectName"], "FallbackProject")
+        mock_logger.warning.assert_called_once()
 
-        result = matching_user(user_list, ado_user)
 
-        self.assertEqual(result, {"email": "USER2@EXAMPLE.COM", "name": "USER 2"})
+class TestGetAsanaWorkspace(unittest.TestCase):
+    """Test get_asana_workspace function."""
 
-    # Tests that matching_user returns the matching user when the display name exists in another case in the user_list.
-    def test_matching_user_matching_display_name_exists_other_case(self):
-        user_list = [
-            {"email": "USER1@EXAMPLE.COM", "name": "USER 1"},
-            {"email": "USER2@EXAMPLE.COM", "name": "USER 2"},
-            {"email": "USER3@EXAMPLE.COM", "name": "USER 3"},
+    @patch('ado_asana_sync.sync.sync.asana.WorkspacesApi')
+    def test_get_asana_workspace_success(self, mock_workspaces_api):
+        """Test successful workspace retrieval."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_workspaces_api.return_value = mock_api_instance
+        mock_api_instance.get_workspaces.return_value = [
+            {"name": "TestWorkspace", "gid": "12345"},
+            {"name": "OtherWorkspace", "gid": "67890"}
         ]
-        ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.co.uk")
+        
+        result = get_asana_workspace(app, "TestWorkspace")
+        
+        self.assertEqual(result, "12345")
 
-        result = matching_user(user_list, ado_user)
-
-        self.assertEqual(result, {"email": "USER2@EXAMPLE.COM", "name": "USER 2"})
-
-    # Tests that matching_user returns None when the email does not exist in the user_list.
-    def test_matching_user_matching_email_does_not_exist(self):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
-            {"email": "user2@example.com", "name": "User 2"},
-            {"email": "user3@example.com", "name": "User 3"},
+    @patch('ado_asana_sync.sync.sync.asana.WorkspacesApi')
+    def test_get_asana_workspace_not_found(self, mock_workspaces_api):
+        """Test workspace not found raises NameError."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_workspaces_api.return_value = mock_api_instance
+        mock_api_instance.get_workspaces.return_value = [
+            {"name": "OtherWorkspace", "gid": "67890"}
         ]
-        ado_user = ADOAssignedUser(display_name="User 4", email="user4@example.com")
+        
+        with self.assertRaises(NameError):
+            get_asana_workspace(app, "NonexistentWorkspace")
 
-        result = matching_user(user_list, ado_user)
+    @patch('ado_asana_sync.sync.sync.asana.WorkspacesApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_get_asana_workspace_api_exception(self, mock_logger, mock_workspaces_api):
+        """Test API exception handling."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_workspaces_api.return_value = mock_api_instance
+        mock_api_instance.get_workspaces.side_effect = ApiException("API Error")
+        
+        with self.assertRaises(ValueError):
+            get_asana_workspace(app, "TestWorkspace")
 
+
+class TestGetAsanaProject(unittest.TestCase):
+    """Test get_asana_project function."""
+
+    @patch('ado_asana_sync.sync.sync.asana.ProjectsApi')
+    def test_get_asana_project_success(self, mock_projects_api):
+        """Test successful project retrieval."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_projects_api.return_value = mock_api_instance
+        mock_api_instance.get_projects.return_value = [
+            {"name": "TestProject", "gid": "project123"},
+            {"name": "OtherProject", "gid": "project456"}
+        ]
+        
+        result = get_asana_project(app, "workspace123", "TestProject")
+        
+        self.assertEqual(result, "project123")
+
+    @patch('ado_asana_sync.sync.sync.asana.ProjectsApi')
+    def test_get_asana_project_not_found(self, mock_projects_api):
+        """Test project not found raises NameError."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_projects_api.return_value = mock_api_instance
+        mock_api_instance.get_projects.return_value = [
+            {"name": "OtherProject", "gid": "project456"}
+        ]
+        
+        with self.assertRaises(NameError):
+            get_asana_project(app, "workspace123", "NonexistentProject")
+
+    @patch('ado_asana_sync.sync.sync.asana.ProjectsApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_get_asana_project_api_exception(self, mock_logger, mock_projects_api):
+        """Test API exception handling returns None."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_projects_api.return_value = mock_api_instance
+        mock_api_instance.get_projects.side_effect = ApiException("API Error")
+        
+        result = get_asana_project(app, "workspace123", "TestProject")
+        
         self.assertIsNone(result)
 
-    # Tests that matching_user returns None when the user_list is empty.
-    def test_matching_user_user_list_empty(self):
-        user_list = []
-        ado_user = ADOAssignedUser(display_name="User 1", email="user1@example.com")
 
-        result = matching_user(user_list, ado_user)
+class TestCreateTagIfNotExisting(unittest.TestCase):
+    """Test create_tag_if_not_existing function."""
 
+    def test_create_tag_existing_in_config(self):
+        """Test when tag_gid exists in config."""
+        app = MagicMock()
+        app.config.get.return_value = {"tag_gid": "existing_tag_123"}
+        
+        result = create_tag_if_not_existing(app, "workspace123", "testtag")
+        
+        self.assertEqual(result, "existing_tag_123")
+
+    @patch('ado_asana_sync.sync.sync.get_tag_by_name')
+    def test_create_tag_existing_tag_found(self, mock_get_tag):
+        """Test when tag exists in Asana."""
+        app = MagicMock()
+        app.config.get.return_value = {}
+        mock_get_tag.return_value = {"gid": "found_tag_456", "name": "testtag"}
+        
+        result = create_tag_if_not_existing(app, "workspace123", "testtag")
+        
+        self.assertEqual(result, "found_tag_456")
+
+    @patch('ado_asana_sync.sync.sync.get_tag_by_name')
+    @patch('ado_asana_sync.sync.sync.asana.TagsApi')
+    def test_create_new_tag_success(self, mock_tags_api, mock_get_tag):
+        """Test creating a new tag successfully."""
+        app = MagicMock()
+        app.config.get.return_value = {}
+        mock_get_tag.return_value = None
+        
+        mock_api_instance = MagicMock()
+        mock_tags_api.return_value = mock_api_instance
+        mock_api_instance.create_tag_for_workspace.return_value = {"gid": "new_tag_789"}
+        
+        result = create_tag_if_not_existing(app, "workspace123", "testtag")
+        
+        self.assertEqual(result, "new_tag_789")
+
+    @patch('ado_asana_sync.sync.sync.get_tag_by_name')
+    @patch('ado_asana_sync.sync.sync.asana.TagsApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_create_new_tag_api_exception(self, mock_logger, mock_tags_api, mock_get_tag):
+        """Test API exception when creating tag."""
+        app = MagicMock()
+        app.config.get.return_value = {}
+        mock_get_tag.return_value = None
+        
+        mock_api_instance = MagicMock()
+        mock_tags_api.return_value = mock_api_instance
+        mock_api_instance.create_tag_for_workspace.side_effect = ApiException("API Error")
+        
+        result = create_tag_if_not_existing(app, "workspace123", "testtag")
+        
         self.assertIsNone(result)
 
-    # Tests that matching_user returns None when the email is an empty string.
-    def test_matching_user_email_empty(self):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
-            {"email": "user2@example.com", "name": "User 2"},
-            {"email": "user3@example.com", "name": "User 3"},
+
+class TestGetTagByName(unittest.TestCase):
+    """Test get_tag_by_name function."""
+
+    @patch('ado_asana_sync.sync.sync.asana.TagsApi')
+    def test_get_tag_by_name_found(self, mock_tags_api):
+        """Test finding tag by name."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_tags_api.return_value = mock_api_instance
+        mock_api_instance.get_tags.return_value = [
+            {"name": "testtag", "gid": "tag123"},
+            {"name": "othertag", "gid": "tag456"}
         ]
-        ado_user = ADOAssignedUser(display_name="", email="")
+        
+        result = get_tag_by_name(app, "workspace123", "testtag")
+        
+        self.assertEqual(result, {"name": "testtag", "gid": "tag123"})
 
-        result = matching_user(user_list, ado_user)
-
+    @patch('ado_asana_sync.sync.sync.asana.TagsApi')
+    def test_get_tag_by_name_not_found(self, mock_tags_api):
+        """Test tag not found returns None."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_tags_api.return_value = mock_api_instance
+        mock_api_instance.get_tags.return_value = [
+            {"name": "othertag", "gid": "tag456"}
+        ]
+        
+        result = get_tag_by_name(app, "workspace123", "nonexistenttag")
+        
         self.assertIsNone(result)
 
-    # Tests that matching_user returns the user when the user_list contains only one user and the email matches that user's email.
-    def test_matching_user_user_list_contains_one_user_email_matches(self):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
+
+class TestGetAsanaTaskTags(unittest.TestCase):
+    """Test get_asana_task_tags function."""
+
+    @patch('ado_asana_sync.sync.sync.asana.TagsApi')
+    def test_get_asana_task_tags_success(self, mock_tags_api):
+        """Test successful retrieval of task tags."""
+        app = MagicMock()
+        task = MagicMock()
+        task.asana_gid = "task123"
+        
+        mock_api_instance = MagicMock()
+        mock_tags_api.return_value = mock_api_instance
+        mock_api_instance.get_tags_for_task.return_value = [
+            {"name": "tag1", "gid": "tag123"},
+            {"name": "tag2", "gid": "tag456"}
         ]
-        ado_user = ADOAssignedUser(display_name="User 1", email="user1@example.com")
+        
+        result = get_asana_task_tags(app, task)
+        
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "tag1")
 
-        result = matching_user(user_list, ado_user)
+    @patch('ado_asana_sync.sync.sync.asana.TagsApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_get_asana_task_tags_api_exception(self, mock_logger, mock_tags_api):
+        """Test API exception handling."""
+        app = MagicMock()
+        task = MagicMock()
+        task.asana_gid = "task123"
+        
+        mock_api_instance = MagicMock()
+        mock_tags_api.return_value = mock_api_instance
+        mock_api_instance.get_tags_for_task.side_effect = ApiException("API Error")
+        
+        result = get_asana_task_tags(app, task)
+        
+        self.assertEqual(result, [])
 
-        self.assertEqual(result, {"email": "user1@example.com", "name": "User 1"})
 
-    # Tests that matching_user returns None when the user_list contains only one user and the email does not match that user's email.
-    def test_matching_user_user_list_contains_one_user_email_does_not_match(
-        self,
-    ):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
+class TestIsItemOlderThanThreshold(unittest.TestCase):
+    """Test is_item_older_than_threshold function."""
+
+    @patch('ado_asana_sync.sync.sync._SYNC_THRESHOLD', 30)
+    def test_item_older_than_threshold(self):
+        """Test item older than threshold."""
+        old_date = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+        wi = {"updated_date": old_date}
+        
+        result = is_item_older_than_threshold(wi)
+        
+        self.assertTrue(result)
+
+    @patch('ado_asana_sync.sync.sync._SYNC_THRESHOLD', 30)
+    def test_item_newer_than_threshold(self):
+        """Test item newer than threshold."""
+        recent_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        wi = {"updated_date": recent_date}
+        
+        result = is_item_older_than_threshold(wi)
+        
+        self.assertFalse(result)
+
+
+class TestRemoveMapping(unittest.TestCase):
+    """Test remove_mapping function."""
+
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    @patch('ado_asana_sync.sync.sync._SYNC_THRESHOLD', 30)
+    def test_remove_mapping(self, mock_logger):
+        """Test removing mapping from database."""
+        app = MagicMock()
+        wi = {
+            "item_type": "Bug",
+            "title": "Test Item",
+            "doc_id": 123
+        }
+        
+        remove_mapping(app, wi)
+        
+        app.matches.remove.assert_called_once_with(doc_ids=[wi["doc_id"]])
+
+
+class TestGetAsanaProjectTasks(unittest.TestCase):
+    """Test get_asana_project_tasks function."""
+
+    @patch('ado_asana_sync.sync.sync.asana.TasksApi')
+    def test_get_asana_project_tasks_success(self, mock_tasks_api):
+        """Test successful retrieval of project tasks."""
+        app = MagicMock()
+        app.asana_page_size = 50
+        
+        mock_api_instance = MagicMock()
+        mock_tasks_api.return_value = mock_api_instance
+        mock_api_instance.get_tasks.return_value = [
+            {"name": "Task 1", "gid": "task123"},
+            {"name": "Task 2", "gid": "task456"}
         ]
-        ado_user = ADOAssignedUser(display_name="User 2", email="user2@example.com")
+        
+        result = get_asana_project_tasks(app, "project123")
+        
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "Task 1")
 
-        result = matching_user(user_list, ado_user)
+    @patch('ado_asana_sync.sync.sync.asana.TasksApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_get_asana_project_tasks_api_exception(self, mock_logger, mock_tasks_api):
+        """Test API exception handling."""
+        app = MagicMock()
+        app.asana_page_size = 50
+        
+        mock_api_instance = MagicMock()
+        mock_tasks_api.return_value = mock_api_instance
+        mock_api_instance.get_tasks.side_effect = ApiException("API Error")
+        
+        result = get_asana_project_tasks(app, "project123")
+        
+        self.assertEqual(result, [])
 
-        self.assertIsNone(result)
 
-    # Tests that matching_user returns None when the ado_user is None.
-    def test_matching_user_ado_user_none(self):
-        user_list = [
-            {"email": "user1@example.com", "name": "User 1"},
-            {"email": "user2@example.com", "name": "User 2"},
-            {"email": "user3@example.com", "name": "User 3"},
+class TestGetAsanaUsers(unittest.TestCase):
+    """Test get_asana_users function."""
+
+    @patch('ado_asana_sync.sync.sync.asana.UsersApi')
+    def test_get_asana_users_success(self, mock_users_api):
+        """Test successful retrieval of Asana users."""
+        app = MagicMock()
+        
+        mock_api_instance = MagicMock()
+        mock_users_api.return_value = mock_api_instance
+        mock_api_instance.get_users.return_value = [
+            {"name": "User 1", "email": "user1@example.com"},
+            {"name": "User 2", "email": "user2@example.com"}
         ]
-        ado_user = None
+        
+        result = get_asana_users(app, "workspace123")
+        
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "User 1")
 
-        result = matching_user(user_list, ado_user)  # NOSONAR
+    @patch('ado_asana_sync.sync.sync.asana.UsersApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_get_asana_users_api_exception(self, mock_logger, mock_users_api):
+        """Test API exception handling."""
+        app = MagicMock()
+        
+        mock_api_instance = MagicMock()
+        mock_users_api.return_value = mock_api_instance
+        mock_api_instance.get_users.side_effect = ApiException("API Error")
+        
+        result = get_asana_users(app, "workspace123")
+        
+        self.assertEqual(result, [])
 
-        self.assertIsNone(result)
+    @patch('ado_asana_sync.sync.sync.asana.UsersApi')
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_get_asana_users_unexpected_exception(self, mock_logger, mock_users_api):
+        """Test unexpected exception handling."""
+        app = MagicMock()
+        
+        mock_api_instance = MagicMock()
+        mock_users_api.return_value = mock_api_instance
+        mock_api_instance.get_users.side_effect = Exception("Unexpected error")
+        
+        result = get_asana_users(app, "workspace123")
+        
+        self.assertEqual(result, [])
+
+
+class TestCleanupInvalidWorkItems(unittest.TestCase):
+    """Test cleanup_invalid_work_items function."""
+
+    def test_cleanup_invalid_work_items(self):
+        """Test cleanup of invalid work items."""
+        app = MagicMock()
+        app.matches.all.return_value = [
+            {"ado_id": 123, "doc_id": 1},  # Valid integer ID
+            {"ado_id": "invalid", "doc_id": 2},  # Invalid string ID
+            {"ado_id": 456, "doc_id": 3},  # Valid integer ID
+            {"ado_id": None, "doc_id": 4}  # Invalid None ID
+        ]
+        
+        cleanup_invalid_work_items(app)
+        
+        # Should remove doc_ids 2 and 4 (invalid items)
+        app.matches.remove.assert_called_once_with(doc_ids=[2, 4])
+
+    @patch('ado_asana_sync.sync.sync._LOGGER')
+    def test_cleanup_invalid_work_items_no_invalid_items(self, mock_logger):
+        """Test cleanup when no invalid items exist."""
+        app = MagicMock()
+        app.matches.all.return_value = [
+            {"ado_id": 123, "doc_id": 1},
+            {"ado_id": 456, "doc_id": 2}
+        ]
+        
+        cleanup_invalid_work_items(app)
+        
+        # Should not call remove
+        app.matches.remove.assert_not_called()
 
 
 if __name__ == "__main__":

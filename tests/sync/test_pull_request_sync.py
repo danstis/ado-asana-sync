@@ -627,6 +627,92 @@ class TestPullRequestSync(unittest.TestCase):
         # Should not have custom_fields in the update data
         self.assertNotIn("custom_fields", update_call_args[0]["data"])
 
+    def test_handle_removed_reviewers_filters_doc_id(self):
+        """Regression test: Ensure handle_removed_reviewers filters doc_id from database results."""
+        from ado_asana_sync.sync.pull_request_sync import handle_removed_reviewers
+        
+        # Mock PR object
+        mock_pr = Mock()
+        mock_pr.pull_request_id = 123
+        
+        # Mock app with pr_matches that returns results with doc_id
+        mock_app = Mock()
+        mock_pr_matches = Mock()
+        mock_app.pr_matches = mock_pr_matches
+        
+        # Mock database results that include doc_id field
+        mock_db_results = [
+            {
+                "ado_pr_id": 123,
+                "ado_repository_id": "repo-456",
+                "title": "Test PR",
+                "status": "active",
+                "url": "https://example.com/pr/123",
+                "reviewer_gid": "removed-reviewer-123",
+                "reviewer_name": "Removed Reviewer",
+                "asana_gid": "asana-task-123",
+                "doc_id": 555  # This should be filtered out
+            }
+        ]
+        mock_pr_matches.search.return_value = mock_db_results
+        
+        current_reviewer_gids = ["active-reviewer-456"]  # removed-reviewer-123 is not in this list
+        
+        # Mock additional requirements for the function
+        mock_app.asana_tag_gid = None  # This will prevent the update call but allow the test to run
+        asana_project = {"gid": "project-123"}  # Required parameter
+        
+        # This should not raise an error about unexpected doc_id argument
+        # The key test is that PullRequestItem creation doesn't fail
+        try:
+            handle_removed_reviewers(mock_app, mock_pr, current_reviewer_gids, asana_project)
+            # If we get here without exception, the doc_id filtering worked
+            success = True
+        except TypeError as e:
+            if "unexpected keyword argument 'doc_id'" in str(e):
+                success = False
+            else:
+                raise  # Re-raise if it's a different error
+        
+        self.assertTrue(success, "PullRequestItem creation should not fail due to doc_id")
+
+    def test_process_closed_pull_requests_filters_doc_id(self):
+        """Regression test: Ensure process_closed_pull_requests filters doc_id from database results."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock app with pr_matches that returns results with doc_id
+        mock_app = Mock()
+        mock_app.pr_matches.all.return_value = [
+            {
+                "ado_pr_id": 789,
+                "ado_repository_id": "repo-789",
+                "title": "Closed PR",
+                "status": "completed",
+                "url": "https://example.com/pr/789",
+                "reviewer_gid": "reviewer-789",
+                "reviewer_name": "Test Reviewer",
+                "asana_gid": "asana-task-789",
+                "doc_id": 333  # This should be filtered out
+            }
+        ]
+        
+        # Mock required parameters
+        asana_users = []
+        asana_project = {"gid": "project-789"}
+        
+        # The key test is that PullRequestItem creation doesn't fail due to doc_id
+        try:
+            process_closed_pull_requests(mock_app, asana_users, asana_project)
+            # If we get here without a TypeError about doc_id, the filtering worked
+            success = True
+        except TypeError as e:
+            if "unexpected keyword argument 'doc_id'" in str(e):
+                success = False
+            else:
+                raise  # Re-raise if it's a different error
+        
+        self.assertTrue(success, "PullRequestItem creation should not fail due to doc_id")
+
 
 if __name__ == "__main__":
     unittest.main()

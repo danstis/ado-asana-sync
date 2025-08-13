@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.task_item import TaskItem
@@ -156,4 +156,406 @@ class TestTaskItem(unittest.TestCase):
         # Call the search method with an ado_id.
         result = TaskItem.search(app, asana_gid="987654")
 
+        self.assertIsNone(result)
+
+    def test_search_filters_doc_id_from_database_results(self):
+        """Regression test: Ensure doc_id is filtered out when creating TaskItem from database results."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        
+        # Mock database result that includes doc_id (this would cause constructor error if not filtered)
+        mock_db_result = {
+            "ado_id": 123,
+            "ado_rev": 5,
+            "title": "Test Task",
+            "item_type": "Bug",
+            "url": "https://example.com/123",
+            "asana_gid": "asana-123",
+            "asana_updated": "2023-12-01T10:00:00Z",
+            "assigned_to": "user-456",
+            "created_date": "2023-12-01T09:00:00Z",
+            "updated_date": "2023-12-01T10:00:00Z",
+            "doc_id": 999  # This should be filtered out
+        }
+        app.matches.search.return_value = [mock_db_result]
+        
+        # This should not raise an error about unexpected doc_id argument
+        result = TaskItem.search(app, ado_id=123)
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ado_id, 123)
+        self.assertEqual(result.title, "Test Task")
+        # Verify doc_id is not present in the created object
+        self.assertFalse(hasattr(result, 'doc_id'))
+
+    def test_find_by_ado_id_filters_doc_id_from_database_results(self):
+        """Regression test: Ensure doc_id is filtered out in find_by_ado_id method."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        
+        # Mock database result with doc_id
+        mock_db_result = {
+            "ado_id": 456,
+            "ado_rev": 3,
+            "title": "Another Test Task",
+            "item_type": "User Story",
+            "url": "https://example.com/456",
+            "doc_id": 777  # This should be filtered out
+        }
+        app.matches.search.return_value = [mock_db_result]
+        
+        # This should not raise an error about unexpected doc_id argument
+        result = TaskItem.find_by_ado_id(app, 456)
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ado_id, 456)
+        self.assertEqual(result.title, "Another Test Task")
+        # Verify doc_id is not present in the created object
+        self.assertFalse(hasattr(result, 'doc_id'))
+
+    def test_search_returns_none_when_items_list_empty(self):
+        """Test that search returns None when matches.search returns empty list."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        app.matches.search.return_value = []  # Empty list
+        
+        result = TaskItem.search(app, ado_id=123)
+        
+        self.assertIsNone(result)
+
+    def test_find_by_ado_id_returns_none_when_items_list_empty(self):
+        """Test that find_by_ado_id returns None when matches.search returns empty list."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        app.matches.search.return_value = []  # Empty list
+        
+        result = TaskItem.find_by_ado_id(app, 123)
+        
+        self.assertIsNone(result)
+
+    def test_save_new_item(self):
+        """Test saving a new TaskItem."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = False
+        app.db_lock = MagicMock()
+        app.db_lock.__enter__ = MagicMock(return_value=app.db_lock)
+        app.db_lock.__exit__ = MagicMock(return_value=None)
+        
+        task_item = TaskItem(
+            ado_id=456,
+            ado_rev=2,
+            title="New Task",
+            item_type="Feature",
+            url="https://example.com/456"
+        )
+        
+        task_item.save(app)
+        
+        # Verify insert was called
+        app.matches.insert.assert_called_once()
+        call_args = app.matches.insert.call_args[0][0]
+        self.assertEqual(call_args["ado_id"], 456)
+        self.assertEqual(call_args["title"], "New Task")
+
+    def test_save_existing_item(self):
+        """Test saving an existing TaskItem."""
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = True
+        app.db_lock = MagicMock()
+        app.db_lock.__enter__ = MagicMock(return_value=app.db_lock)
+        app.db_lock.__exit__ = MagicMock(return_value=None)
+        
+        task_item = TaskItem(
+            ado_id=789,
+            ado_rev=3,
+            title="Updated Task",
+            item_type="Bug",
+            url="https://example.com/789"
+        )
+        
+        task_item.save(app)
+        
+        # Verify update was called
+        app.matches.update.assert_called_once()
+        call_args = app.matches.update.call_args[0][0]
+        self.assertEqual(call_args["ado_id"], 789)
+        self.assertEqual(call_args["title"], "Updated Task")
+
+    def test_save_with_none_app_matches_raises_error(self):
+        """Test save raises ValueError when app.matches is None."""
+        app = MagicMock()
+        app.matches = None
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=1,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123"
+        )
+        
+        with self.assertRaises(ValueError) as context:
+            task_item.save(app)
+        
+        self.assertIn("app.matches is None", str(context.exception))
+
+    def test_is_current_true_when_up_to_date(self):
+        """Test is_current returns True when task is up to date."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+        
+        # Mock ADO task
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+        app.ado_wit_client.get_work_item.return_value = mock_ado_task
+        
+        # Mock Asana task  
+        mock_asana_task = {"modified_at": "2023-12-01T10:00:00Z"}
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,  # Same as mock
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z"  # Same as mock
+        )
+        
+        with patch('ado_asana_sync.sync.task_item.get_asana_task', return_value=mock_asana_task):
+            result = task_item.is_current(app)
+        
+        self.assertTrue(result)
+
+    def test_is_current_false_when_ado_rev_differs(self):
+        """Test is_current returns False when ADO revision differs."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+        
+        # Mock ADO task with different revision
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 6  # Different from task_item.ado_rev
+        app.ado_wit_client.get_work_item.return_value = mock_ado_task
+        
+        # Mock Asana task
+        mock_asana_task = {"modified_at": "2023-12-01T10:00:00Z"}
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,  # Different from mock
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z"
+        )
+        
+        with patch('ado_asana_sync.sync.task_item.get_asana_task', return_value=mock_asana_task):
+            result = task_item.is_current(app)
+        
+        self.assertFalse(result)
+
+    def test_is_current_false_when_asana_modified_differs(self):
+        """Test is_current returns False when Asana modified_at differs."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+        
+        # Mock ADO task
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+        app.ado_wit_client.get_work_item.return_value = mock_ado_task
+        
+        # Mock Asana task with different modified_at
+        mock_asana_task = {"modified_at": "2023-12-01T11:00:00Z"}  # Different time
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z"  # Different from mock
+        )
+        
+        with patch('ado_asana_sync.sync.task_item.get_asana_task', return_value=mock_asana_task):
+            result = task_item.is_current(app)
+        
+        self.assertFalse(result)
+
+    def test_is_current_false_when_ado_wit_client_none(self):
+        """Test is_current returns False when app.ado_wit_client is None."""
+        app = MagicMock()
+        app.ado_wit_client = None
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123"
+        )
+        
+        result = task_item.is_current(app)
+        
+        self.assertFalse(result)
+
+    def test_is_current_false_when_ado_task_none(self):
+        """Test is_current returns False when ADO task is None."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+        app.ado_wit_client.get_work_item.return_value = None
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123"
+        )
+        
+        result = task_item.is_current(app)
+        
+        self.assertFalse(result)
+
+    def test_is_current_false_when_asana_task_none(self):
+        """Test is_current returns False when Asana task is None."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+        
+        # Mock ADO task
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+        app.ado_wit_client.get_work_item.return_value = mock_ado_task
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123"
+        )
+        
+        with patch('ado_asana_sync.sync.task_item.get_asana_task', return_value=None):
+            result = task_item.is_current(app)
+        
+        self.assertFalse(result)
+
+    def test_is_current_true_when_no_asana_gid(self):
+        """Test is_current behavior when asana_gid is None."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+        
+        # Mock ADO task
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+        app.ado_wit_client.get_work_item.return_value = mock_ado_task
+        
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid=None  # No Asana GID
+        )
+        
+        result = task_item.is_current(app)
+        
+        # Should return False because asana_task will be None
+        self.assertFalse(result)
+
+    def test_equality_with_different_objects(self):
+        """Test equality comparison with different object types."""
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=1,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123"
+        )
+        
+        # Test with string
+        self.assertNotEqual(task_item, "not a task item")
+        
+        # Test with dict
+        self.assertNotEqual(task_item, {"ado_id": 123})
+        
+        # Test with None
+        self.assertNotEqual(task_item, None)
+
+    def test_equality_with_matching_task_items(self):
+        """Test equality comparison with matching TaskItems."""
+        task_item1 = TaskItem(
+            ado_id=123,
+            ado_rev=1,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z",
+            assigned_to="user-456",
+            created_date="2023-12-01T09:00:00Z",
+            updated_date="2023-12-01T10:00:00Z"
+        )
+        
+        task_item2 = TaskItem(
+            ado_id=123,
+            ado_rev=1,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z",
+            assigned_to="user-456",
+            created_date="2023-12-01T09:00:00Z",
+            updated_date="2023-12-01T10:00:00Z"
+        )
+        
+        self.assertEqual(task_item1, task_item2)
+
+    def test_equality_with_different_task_items(self):
+        """Test equality comparison with different TaskItems."""
+        task_item1 = TaskItem(
+            ado_id=123,
+            ado_rev=1,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123"
+        )
+        
+        task_item2 = TaskItem(
+            ado_id=456,  # Different ID
+            ado_rev=1,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/456"
+        )
+        
+        self.assertNotEqual(task_item1, task_item2)
+
+    def test_find_by_ado_id_with_no_matches_table(self):
+        """Test find_by_ado_id when app.matches is None."""
+        app = MagicMock()
+        app.matches = None
+        
+        result = TaskItem.find_by_ado_id(app, 123)
+        
+        self.assertIsNone(result)
+
+    def test_search_with_no_matches_table(self):
+        """Test search when app.matches is None."""
+        app = MagicMock()
+        app.matches = None
+        
+        result = TaskItem.search(app, ado_id=123)
+        
         self.assertIsNone(result)
