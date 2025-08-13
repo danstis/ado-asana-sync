@@ -33,7 +33,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2
 
       - name: Run Claude PR Action
         uses: anthropics/claude-code-action@beta
@@ -71,6 +71,10 @@ jobs:
       issues: write
       id-token: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Need at least 2 commits to analyze the latest
       - uses: anthropics/claude-code-action@beta
         with:
           mode: agent
