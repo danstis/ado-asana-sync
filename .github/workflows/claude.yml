@@ -74,7 +74,7 @@ jobs:
       - uses: anthropics/claude-code-action@beta
         with:
           mode: agent
-          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           override_prompt: |
             Check for outdated dependencies and security vulnerabilities.
             Create an issue if any critical problems are found.
