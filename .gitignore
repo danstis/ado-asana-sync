@@ -111,5 +111,4 @@ venv.bak/
 # Other
 .aider*
 *.ignore*
-data/appdata.json
-data/projects.json
+data/
