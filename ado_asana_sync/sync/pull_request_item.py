@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from .app import App
 from .asana import get_asana_task
+from .pull_request_sync import extract_reviewer_vote
 
 
 class PullRequestItem:
@@ -228,13 +229,11 @@ class PullRequestItem:
             return False
 
         # Check if Asana task has been updated
-        if asana_task and asana_task["modified_at"] != self.asana_updated:
+        if asana_task and asana_task.get("modified_at") != self.asana_updated:
             return False
 
         # Check if reviewer's vote status has changed
         if reviewer is not None:
-            from .pull_request_sync import extract_reviewer_vote
-
             current_review_status = extract_reviewer_vote(reviewer)
             if current_review_status != self.review_status:
                 return False

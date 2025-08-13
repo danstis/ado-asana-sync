@@ -30,7 +30,7 @@ app = App()
 app.connect()
 
 
-def cleanup_handler(signum=None, frame=None):
+def cleanup_handler(_signum=None, _frame=None):
     """Handle cleanup on shutdown."""
     _LOGGER.info("Shutting down application...")
     app.close()
@@ -39,7 +39,7 @@ def cleanup_handler(signum=None, frame=None):
 
 
 # Register cleanup handlers
-atexit.register(lambda: app.close())
+atexit.register(app.close)
 signal.signal(signal.SIGINT, cleanup_handler)
 signal.signal(signal.SIGTERM, cleanup_handler)
 

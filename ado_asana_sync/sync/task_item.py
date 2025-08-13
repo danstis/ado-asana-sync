@@ -218,7 +218,7 @@ class TaskItem:
 
         if (
             ado_task.rev != self.ado_rev
-            or asana_task["modified_at"] != self.asana_updated
+            or (asana_task and asana_task.get("modified_at")) != self.asana_updated
         ):
             return False
 
