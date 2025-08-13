@@ -655,7 +655,7 @@ def remove_mapping(app, wi):
         _SYNC_THRESHOLD,
     )
     with app.db_lock:
-        app.matches.remove(doc_ids=[wi.doc_id])
+        app.matches.remove(doc_ids=[wi["doc_id"]])
 
 
 def get_existing_match(app, wi):
