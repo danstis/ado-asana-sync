@@ -12,8 +12,8 @@ on:
     types: [submitted]
   # Events for agent mode (only these work with agent mode)
   workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * 0" # Weekly on Sunday
+  # schedule:
+  #   - cron: "0 0 * * 0" # Weekly on Sunday
 
 jobs:
   claude-code-action:
@@ -64,6 +64,7 @@ jobs:
   # Agent Mode - Automation for workflow_dispatch and schedule events
   agent-mode-scheduled-task:
     # Only works with workflow_dispatch or schedule events
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
