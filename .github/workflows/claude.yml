@@ -64,7 +64,7 @@ jobs:
   # Agent Mode - Automation for workflow_dispatch and schedule events
   agent-mode-scheduled-task:
     # Only works with workflow_dispatch or schedule events
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
