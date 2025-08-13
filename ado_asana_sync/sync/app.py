@@ -19,8 +19,14 @@ from tinydb.table import Table
 from azure.devops.connection import Connection  # type: ignore
 from azure.monitor.opentelemetry import configure_azure_monitor
 
+from ado_asana_sync.utils.logging_tracing import (
+    setup_logging_and_tracing,
+    log_with_context,
+    log_performance
+)
+
 # _LOGGER is the logging instance for this file.
-_LOGGER = logging.getLogger(__name__)
+_LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 # ASANA_PAGE_SIZE contains the default value for the page size to send to the Asana API.
 ASANA_PAGE_SIZE = 100
 # ASANA_TAG_NAME defined the name of the tag to add to synced items.
@@ -97,50 +103,104 @@ class App:
         self.config: Optional[Table] = None
         self.sleep_time = SLEEP_TIME
 
+        # Validate required configuration with enhanced logging
+        missing_configs = []
         if not self.ado_pat:
-            _LOGGER.fatal("ADO_PAT must be provided")
-            raise ValueError("ADO_PAT must be provided")
-
+            missing_configs.append("ADO_PAT")
         if not self.ado_url:
-            _LOGGER.fatal("ADO_URL must be provided")
-            raise ValueError("ADO_URL must be provided")
-
+            missing_configs.append("ADO_URL") 
         if not self.asana_token:
-            _LOGGER.fatal("ASANA_TOKEN must be provided")
-            raise ValueError("ASANA_TOKEN must be provided")
-
+            missing_configs.append("ASANA_TOKEN")
         if not self.asana_workspace_name:
-            _LOGGER.fatal("ASANA_WORKSPACE_NAME must be provided")
-            raise ValueError("ASANA_WORKSPACE_NAME must be provided")
+            missing_configs.append("ASANA_WORKSPACE_NAME")
+            
+        if missing_configs:
+            log_with_context(
+                _LOGGER,
+                logging.FATAL,
+                "Missing required configuration",
+                missing_configs=missing_configs,
+                provided_configs={
+                    "ado_url_provided": bool(self.ado_url),
+                    "workspace_name_provided": bool(self.asana_workspace_name),
+                    "applicationinsights_configured": bool(self.applicationinsights_connection_string)
+                }
+            )
+            raise ValueError(f"Missing required configuration: {', '.join(missing_configs)}")
 
-        _LOGGER.debug("Created new App instance")
+        log_with_context(
+            _LOGGER,
+            logging.INFO,
+            "App instance created successfully",
+            ado_url=self.ado_url,
+            asana_workspace=self.asana_workspace_name,
+            asana_tag_name=self.asana_tag_name,
+            sleep_time_seconds=self.sleep_time,
+            applicationinsights_enabled=bool(self.applicationinsights_connection_string)
+        )
 
     def connect(self) -> None:
         """
         Connects to ADO and Asana, and sets up the TinyDB database.
         """
-        # Connect ADO.
-        _LOGGER.debug("Connecting to Azure DevOps")
-        ado_credentials = BasicAuthentication("", self.ado_pat)
-        ado_connection = Connection(base_url=self.ado_url, creds=ado_credentials)
-        self.ado_core_client = ado_connection.clients.get_core_client()
-        self.ado_work_client = ado_connection.clients.get_work_client()
-        self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
-        self.ado_git_client = ado_connection.clients.get_git_client()
-        # Connect Asana.
-        _LOGGER.debug("Connecting to Asana")
-        asana_config = asana.Configuration()
-        asana_config.access_token = self.asana_token
-        self.asana_client = asana.ApiClient(asana_config)
-        # Configure application insights.
-        configure_azure_monitor(
-            connection_string=self.applicationinsights_connection_string,
-        )
-        # Setup tinydb.
-        _LOGGER.debug("Opening local database")
-        self.db = TinyDB(
-            os.path.join(os.path.dirname(__package__), "data", "appdata.json")
-        )
-        self.matches = self.db.table("matches")
-        self.pr_matches = self.db.table("pr_matches")
-        self.config = self.db.table("config")
+        with log_performance(_LOGGER, "connect_all_services"):
+            # Connect ADO.
+            with log_performance(_LOGGER, "connect_ado", ado_url=self.ado_url):
+                ado_credentials = BasicAuthentication("", self.ado_pat)
+                ado_connection = Connection(base_url=self.ado_url, creds=ado_credentials)
+                self.ado_core_client = ado_connection.clients.get_core_client()
+                self.ado_work_client = ado_connection.clients.get_work_client()
+                self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
+                self.ado_git_client = ado_connection.clients.get_git_client()
+                log_with_context(
+                    _LOGGER,
+                    logging.INFO,
+                    "Successfully connected to Azure DevOps",
+                    ado_url=self.ado_url
+                )
+            
+            # Connect Asana.
+            with log_performance(_LOGGER, "connect_asana", workspace=self.asana_workspace_name):
+                asana_config = asana.Configuration()
+                asana_config.access_token = self.asana_token
+                self.asana_client = asana.ApiClient(asana_config)
+                log_with_context(
+                    _LOGGER,
+                    logging.INFO,
+                    "Successfully connected to Asana",
+                    workspace=self.asana_workspace_name
+                )
+            
+            # Configure application insights.
+            if self.applicationinsights_connection_string:
+                with log_performance(_LOGGER, "configure_monitoring"):
+                    configure_azure_monitor(
+                        connection_string=self.applicationinsights_connection_string,
+                    )
+                    log_with_context(
+                        _LOGGER,
+                        logging.INFO,
+                        "Application insights configured",
+                        has_connection_string=True
+                    )
+            else:
+                log_with_context(
+                    _LOGGER,
+                    logging.INFO,
+                    "Application insights disabled - no connection string provided"
+                )
+            
+            # Setup tinydb.
+            with log_performance(_LOGGER, "setup_database"):
+                db_path = os.path.join(os.path.dirname(__package__), "data", "appdata.json")
+                self.db = TinyDB(db_path)
+                self.matches = self.db.table("matches")
+                self.pr_matches = self.db.table("pr_matches")
+                self.config = self.db.table("config")
+                log_with_context(
+                    _LOGGER,
+                    logging.INFO,
+                    "Database initialized successfully",
+                    db_path=db_path,
+                    tables=["matches", "pr_matches", "config"]
+                )

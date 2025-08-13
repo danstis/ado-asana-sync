@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
 
-from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+from ado_asana_sync.utils.logging_tracing import (
+    setup_logging_and_tracing,
+    log_api_call,
+    log_api_response,
+    log_with_context
+)
 
 from .app import App
 
@@ -31,7 +39,19 @@ def get_asana_task(app: App, task_gid: str) -> dict | None:
                 "task_gid": task_gid,
             }
         )
+        
+        log_api_call(
+            _LOGGER,
+            "Asana",
+            "get_task",
+            endpoint=f"tasks/{task_gid}",
+            task_gid=task_gid,
+            workspace=app.asana_workspace_name
+        )
+        
         api_instance = asana.TasksApi(app.asana_client)
+        start_time = time.time()
+        
         try:
             opts = {
                 "opt_fields": (
@@ -46,7 +66,29 @@ def get_asana_task(app: App, task_gid: str) -> dict | None:
                 task_gid,
                 opts,
             )
+            
+            response_time = time.time() - start_time
+            log_api_response(
+                _LOGGER,
+                "Asana",
+                "get_task",
+                success=True,
+                response_time=response_time,
+                task_gid=task_gid,
+                task_name=api_response.get("name", "unknown") if api_response else None
+            )
+            
             return api_response
         except ApiException as exception:
-            _LOGGER.error("Exception when calling TasksApi->get_task: %s\n", exception)
+            response_time = time.time() - start_time
+            log_api_response(
+                _LOGGER,
+                "Asana",
+                "get_task",
+                success=False,
+                response_time=response_time,
+                error=str(exception),
+                task_gid=task_gid,
+                status_code=getattr(exception, 'status', None)
+            )
             return None

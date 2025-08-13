@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Tuple, Any
@@ -16,7 +17,14 @@ from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from ado_asana_sync.utils.date import iso8601_utc
-from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+from ado_asana_sync.utils.logging_tracing import (
+    setup_logging_and_tracing, 
+    log_performance, 
+    log_with_context,
+    generate_correlation_id,
+    log_api_call,
+    log_api_response
+)
 from ado_asana_sync.utils.utils import safe_get
 
 from .app import App
@@ -56,52 +64,109 @@ def start_sync(app: App) -> None:
     Args:
         app: The App instance containing configuration and clients.
     """
-    _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
+    correlation_id = generate_correlation_id()
+    
+    log_with_context(
+        _LOGGER, 
+        logging.INFO,
+        "Starting sync process",
+        correlation_id=correlation_id,
+        workspace=app.asana_workspace_name,
+        closed_states=sorted(list(_CLOSED_STATES)),
+        thread_count=_THREAD_COUNT,
+        sync_threshold_days=_SYNC_THRESHOLD
+    )
+    
     try:
-        workspace = get_asana_workspace(app, app.asana_workspace_name)
-        if workspace is None:
-            raise ValueError("Could not find Asana workspace")
-        app.asana_tag_gid = create_tag_if_not_existing(
-            app,
-            workspace,
-            app.asana_tag_name,
-        )
+        with log_performance(_LOGGER, "workspace_setup", correlation_id=correlation_id):
+            workspace = get_asana_workspace(app, app.asana_workspace_name)
+            if workspace is None:
+                raise ValueError("Could not find Asana workspace")
+            app.asana_tag_gid = create_tag_if_not_existing(
+                app,
+                workspace,
+                app.asana_tag_name,
+            )
     except Exception as exception:
-        _LOGGER.error("Failed to create or get Asana tag: %s", exception)
+        log_with_context(
+            _LOGGER,
+            logging.ERROR,
+            "Failed to initialize workspace setup",
+            correlation_id=correlation_id,
+            workspace=app.asana_workspace_name,
+            tag_name=app.asana_tag_name,
+            error=str(exception),
+            error_type=type(exception).__name__
+        )
         return
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
-            # Check if the cache is valid
-            global LAST_CACHE_REFRESH
-            now = datetime.now(timezone.utc)
-            if (
-                CUSTOM_FIELDS_AVAILABLE
-                and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
-            ):
-                CUSTOM_FIELDS_CACHE.clear()
-                LAST_CACHE_REFRESH = now
-                _LOGGER.info("Custom field cache cleared")
+            sync_run_id = generate_correlation_id()
+            
+            with log_performance(_LOGGER, "sync_run", correlation_id=sync_run_id):
+                # Check if the cache is valid
+                global LAST_CACHE_REFRESH
+                now = datetime.now(timezone.utc)
+                if (
+                    CUSTOM_FIELDS_AVAILABLE
+                    and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
+                ):
+                    CUSTOM_FIELDS_CACHE.clear()
+                    LAST_CACHE_REFRESH = now
+                    log_with_context(
+                        _LOGGER,
+                        logging.INFO,
+                        "Custom field cache cleared",
+                        correlation_id=sync_run_id,
+                        cache_age_hours=(now - LAST_CACHE_REFRESH).total_seconds() / 3600
+                    )
 
-            projects = read_projects()
-            # Use the lower of the _THREAD_COUNT and the length of projects.
-            optimal_thread_count = min(len(projects), _THREAD_COUNT)
-            _LOGGER.info(
-                "Syncing %s projects using %s threads",
-                len(projects),
-                optimal_thread_count,
-            )
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=optimal_thread_count
-            ) as executor:
-                try:
-                    executor.map(sync_project, [app] * len(projects), projects)
-                except Exception as exception:
-                    _LOGGER.error("Error in sync_project thread: %s", exception)
+                projects = read_projects()
+                # Use the lower of the _THREAD_COUNT and the length of projects.
+                optimal_thread_count = min(len(projects), _THREAD_COUNT)
+                
+                log_with_context(
+                    _LOGGER,
+                    logging.INFO,
+                    "Starting project synchronization",
+                    correlation_id=sync_run_id,
+                    project_count=len(projects),
+                    thread_count=optimal_thread_count,
+                    project_names=[p.get("adoProjectName", "unknown") for p in projects]
+                )
+                
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=optimal_thread_count
+                ) as executor:
+                    try:
+                        # Create individual correlation IDs for each project
+                        project_correlation_ids = [generate_correlation_id() for _ in projects]
+                        
+                        # Pass correlation IDs to projects
+                        project_args = []
+                        for i, project in enumerate(projects):
+                            project_with_context = {**project, "_correlation_id": project_correlation_ids[i]}
+                            project_args.append((app, project_with_context))
+                        
+                        executor.map(lambda args: sync_project(*args), project_args)
+                    except Exception as exception:
+                        log_with_context(
+                            _LOGGER,
+                            logging.ERROR,
+                            "Error in project synchronization threads",
+                            correlation_id=sync_run_id,
+                            error=str(exception),
+                            error_type=type(exception).__name__
+                        )
 
-            _LOGGER.info(
-                "Sync process complete, sleeping for %s seconds", app.sleep_time
-            )
+                log_with_context(
+                    _LOGGER,
+                    logging.INFO,
+                    "Sync run completed, entering sleep period",
+                    correlation_id=sync_run_id,
+                    sleep_duration_seconds=app.sleep_time
+                )
 
         sleep(app.sleep_time)
 
@@ -251,70 +316,114 @@ def sync_project(app: App, project):
     """
     Synchronizes a project by mapping ADO work items to Asana tasks.
     """
-    # Log the item being synced.
-    _LOGGER.info(
-        "syncing from %s/%s -> %s/%s",
-        project["adoProjectName"],
-        project["adoTeamName"],
-        app.asana_workspace_name,
-        project["asanaProjectName"],
-    )
+    # Extract correlation ID if provided, otherwise generate one
+    correlation_id = project.get("_correlation_id", generate_correlation_id())
+    
+    with log_performance(
+        _LOGGER, 
+        "project_sync", 
+        correlation_id=correlation_id,
+        ado_project=project["adoProjectName"],
+        ado_team=project["adoTeamName"],
+        asana_project=project["asanaProjectName"]
+    ):
+        # Get project IDs
+        try:
+            with log_performance(_LOGGER, "get_project_ids", correlation_id=correlation_id):
+                ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(
+                    app, project
+                )
+        except Exception as e:
+            log_with_context(
+                _LOGGER,
+                logging.ERROR,
+                "Failed to get project IDs",
+                correlation_id=correlation_id,
+                ado_project_name=project["adoProjectName"],
+                ado_team_name=project["adoTeamName"],
+                asana_project_name=project["asanaProjectName"],
+                error=str(e),
+                error_type=type(e).__name__
+            )
+            return
 
-    # Get project IDs
-    try:
-        ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(
-            app, project
-        )
-    except Exception as e:
-        _LOGGER.error("Error getting project IDs: %s", e)
-        return
+        # Get all Asana users in the workspace, this will enable user matching.
+        with log_performance(_LOGGER, "get_asana_users", correlation_id=correlation_id):
+            asana_users = get_asana_users(app, asana_workspace_id)
+            log_with_context(
+                _LOGGER,
+                logging.DEBUG,
+                "Retrieved Asana users",
+                correlation_id=correlation_id,
+                user_count=len(asana_users)
+            )
 
-    # Get all Asana users in the workspace, this will enable user matching.
-    asana_users = get_asana_users(app, asana_workspace_id)
+        # Get all Asana Tasks in this project.
+        with log_performance(_LOGGER, "get_asana_project_tasks", correlation_id=correlation_id):
+            asana_project_tasks = get_asana_project_tasks(app, asana_project)
+            log_with_context(
+                _LOGGER,
+                logging.INFO,
+                "Retrieved Asana project tasks",
+                correlation_id=correlation_id,
+                ado_project=project["adoProjectName"],
+                asana_project_gid=asana_project,
+                task_count=len(asana_project_tasks)
+            )
 
-    # Get all Asana Tasks in this project.
-    _LOGGER.info(
-        "Getting all Asana tasks for project %s [%s]",
-        project["adoProjectName"],
-        asana_project,
-    )
-    asana_project_tasks = get_asana_project_tasks(app, asana_project)
+        # Get the backlog items for the ADO project and team.
+        if app.ado_work_client is None:
+            raise ValueError("app.ado_work_client is None")
+        
+        with log_performance(_LOGGER, "get_ado_backlog_items", correlation_id=correlation_id):
+            ado_items = app.ado_work_client.get_backlog_level_work_items(
+                TeamContext(team_id=ado_team.id, project_id=ado_project.id),
+                "Microsoft.RequirementCategory",
+            )
+            log_with_context(
+                _LOGGER,
+                logging.INFO,
+                "Retrieved ADO backlog items",
+                correlation_id=correlation_id,
+                ado_project=project["adoProjectName"],
+                work_item_count=len(ado_items.work_items) if ado_items.work_items else 0
+            )
 
-    # Get the backlog items for the ADO project and team.
-    if app.ado_work_client is None:
-        raise ValueError("app.ado_work_client is None")
-    ado_items = app.ado_work_client.get_backlog_level_work_items(
-        TeamContext(team_id=ado_team.id, project_id=ado_project.id),
-        "Microsoft.RequirementCategory",
-    )
+        # Process backlog items
+        with log_performance(_LOGGER, "process_backlog_items", correlation_id=correlation_id):
+            process_backlog_items(
+                app, ado_items, asana_users, asana_project_tasks, asana_project
+            )
 
-    # Process backlog items
-    process_backlog_items(
-        app, ado_items, asana_users, asana_project_tasks, asana_project
-    )
+        # Clean up any invalid entries that may have gotten mixed between tables
+        cleanup_invalid_work_items(app)
 
-    # Clean up any invalid entries that may have gotten mixed between tables
-    cleanup_invalid_work_items(app)
+        # Process any existing matched items that are no longer returned in the backlog (closed or removed).
+        if app.matches is None:
+            raise ValueError("app.matches is None")
+        
+        with log_performance(_LOGGER, "process_closed_items", correlation_id=correlation_id):
+            all_tasks = app.matches.all()
+            processed_item_ids = set(item.target.id for item in ado_items.work_items)
+            process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
-    # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    if app.matches is None:
-        raise ValueError("app.matches is None")
-    all_tasks = app.matches.all()
-    processed_item_ids = set(item.target.id for item in ado_items.work_items)
-    process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
+        # Sync pull requests for this project
+        try:
+            from .pull_request_sync import sync_pull_requests
 
-    # Sync pull requests for this project
-    try:
-        from .pull_request_sync import sync_pull_requests
-
-        if asana_project is not None:
-            sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
-    except Exception as e:
-        _LOGGER.error(
-            "Error syncing pull requests for project %s: %s",
-            project["adoProjectName"],
-            e,
-        )
+            if asana_project is not None:
+                with log_performance(_LOGGER, "sync_pull_requests", correlation_id=correlation_id):
+                    sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
+        except Exception as e:
+            log_with_context(
+                _LOGGER,
+                logging.ERROR,
+                "Failed to sync pull requests",
+                correlation_id=correlation_id,
+                ado_project=project["adoProjectName"],
+                error=str(e),
+                error_type=type(e).__name__
+            )
 
 
 def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # noqa: C901
