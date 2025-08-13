@@ -135,6 +135,21 @@ class App:
         # Configure application insights.
         configure_azure_monitor(
             connection_string=self.applicationinsights_connection_string,
+            disable_offline_storage=True,
+            instrumentation_options={
+                "azure_sdk": {"enabled": True},
+                "django": {"enabled": False},
+                "fastapi": {"enabled": False},
+                "flask": {"enabled": False},
+                "psycopg2": {"enabled": False},
+                "pymongo": {"enabled": False},
+                "pymysql": {"enabled": False},
+                "redis": {"enabled": False},
+                "requests": {"enabled": True},
+                "sqlalchemy": {"enabled": False},
+                "urllib": {"enabled": True},
+                "urllib3": {"enabled": True},
+            },
         )
         # Setup SQLite database.
         _LOGGER.debug("Opening local database")
