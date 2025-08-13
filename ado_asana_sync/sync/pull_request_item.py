@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from .app import App
 from .asana import get_asana_task
-from .pull_request_sync import extract_reviewer_vote
+from .utils import extract_reviewer_vote
 
 
 class PullRequestItem:
