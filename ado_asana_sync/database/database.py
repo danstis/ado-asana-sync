@@ -16,6 +16,9 @@ from typing import Any, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
 
+# Current database schema version
+CURRENT_SCHEMA_VERSION = 2
+
 
 class DatabaseTable:
     """
@@ -209,6 +212,12 @@ class Database:
             conn.execute("PRAGMA cache_size=10000")
             conn.execute("PRAGMA temp_store=MEMORY")
 
+            # Ensure schema version tracking table exists
+            self._ensure_schema_version_table(conn)
+
+            # Apply any pending migrations
+            self._apply_migrations(conn)
+
             # Create tables with JSON data storage
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS matches (
@@ -240,11 +249,12 @@ class Database:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ado_project_name TEXT NOT NULL UNIQUE,
+                    ado_project_name TEXT NOT NULL,
                     ado_team_name TEXT NOT NULL,
                     asana_project_name TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(ado_project_name, ado_team_name)
                 )
             """)
 
@@ -258,6 +268,118 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_pr_matches_data
                 ON pr_matches(json_extract(data, '$.pr_id'))
             """)
+
+    def _ensure_schema_version_table(self, conn):
+        """Ensure schema_version table exists."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                version INTEGER NOT NULL,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                description TEXT
+            )
+        """)
+
+    def get_schema_version(self, conn):
+        """Get current schema version from database."""
+        try:
+            cursor = conn.execute("SELECT version FROM schema_version ORDER BY id DESC LIMIT 1")
+            row = cursor.fetchone()
+            return row[0] if row else 1
+        except sqlite3.OperationalError as exc:
+            # Fallback only if version table doesn't exist (old schema)
+            if "no such table: schema_version" in str(exc):
+                return 1
+            raise
+    def _record_migration(self, conn, version: int, description: str):
+        """Record a completed migration in the schema_version table."""
+        conn.execute("""
+            INSERT INTO schema_version (version, description)
+            VALUES (?, ?)
+        """, (version, description))
+        _LOGGER.info("Recorded migration to version %d: %s", version, description)
+
+    def _apply_migrations(self, conn):
+        """Apply any pending migrations."""
+        current_version = self.get_schema_version(conn)
+
+        # For new databases, record the current schema version
+        if current_version == 1:
+            # Check if this is truly a new database (no tables) or an old database
+            cursor = conn.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name IN ('matches', 'pr_matches', 'config', 'projects')
+            """)
+            existing_tables = cursor.fetchall()
+
+            if not existing_tables:
+                # This is a new database, set it to current version
+                self._record_migration(conn, CURRENT_SCHEMA_VERSION, "Initial schema creation")
+                return
+
+        if current_version < 2:
+            self._migrate_to_version_2(conn)
+            self._record_migration(conn, 2, "Add composite unique constraint for projects table")
+
+        # Future migrations would be added here:
+        # if current_version < 3:
+        #     self._migrate_to_version_3(conn)
+        #     self._record_migration(conn, 3, "Description of version 3 migration")
+
+    def get_current_schema_version(self) -> int:
+        """Get the current schema version from the database."""
+        with self.get_connection() as conn:
+            return self.get_schema_version(conn)
+
+    def _migrate_to_version_2(self, conn):
+        """Migrate to version 2: composite unique constraint for projects."""
+        # Check if projects table exists and what its schema looks like
+        cursor = conn.execute("""
+            SELECT sql FROM sqlite_master
+            WHERE type='table' AND name='projects'
+        """)
+        result = cursor.fetchone()
+
+        if result is None:
+            # Table doesn't exist yet, no migration needed
+            return
+
+        table_sql = result[0]
+
+        # Check if the table has the old UNIQUE constraint on just ado_project_name
+        if "ado_project_name TEXT NOT NULL UNIQUE" in table_sql:
+            _LOGGER.info("Migrating projects table to support multiple teams per project")
+
+            # Get existing data
+            cursor = conn.execute("SELECT ado_project_name, ado_team_name, asana_project_name FROM projects")
+            existing_projects = cursor.fetchall()
+
+            # Drop the old table
+            conn.execute("DROP TABLE projects")
+
+            # Create the new table with the updated schema
+            conn.execute("""
+                CREATE TABLE projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ado_project_name TEXT NOT NULL,
+                    ado_team_name TEXT NOT NULL,
+                    asana_project_name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(ado_project_name, ado_team_name)
+                )
+            """)
+
+            # Insert the existing data back
+            for project in existing_projects:
+                conn.execute("""
+                    INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                    VALUES (?, ?, ?)
+                """, project)
+
+            _LOGGER.info("Successfully migrated %d project records", len(existing_projects))
+        else:
+            _LOGGER.debug("Projects table already has composite unique constraint, skipping migration")
 
     @contextmanager
     def get_connection(self):
