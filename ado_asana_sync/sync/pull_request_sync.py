@@ -88,7 +88,7 @@ def sync_pull_requests(
                     _LOGGER.error("Failed to process repository %s: %s", repo.name, e)
 
         # Process existing PR matches that may no longer be active
-        process_closed_pull_requests(app, asana_users, asana_project)
+        process_closed_pull_requests(app, asana_users, asana_project, repositories)
 
         _LOGGER.info("Completed pull request sync for project %s", ado_project.name)
 
@@ -634,16 +634,41 @@ def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
 
 
 def process_closed_pull_requests(  # noqa: C901
-    app: App, _asana_users: List[dict], asana_project: str
+    app: App, _asana_users: List[dict], asana_project: str, repositories: List[Any] = None
 ) -> None:
     """
     Process pull requests that are no longer active but still have tasks in the database.
+    Only processes PRs that belong to the repositories in the current project scope to prevent cross-project contamination.
 
     Note: Complexity justified by necessary error handling and cleanup logic.
     """
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
+    
+    # Get repository IDs for the current project to filter PR tasks
+    repository_ids = set()
+    if repositories:
+        repository_ids = {repo.id for repo in repositories}
+        _LOGGER.debug("Filtering closed PR processing to repositories: %s", repository_ids)
+    
     all_pr_tasks = app.pr_matches.all()
+    
+    # Filter PR tasks to only those belonging to the current project's repositories
+    if repository_ids:
+        filtered_pr_tasks = [
+            task for task in all_pr_tasks 
+            if task.get('ado_repository_id') in repository_ids
+        ]
+        _LOGGER.info(
+            "Processing %d closed PR tasks for current project (filtered from %d total)", 
+            len(filtered_pr_tasks), len(all_pr_tasks)
+        )
+    else:
+        # Fallback to all tasks if no repositories provided (backward compatibility)
+        filtered_pr_tasks = all_pr_tasks
+        _LOGGER.warning("No repositories provided, processing all PR tasks (cross-project contamination risk)")
+    
+    all_pr_tasks = filtered_pr_tasks
 
     for pr_task_data in all_pr_tasks:
         # Remove doc_id before creating PullRequestItem
