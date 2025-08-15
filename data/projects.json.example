@@ -3,5 +3,15 @@
         "adoProjectName": "test-board",
         "adoTeamName": "test-board Team",
         "asanaProjectName": "test-board"
+    },
+    {
+        "adoProjectName": "test-board",
+        "adoTeamName": "Backend Team",
+        "asanaProjectName": "test-board-backend"
+    },
+    {
+        "adoProjectName": "test-board",
+        "adoTeamName": "Frontend Team", 
+        "asanaProjectName": "test-board-frontend"
     }
 ]
