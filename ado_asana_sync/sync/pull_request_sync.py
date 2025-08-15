@@ -233,6 +233,14 @@ def handle_removed_reviewers(
         clean_task_data = {k: v for k, v in task_data.items() if k != 'doc_id'}
         pr_item = PullRequestItem(**clean_task_data)
 
+        # Validate that this PR item is for the correct PR
+        if pr_item.ado_pr_id != pr.pull_request_id:
+            _LOGGER.warning(
+                "Skipping corrupted PR item: expected PR ID %s but got %s with title '%s'",
+                pr.pull_request_id, pr_item.ado_pr_id, pr_item.title
+            )
+            continue
+
         # If this reviewer is no longer in the current reviewers list, close their task
         if pr_item.reviewer_gid not in current_reviewer_gids:
             _LOGGER.info(
@@ -447,6 +455,15 @@ def update_existing_pr_reviewer_task(
             "PR title changed from '%s' to '%s'", existing_match.title, pr.title
         )
 
+        # Validate that the PR ID hasn't been mixed up before updating
+        if existing_match.ado_pr_id != pr.pull_request_id:
+            _LOGGER.error(
+                "Critical data corruption detected: PR item has ID %s but PR object has ID %s. "
+                "This would create a title/ID mismatch. Skipping update to prevent corruption.",
+                existing_match.ado_pr_id, pr.pull_request_id
+            )
+            return
+
     if review_status_changed:
         old_status = existing_match.review_status or "noVote"
         new_status = extract_reviewer_vote(reviewer)
@@ -649,6 +666,14 @@ def process_closed_pull_requests(  # noqa: C901
         # Remove doc_id before creating PullRequestItem
         clean_pr_task_data = {k: v for k, v in pr_task_data.items() if k != 'doc_id'}
         pr_item = PullRequestItem(**clean_pr_task_data)
+
+        # Skip processing if data consistency validation fails
+        if not pr_item.validate_data_consistency():
+            _LOGGER.warning(
+                "Skipping PR item with inconsistent data: PR ID %s, URL %s, title '%s'",
+                pr_item.ado_pr_id, pr_item.url, pr_item.title
+            )
+            continue
 
         try:
             # Try to get the current PR from ADO

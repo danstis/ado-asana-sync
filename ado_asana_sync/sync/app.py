@@ -180,6 +180,9 @@ class App:
         # Sync projects from JSON on startup
         self._sync_projects_from_json()
 
+        # Clean up any corrupted PR records from previous runs
+        self._cleanup_corrupted_pr_data()
+
     def _sync_projects_from_json(self) -> None:
         """
         Sync projects from projects.json to the database.
@@ -203,6 +206,21 @@ class App:
 
         except Exception as e:
             _LOGGER.error("Failed to sync projects from JSON: %s", e)
+
+    def _cleanup_corrupted_pr_data(self) -> None:
+        """
+        Clean up corrupted PR data during application startup.
+        """
+        try:
+            from .pull_request_item import PullRequestItem
+
+            if self.pr_matches is not None:
+                cleaned_count = PullRequestItem.cleanup_all_corrupted_records(self)
+                if cleaned_count > 0:
+                    _LOGGER.info("Startup cleanup removed %d corrupted PR records", cleaned_count)
+
+        except Exception as e:
+            _LOGGER.error("Failed to cleanup corrupted PR data: %s", e)
 
     def close(self) -> None:
         """
