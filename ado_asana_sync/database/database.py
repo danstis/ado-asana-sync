@@ -286,10 +286,11 @@ class Database:
             cursor = conn.execute("SELECT version FROM schema_version ORDER BY id DESC LIMIT 1")
             row = cursor.fetchone()
             return row[0] if row else 1
-        except Exception:
-            # No version table exists or other error = version 1 (original schema)
-            return 1
-
+        except sqlite3.OperationalError as exc:
+            # Fallback only if version table doesn't exist (old schema)
+            if "no such table: schema_version" in str(exc):
+                return 1
+            raise
     def _record_migration(self, conn, version: int, description: str):
         """Record a completed migration in the schema_version table."""
         conn.execute("""
