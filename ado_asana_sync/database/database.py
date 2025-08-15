@@ -240,13 +240,17 @@ class Database:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ado_project_name TEXT NOT NULL UNIQUE,
+                    ado_project_name TEXT NOT NULL,
                     ado_team_name TEXT NOT NULL,
                     asana_project_name TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(ado_project_name, ado_team_name)
                 )
             """)
+
+            # Migrate projects table if needed
+            self._migrate_projects_table(conn)
 
             # Create indexes for better performance
             conn.execute("""
@@ -258,6 +262,50 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_pr_matches_data
                 ON pr_matches(json_extract(data, '$.pr_id'))
             """)
+
+    def _migrate_projects_table(self, conn):
+        """Migrate projects table to use composite unique constraint if needed."""
+        # Check if the current table has the old schema (single column unique constraint)
+        cursor = conn.execute("""
+            SELECT sql FROM sqlite_master 
+            WHERE type='table' AND name='projects'
+        """)
+        table_sql = cursor.fetchone()
+        
+        if table_sql and 'ado_project_name TEXT NOT NULL UNIQUE' in table_sql[0]:
+            _LOGGER.info("Migrating projects table to support multiple team backlogs per project")
+            
+            # Get existing data
+            cursor = conn.execute("""
+                SELECT ado_project_name, ado_team_name, asana_project_name
+                FROM projects
+            """)
+            existing_data = cursor.fetchall()
+            
+            # Drop the old table
+            conn.execute("DROP TABLE projects")
+            
+            # Recreate with new schema
+            conn.execute("""
+                CREATE TABLE projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ado_project_name TEXT NOT NULL,
+                    ado_team_name TEXT NOT NULL,
+                    asana_project_name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(ado_project_name, ado_team_name)
+                )
+            """)
+            
+            # Restore existing data
+            for row in existing_data:
+                conn.execute("""
+                    INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                    VALUES (?, ?, ?)
+                """, row)
+            
+            _LOGGER.info("Successfully migrated projects table for %d projects", len(existing_data))
 
     @contextmanager
     def get_connection(self):
