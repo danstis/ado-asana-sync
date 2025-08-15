@@ -340,11 +340,15 @@ class TestDatabaseMigration(unittest.TestCase):
 
     def test_migration_from_old_schema(self):
         """Test migration from old single-column unique constraint to new composite constraint."""
+        # This test is now covered by test_schema_versioning_old_database_migration
+        # But keeping it for backward compatibility testing
+        
         db = Database(self.db_path)
         
         # Manually create the old table schema
         with db.get_connection() as conn:
-            # Drop the new table and create the old one
+            # Drop schema_version and projects tables to simulate old database
+            conn.execute("DROP TABLE IF EXISTS schema_version")
             conn.execute("DROP TABLE IF EXISTS projects")
             conn.execute("""
                 CREATE TABLE projects (
@@ -368,6 +372,9 @@ class TestDatabaseMigration(unittest.TestCase):
         
         # Create new database instance - this should trigger migration
         db = Database(self.db_path)
+        
+        # Verify the migration was applied (schema version should be 2)
+        self.assertEqual(db.get_current_schema_version(), 2)
         
         # Verify the old data is still there
         projects = db.get_projects()
@@ -398,6 +405,128 @@ class TestDatabaseMigration(unittest.TestCase):
         
         old_project_teams = [p for p in projects if p["adoProjectName"] == "OldProject"]
         self.assertEqual(len(old_project_teams), 2)
+        
+        db.close()
+
+    def test_schema_versioning_new_database(self):
+        """Test that new databases are created with the current schema version."""
+        db = Database(self.db_path)
+        
+        # New database should be at current version
+        current_version = db.get_current_schema_version()
+        self.assertEqual(current_version, 2)  # CURRENT_SCHEMA_VERSION
+        
+        # Verify schema_version table has the initial record
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT version, description FROM schema_version ORDER BY id")
+            records = cursor.fetchall()
+            
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0][0], 2)  # version
+            self.assertEqual(records[0][1], "Initial schema creation")  # description
+        
+        db.close()
+
+    def test_schema_versioning_old_database_migration(self):
+        """Test that old databases are properly migrated and version is recorded."""
+        db = Database(self.db_path)
+        
+        # Manually create an old database by removing version table and creating old schema
+        with db.get_connection() as conn:
+            # Drop schema_version and projects tables
+            conn.execute("DROP TABLE IF EXISTS schema_version")
+            conn.execute("DROP TABLE IF EXISTS projects")
+            
+            # Create old projects table schema
+            conn.execute("""
+                CREATE TABLE projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ado_project_name TEXT NOT NULL UNIQUE,
+                    ado_team_name TEXT NOT NULL,
+                    asana_project_name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Insert test data
+            conn.execute("""
+                INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                VALUES ('TestProject', 'TestTeam', 'TestAsanaProject')
+            """)
+        
+        # Close and reopen to trigger migration
+        db.close()
+        db = Database(self.db_path)
+        
+        # Should now be at version 2
+        current_version = db.get_current_schema_version()
+        self.assertEqual(current_version, 2)
+        
+        # Verify migration was recorded
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT version, description FROM schema_version ORDER BY id")
+            records = cursor.fetchall()
+            
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0][0], 2)  # version
+            self.assertEqual(records[0][1], "Add composite unique constraint for projects table")  # description
+        
+        # Verify data was preserved
+        projects = db.get_projects()
+        self.assertEqual(len(projects), 1)
+        self.assertEqual(projects[0]["adoProjectName"], "TestProject")
+        
+        db.close()
+
+    def test_schema_versioning_already_migrated(self):
+        """Test that already migrated databases don't get migrated again."""
+        db = Database(self.db_path)
+        
+        # First initialization creates version record
+        initial_version = db.get_current_schema_version()
+        
+        # Get initial migration records
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM schema_version")
+            initial_count = cursor.fetchone()[0]
+        
+        # Close and reopen database - should not create additional migration records
+        db.close()
+        db = Database(self.db_path)
+        
+        # Version should be the same
+        current_version = db.get_current_schema_version()
+        self.assertEqual(current_version, initial_version)
+        
+        # Should not have created additional migration records
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM schema_version")
+            final_count = cursor.fetchone()[0]
+        
+        self.assertEqual(final_count, initial_count)
+        
+        db.close()
+
+    def test_schema_version_table_structure(self):
+        """Test that schema_version table has the correct structure."""
+        db = Database(self.db_path)
+        
+        with db.get_connection() as conn:
+            # Test table structure
+            cursor = conn.execute("PRAGMA table_info(schema_version)")
+            columns = cursor.fetchall()
+            
+            # Verify expected columns exist
+            column_names = [col[1] for col in columns]  # col[1] is column name
+            expected_columns = ['id', 'version', 'applied_at', 'description']
+            
+            for expected_col in expected_columns:
+                self.assertIn(expected_col, column_names)
+            
+            # Verify primary key
+            primary_key_cols = [col[1] for col in columns if col[5] == 1]  # col[5] is pk flag
+            self.assertEqual(primary_key_cols, ['id'])
         
         db.close()
 
