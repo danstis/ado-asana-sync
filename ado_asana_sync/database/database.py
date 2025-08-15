@@ -292,17 +292,42 @@ class Database:
             conn.execute("DELETE FROM projects")
 
             # Insert new projects
-            for project in projects_data:
-                conn.execute("""
-                    INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
-                    VALUES (?, ?, ?)
-                """, (
-                    project["adoProjectName"],
-                    project["adoTeamName"],
-                    project["asanaProjectName"]
-                ))
+            try:
+                for project in projects_data:
+                    conn.execute("""
+                        INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                        VALUES (?, ?, ?)
+                    """, (
+                        project["adoProjectName"],
+                        project["adoTeamName"],
+                        project["asanaProjectName"]
+                    ))
 
-            _LOGGER.info("Synced %d projects to database", len(projects_data))
+                _LOGGER.info("Synced %d projects to database", len(projects_data))
+            except sqlite3.IntegrityError as e:
+                # Handle unique constraint violations with detailed error message
+                error_msg = str(e)
+                if "UNIQUE constraint failed: projects.ado_project_name" in error_msg:
+                    # Find duplicate project names
+                    project_names = [p["adoProjectName"] for p in projects_data]
+                    seen = set()
+                    duplicates = set()
+                    
+                    for name in project_names:
+                        if name in seen:
+                            duplicates.add(name)
+                        else:
+                            seen.add(name)
+                    
+                    if duplicates:
+                        duplicate_list = ", ".join(sorted(duplicates))
+                        raise sqlite3.IntegrityError(
+                            f"UNIQUE constraint failed: projects.ado_project_name - "
+                            f"Duplicate project name(s) found: {duplicate_list}"
+                        ) from e
+                
+                # Re-raise original error if we can't provide better details
+                raise
 
     def get_projects(self) -> List[Dict[str, str]]:
         """Get all projects from the database."""
