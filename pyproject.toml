@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "ado_asana_sync" }]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.13"
 asana = "^5.0.3"
 azure-devops = "^7.1.0b3"
 tinydb = "^4.8.0"
@@ -25,7 +25,7 @@ pytest = ">=7.4,<9.0"
 tox = "^4.9"
 black = ">=23.7,<26.0"
 mdformat = "^0.7.0"
-mdformat-gfm = "^0.3.0"
+mdformat-gfm = ">=0.3,<0.5"
 
 [tool.black]
 line-length = 127

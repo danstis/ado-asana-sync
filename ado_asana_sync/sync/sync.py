@@ -52,10 +52,12 @@ CACHE_VALIDITY_DURATION = timedelta(hours=24)
 def start_sync(app: App) -> None:
     """
     Start the synchronization process between Azure DevOps and Asana.
-    
+
     Args:
         app: The App instance containing configuration and clients.
     """
+    global LAST_CACHE_REFRESH
+    LAST_CACHE_REFRESH = datetime.now(timezone.utc)
     _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
     try:
         workspace = get_asana_workspace(app, app.asana_workspace_name)
@@ -73,7 +75,6 @@ def start_sync(app: App) -> None:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
             # Check if the cache is valid
-            global LAST_CACHE_REFRESH
             now = datetime.now(timezone.utc)
             if (
                 CUSTOM_FIELDS_AVAILABLE
@@ -83,7 +84,7 @@ def start_sync(app: App) -> None:
                 LAST_CACHE_REFRESH = now
                 _LOGGER.info("Custom field cache cleared")
 
-            projects = read_projects()
+            projects = read_projects(app)
             # Use the lower of the _THREAD_COUNT and the length of projects.
             optimal_thread_count = min(len(projects), _THREAD_COUNT)
             _LOGGER.info(
@@ -106,12 +107,24 @@ def start_sync(app: App) -> None:
         sleep(app.sleep_time)
 
 
-def read_projects() -> list:
+def read_projects(app: App) -> list:
     """
-    Read projects from JSON file and return as a list.
+    Read projects from database and return as a list.
+    Falls back to JSON file if database is not available.
     """
     with _TRACER.start_as_current_span("read_projects"):
-        # Initialize an empty list to store the projects
+        # Try to read from database first
+        if app.db:
+            try:
+                projects = app.db.get_projects()
+                if projects:
+                    _LOGGER.debug("Read %d projects from database", len(projects))
+                    return projects
+            except Exception as e:
+                _LOGGER.warning("Failed to read projects from database: %s", e)
+
+        # Fallback to JSON file
+        _LOGGER.info("Reading projects from JSON file as fallback")
         projects = []
 
         # Open the JSON file and load the data
@@ -162,9 +175,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             if app.config is None:
                 raise ValueError("app.config is None")
             with app.db_lock:
-                from tinydb import Query
-                doc_query = Query()
-                app.config.upsert({"tag_gid": existing_tag["gid"]}, doc_query.doc_id == 1)
+                def config_query_func(record):
+                    return record.get("doc_id") == 1
+                app.config.upsert({"tag_gid": existing_tag["gid"]}, config_query_func)
             return existing_tag["gid"]
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
@@ -174,9 +187,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
             # Store the new tag_gid in the config table
             with app.db_lock:
-                from tinydb import Query
-                doc_query = Query()
-                app.config.upsert({"tag_gid": api_response["gid"]}, doc_query.doc_id == 1)
+                def new_config_query_func(record):
+                    return record.get("doc_id") == 1
+                app.config.upsert({"tag_gid": api_response["gid"]}, new_config_query_func)
             return api_response["gid"]
         except ApiException as exception:
             _LOGGER.error(
@@ -271,6 +284,9 @@ def sync_project(app: App, project):
 
     # Get all Asana users in the workspace, this will enable user matching.
     asana_users = get_asana_users(app, asana_workspace_id)
+    _LOGGER.debug("Found %d Asana users in workspace", len(asana_users))
+    for user in asana_users:
+        _LOGGER.debug("Asana user: %s <%s>", user.get("name", ""), user.get("email", ""))
 
     # Get all Asana Tasks in this project.
     _LOGGER.info(
@@ -288,10 +304,19 @@ def sync_project(app: App, project):
         "Microsoft.RequirementCategory",
     )
 
+    _LOGGER.info("Found %d work items in ADO backlog for project %s",
+                 len(ado_items.work_items) if ado_items.work_items else 0,
+                 project["adoProjectName"])
+
+    if ado_items.work_items:
+        item_ids = [item.target.id for item in ado_items.work_items]
+        _LOGGER.info("Found %d ADO work items in backlog", len(item_ids))
+
     # Process backlog items
     process_backlog_items(
         app, ado_items, asana_users, asana_project_tasks, asana_project
     )
+    _LOGGER.info("Completed backlog processing for project %s", project["adoProjectName"])
 
     # Clean up any invalid entries that may have gotten mixed between tables
     cleanup_invalid_work_items(app)
@@ -301,6 +326,11 @@ def sync_project(app: App, project):
         raise ValueError("app.matches is None")
     all_tasks = app.matches.all()
     processed_item_ids = set(item.target.id for item in ado_items.work_items)
+
+    _LOGGER.info("Found %d existing matched items in database", len(all_tasks))
+    items_not_in_backlog = [t for t in all_tasks if t["ado_id"] not in processed_item_ids]
+    _LOGGER.info("Processing %d items that are no longer in backlog", len(items_not_in_backlog))
+
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
     # Sync pull requests for this project
@@ -382,12 +412,46 @@ def process_backlog_items(
     """
     Processes the backlog items from ADO.
     """
+    processed_count = 0
+    skipped_count = 0
+
     for wi in ado_items.work_items:
-        # Get the work item from the ID
-        ado_task = app.ado_wit_client.get_work_item(wi.target.id)
-        process_backlog_item(
-            app, ado_task, asana_users, asana_project_tasks, asana_project
-        )
+        try:
+            # Get the work item from the ID
+            _LOGGER.info("Processing work item ID: %d", wi.target.id)
+            ado_task = app.ado_wit_client.get_work_item(wi.target.id)
+
+            # Track if item was processed or skipped
+            existing_match = None
+            ado_assigned = None
+            asana_matched_user = None
+
+            try:
+                existing_match = TaskItem.search(app, ado_id=ado_task.id)
+                ado_assigned = get_task_user(ado_task)
+                asana_matched_user = matching_user(asana_users, ado_assigned) if ado_assigned else None
+            except Exception as e:
+                _LOGGER.error("Error checking work item %d: %s", ado_task.id, e)
+
+            if (ado_assigned is None and existing_match is None) or \
+               (asana_matched_user is None and existing_match is None):
+                skipped_count += 1
+                _LOGGER.debug("Skipped work item %d: %s", ado_task.id, ado_task.fields[ADO_TITLE])
+            else:
+                processed_count += 1
+                _LOGGER.debug("Processing work item %d: %s", ado_task.id, ado_task.fields[ADO_TITLE])
+
+            process_backlog_item(
+                app, ado_task, asana_users, asana_project_tasks, asana_project
+            )
+            _LOGGER.info("Completed processing work item ID: %d", wi.target.id)
+
+        except Exception as e:
+            _LOGGER.error("Failed to process work item %d: %s", wi.target.id, e)
+            continue
+
+    _LOGGER.info("Backlog processing complete: %d processed, %d skipped",
+                 processed_count, skipped_count)
 
 
 def process_backlog_item(
@@ -397,6 +461,8 @@ def process_backlog_item(
     Processes a single backlog item.
     """
     existing_match = TaskItem.search(app, ado_id=ado_task.id)
+    _LOGGER.debug("Work item %d search result: %s", ado_task.id,
+                  "Found match" if existing_match else "No match")
     ado_assigned = get_task_user(ado_task)
 
     if ado_assigned is None and existing_match is None:
@@ -417,10 +483,12 @@ def process_backlog_item(
         return
 
     if existing_match is None:
+        _LOGGER.debug("Work item %d: No existing match found, creating new mapping", ado_task.id)
         create_new_task_mapping(
             app, ado_task, asana_matched_user, asana_project_tasks, asana_project
         )
     else:
+        _LOGGER.debug("Work item %d: Existing match found, updating", ado_task.id)
         update_existing_task(
             app, ado_task, existing_match, asana_matched_user, asana_project
         )
@@ -587,7 +655,7 @@ def remove_mapping(app, wi):
         _SYNC_THRESHOLD,
     )
     with app.db_lock:
-        app.matches.remove(doc_ids=[wi.doc_id])
+        app.matches.remove(doc_ids=[wi["doc_id"]])
 
 
 def get_existing_match(app, wi):
@@ -889,7 +957,7 @@ def cleanup_invalid_work_items(app: App) -> None:
             # Work item IDs should be integers
             int(task["ado_id"])
         except (ValueError, TypeError):
-            invalid_items.append(task.doc_id)
+            invalid_items.append(task["doc_id"])
             _LOGGER.info("Removing invalid work item entry with ID: %s", task["ado_id"])
 
     # Remove invalid items

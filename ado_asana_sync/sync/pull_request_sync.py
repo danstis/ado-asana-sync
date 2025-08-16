@@ -17,6 +17,7 @@ from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from .app import App
 from .asana import get_asana_task
 from .pull_request_item import PullRequestItem
+from .utils import extract_reviewer_vote
 
 # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
@@ -219,16 +220,26 @@ def handle_removed_reviewers(
     """
     Handle reviewers that have been removed from the PR by closing their Asana tasks.
     """
-    from tinydb import Query
-
     # Find all existing PR tasks for this PR
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
-    query = Query()
-    existing_pr_tasks = app.pr_matches.search(query.ado_pr_id == pr.pull_request_id)
+
+    def query_func(record):
+        return record.get("ado_pr_id") == pr.pull_request_id
+    existing_pr_tasks = app.pr_matches.search(query_func)
 
     for task_data in existing_pr_tasks:
-        pr_item = PullRequestItem(**task_data)
+        # Remove doc_id before creating PullRequestItem
+        clean_task_data = {k: v for k, v in task_data.items() if k != 'doc_id'}
+        pr_item = PullRequestItem(**clean_task_data)
+
+        # Validate that this PR item is for the correct PR
+        if pr_item.ado_pr_id != pr.pull_request_id:
+            _LOGGER.warning(
+                "Skipping corrupted PR item: expected PR ID %s but got %s with title '%s'",
+                pr.pull_request_id, pr_item.ado_pr_id, pr_item.title
+            )
+            continue
 
         # If this reviewer is no longer in the current reviewers list, close their task
         if pr_item.reviewer_gid not in current_reviewer_gids:
@@ -444,6 +455,15 @@ def update_existing_pr_reviewer_task(
             "PR title changed from '%s' to '%s'", existing_match.title, pr.title
         )
 
+        # Validate that the PR ID hasn't been mixed up before updating
+        if existing_match.ado_pr_id != pr.pull_request_id:
+            _LOGGER.error(
+                "Critical data corruption detected: PR item has ID %s but PR object has ID %s. "
+                "This would create a title/ID mismatch. Skipping update to prevent corruption.",
+                existing_match.ado_pr_id, pr.pull_request_id
+            )
+            return
+
     if review_status_changed:
         old_status = existing_match.review_status or "noVote"
         new_status = extract_reviewer_vote(reviewer)
@@ -643,7 +663,17 @@ def process_closed_pull_requests(  # noqa: C901
     all_pr_tasks = app.pr_matches.all()
 
     for pr_task_data in all_pr_tasks:
-        pr_item = PullRequestItem(**pr_task_data)
+        # Remove doc_id before creating PullRequestItem
+        clean_pr_task_data = {k: v for k, v in pr_task_data.items() if k != 'doc_id'}
+        pr_item = PullRequestItem(**clean_pr_task_data)
+
+        # Skip processing if data consistency validation fails
+        if not pr_item.validate_data_consistency():
+            _LOGGER.warning(
+                "Skipping PR item with inconsistent data: PR ID %s, URL %s, title '%s'",
+                pr_item.ado_pr_id, pr_item.url, pr_item.title
+            )
+            continue
 
         try:
             # Try to get the current PR from ADO
@@ -685,45 +715,6 @@ def process_closed_pull_requests(  # noqa: C901
                 _LOGGER.warning(
                     "Failed to process closed PR %s: %s", pr_item.ado_pr_id, e
                 )
-
-
-def extract_reviewer_vote(reviewer) -> str:
-    """
-    Extract the vote from an ADO reviewer object.
-
-    ADO vote values include:
-    - 'approved' (10) - Approve
-    - 'approvedWithSuggestions' (5) - Approve with suggestions
-    - 'noVote' (0) - No vote
-    - 'waitingForAuthor' (-5) - Waiting for author
-    - 'rejected' (-10) - Reject
-    """
-    try:
-        # Try different possible attribute names for the vote
-        vote = getattr(reviewer, "vote", None)
-
-        # Vote might be an integer or string, normalize to string
-        if vote is not None:
-            # Handle integer vote values (ADO API sometimes returns integers)
-            if isinstance(vote, int):
-                vote_mapping = {
-                    10: "approved",
-                    5: "approvedWithSuggestions",
-                    0: "noVote",
-                    -5: "waitingForAuthor",
-                    -10: "rejected",
-                }
-                vote = vote_mapping.get(vote, str(vote))
-
-            _LOGGER.debug("Extracted reviewer vote: %s", vote)
-            return str(vote)
-
-        _LOGGER.debug("No vote found for reviewer")
-        return "noVote"
-
-    except Exception as e:
-        _LOGGER.error("Failed to extract vote from reviewer: %s", e)
-        return "noVote"
 
 
 def create_ado_user_from_reviewer(reviewer) -> Any:

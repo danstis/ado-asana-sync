@@ -6,6 +6,7 @@ Classes:
     App: Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
 """
 
+import json
 import logging
 import os
 import threading
@@ -13,11 +14,10 @@ from typing import Optional
 
 import asana  # type: ignore
 from msrest.authentication import BasicAuthentication
-from tinydb import TinyDB
-from tinydb.table import Table
 
 from azure.devops.connection import Connection  # type: ignore
 from azure.monitor.opentelemetry import configure_azure_monitor
+from ado_asana_sync.database import Database, DatabaseTable
 
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
@@ -53,11 +53,11 @@ class App:
         asana_page_size: The default page size for API calls, can be between 1-100.
         asana_tag_name: Defines the name of the Asana tag to add to synced items.
         asana_tag_gid: stores the tag id for the named asana tag in asana_tag_name.
-        db: TinyDB database.
-        db_lock: Lock for the TinyDB database.
-        matches: TinyDB table named "matches".
-        pr_matches: TinyDB table named "pr_matches".
-        config: TinyDB table named "config".
+        db: SQLite database.
+        db_lock: Lock for the SQLite database (maintained for compatibility).
+        matches: Database table named "matches".
+        pr_matches: Database table named "pr_matches".
+        config: Database table named "config".
     """
 
     def __init__(
@@ -90,11 +90,11 @@ class App:
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid: Optional[str] = None
         self.asana_tag_name = ASANA_TAG_NAME
-        self.db: Optional[TinyDB] = None
-        self.db_lock = threading.Lock()
-        self.matches: Optional[Table] = None
-        self.pr_matches: Optional[Table] = None
-        self.config: Optional[Table] = None
+        self.db: Optional[Database] = None
+        self.db_lock = threading.Lock()  # Maintained for compatibility, SQLite handles its own locking
+        self.matches: Optional[DatabaseTable] = None
+        self.pr_matches: Optional[DatabaseTable] = None
+        self.config: Optional[DatabaseTable] = None
         self.sleep_time = SLEEP_TIME
 
         if not self.ado_pat:
@@ -135,12 +135,100 @@ class App:
         # Configure application insights.
         configure_azure_monitor(
             connection_string=self.applicationinsights_connection_string,
+            disable_offline_storage=True,
+            instrumentation_options={
+                "azure_sdk": {"enabled": True},
+                "django": {"enabled": False},
+                "fastapi": {"enabled": False},
+                "flask": {"enabled": False},
+                "psycopg2": {"enabled": False},
+                "pymongo": {"enabled": False},
+                "pymysql": {"enabled": False},
+                "redis": {"enabled": False},
+                "requests": {"enabled": True},
+                "sqlalchemy": {"enabled": False},
+                "urllib": {"enabled": True},
+                "urllib3": {"enabled": True},
+            },
         )
-        # Setup tinydb.
+        # Setup SQLite database.
         _LOGGER.debug("Opening local database")
-        self.db = TinyDB(
-            os.path.join(os.path.dirname(__package__), "data", "appdata.json")
-        )
+        data_dir = os.path.join(os.path.dirname(__package__), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        db_path = os.path.join(data_dir, "appdata.db")
+        appdata_json_path = os.path.join(data_dir, "appdata.json")
+
+        # Initialize SQLite database
+        self.db = Database(db_path)
+
+        # Migrate from TinyDB if appdata.json exists
+        if os.path.exists(appdata_json_path):
+            _LOGGER.info("Found existing appdata.json, starting migration to SQLite")
+            if self.db.migrate_from_tinydb(appdata_json_path):
+                # Rename the old file after successful migration
+                backup_path = appdata_json_path + ".migrated"
+                os.rename(appdata_json_path, backup_path)
+                _LOGGER.info("Migration successful, renamed %s to %s", appdata_json_path, backup_path)
+            else:
+                _LOGGER.error("Migration failed, keeping original appdata.json file")
+
+        # Setup table interfaces
         self.matches = self.db.table("matches")
         self.pr_matches = self.db.table("pr_matches")
         self.config = self.db.table("config")
+
+        # Sync projects from JSON on startup
+        self._sync_projects_from_json()
+
+        # Clean up any corrupted PR records from previous runs
+        self._cleanup_corrupted_pr_data()
+
+    def _sync_projects_from_json(self) -> None:
+        """
+        Sync projects from projects.json to the database.
+
+        This method reads the projects.json file and updates the projects
+        table in the database to match the JSON configuration.
+        """
+        try:
+            projects_path = os.path.join(os.path.dirname(__package__), "data", "projects.json")
+
+            if not os.path.exists(projects_path):
+                _LOGGER.warning("projects.json not found at %s", projects_path)
+                return
+
+            with open(projects_path, 'r', encoding='utf-8') as f:
+                projects_data = json.load(f)
+
+            if self.db:
+                self.db.sync_projects_from_json(projects_data)
+                _LOGGER.debug("Successfully synced %d projects from JSON", len(projects_data))
+
+        except Exception as e:
+            _LOGGER.error("Failed to sync projects from JSON: %s", e)
+
+    def _cleanup_corrupted_pr_data(self) -> None:
+        """
+        Clean up corrupted PR data during application startup.
+        """
+        try:
+            from .pull_request_item import PullRequestItem
+
+            if self.pr_matches is not None:
+                cleaned_count = PullRequestItem.cleanup_all_corrupted_records(self)
+                if cleaned_count > 0:
+                    _LOGGER.info("Startup cleanup removed %d corrupted PR records", cleaned_count)
+
+        except Exception as e:
+            _LOGGER.error("Failed to cleanup corrupted PR data: %s", e)
+
+    def close(self) -> None:
+        """
+        Clean up resources and close database connections.
+
+        This ensures proper cleanup of SQLite WAL and SHM files.
+        """
+        if self.db:
+            _LOGGER.debug("Closing database connections")
+            self.db.close()
+            self.db = None

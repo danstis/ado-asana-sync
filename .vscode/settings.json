@@ -10,9 +10,17 @@
     "connectionId": "danstis",
     "projectKey": "danstis_ado-asana-sync"
   },
-  "python.testing.pytestArgs": [
-    "tests"
-  ],
+  "python.testing.pytestArgs": ["tests"],
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestEnabled": true
+  "python.testing.pytestEnabled": true,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Use conventional commit message format."
+    }
+  ],
+  "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
+    {
+      "text": "Use conventional commit message format for the Pull Request title. Include a summary of the commits in the description."
+    }
+  ]
 }

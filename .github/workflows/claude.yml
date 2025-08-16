@@ -1,0 +1,90 @@
+# https://github.com/anthropics/claude-code-action/blob/main/examples/claude.yml
+name: Claude PR Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned, labeled]
+  pull_request_review:
+    types: [submitted]
+  # Events for agent mode (only these work with agent mode)
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 0 * * 0" # Weekly on Sunday
+
+jobs:
+  claude-code-action:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(toJson(github.event.issue.labels), 'claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Run Claude PR Action
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          timeout_minutes: "60"
+          # Optional: set execution mode (default: tag)
+          # mode: "tag"
+          # Optional: add custom trigger phrase (default: @claude)
+          # trigger_phrase: "/claude"
+          # Optional: add assignee trigger for issues
+          # assignee_trigger: "claude"
+          # Optional: add label trigger for issues
+          label_trigger: "claude"
+          # Optional: add custom environment variables (YAML format)
+          # claude_env: |
+          #   NODE_ENV: test
+          #   DEBUG: true
+          #   API_URL: https://api.example.com
+          # Optional: limit the number of conversation turns
+          # max_turns: "5"
+          # Optional: grant additional permissions (requires corresponding GitHub token permissions)
+          # additional_permissions: |
+          #   actions: read
+          # Optional: allow bot users to trigger the action
+          # allowed_bots: "dependabot[bot],renovate[bot]"
+
+  # Agent Mode - Automation for workflow_dispatch and schedule events
+  agent-mode-scheduled-task:
+    # Only works with workflow_dispatch or schedule events
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Need at least 2 commits to analyze the latest
+      - uses: anthropics/claude-code-action@beta
+        with:
+          mode: agent
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          override_prompt: |
+            Check for outdated dependencies and security vulnerabilities.
+            Create an issue if any critical problems are found.
+          # Agent mode behavior:
+          # - ONLY works with workflow_dispatch and schedule events
+          # - Does NOT work with pull_request, issues, or issue_comment events
+          # - No @claude mention needed for supported events
+          # - Perfect for: scheduled maintenance, manual automation runs

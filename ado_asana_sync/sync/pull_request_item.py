@@ -6,10 +6,9 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Optional
 
-from tinydb import Query
-
 from .app import App
 from .asana import get_asana_task
+from .utils import extract_reviewer_vote
 
 
 class PullRequestItem:
@@ -62,6 +61,17 @@ class PullRequestItem:
         self.updated_date = updated_date
         self.review_status = review_status
 
+        # Validate data consistency to catch potential corruption early
+        if not self.validate_data_consistency():
+            # This is a critical error that indicates data corruption
+            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.error(
+                "Data consistency validation failed for PR item: ado_pr_id=%s, url=%s, title='%s'. "
+                "This indicates potential data corruption where PR ID and URL don't match.",
+                self.ado_pr_id, self.url, self.title
+            )
+
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, PullRequestItem):
             return False
@@ -112,6 +122,45 @@ class PullRequestItem:
         return f'<a href="{self.url}">Pull Request {self.ado_pr_id}</a>: {escape(self.title)}'
 
     @classmethod
+    def _create_search_query(
+        cls,
+        ado_pr_id: Optional[int] = None,
+        reviewer_gid: Optional[str] = None,
+        asana_gid: Optional[str] = None,
+    ):
+        """Create a query function for database search."""
+        def query_func(record):
+            # Check for PR ID and reviewer GID combination first (most specific)
+            if ado_pr_id is not None and reviewer_gid is not None:
+                return (record.get("ado_pr_id") == ado_pr_id and
+                        record.get("reviewer_gid") == reviewer_gid)
+
+            # Check individual conditions
+            if ado_pr_id is not None and record.get("ado_pr_id") == ado_pr_id:
+                return True
+            if reviewer_gid is not None and record.get("reviewer_gid") == reviewer_gid:
+                return True
+            if asana_gid is not None and record.get("asana_gid") == asana_gid:
+                return True
+
+            return False
+        return query_func
+
+    @classmethod
+    def _validate_search_result(cls, pr_item, ado_pr_id: Optional[int], item_data: dict) -> bool:
+        """Validate that search result matches expected criteria."""
+        if ado_pr_id is not None and pr_item.ado_pr_id != ado_pr_id:
+            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.warning(
+                "Database corruption detected: searched for PR ID %s but got item with ID %s. "
+                "This could cause title/ID mismatches. Item data: %s",
+                ado_pr_id, pr_item.ado_pr_id, item_data
+            )
+            return False
+        return True
+
+    @classmethod
     def search(
         cls,
         app: App,
@@ -134,34 +183,20 @@ class PullRequestItem:
         if ado_pr_id is None and reviewer_gid is None and asana_gid is None:
             return None
 
-        # Generate the query based on the input.
-        pr = Query()
-        conditions = []
+        query_func = cls._create_search_query(ado_pr_id, reviewer_gid, asana_gid)
 
-        if ado_pr_id is not None and reviewer_gid is not None:
-            conditions.append(
-                (pr.ado_pr_id == ado_pr_id) & (pr.reviewer_gid == reviewer_gid)
-            )
-        elif ado_pr_id is not None:
-            conditions.append(pr.ado_pr_id == ado_pr_id)
-        elif reviewer_gid is not None:
-            conditions.append(pr.reviewer_gid == reviewer_gid)
+        if app.pr_matches and app.pr_matches.contains(query_func):
+            items = app.pr_matches.search(query_func)
+            if items:
+                # Remove doc_id before creating PullRequestItem
+                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                pr_item = cls(**item_data)
 
-        if asana_gid is not None:
-            conditions.append(pr.asana_gid == asana_gid)
+                # Validate search result for corruption
+                if not cls._validate_search_result(pr_item, ado_pr_id, item_data):
+                    return None  # Don't return corrupted data
 
-        # Combine conditions with OR
-        if len(conditions) == 1:
-            query = conditions[0]
-        else:
-            query = conditions[0]
-            for condition in conditions[1:]:
-                query = query | condition
-
-        # return the first matching item, or return None if not found.
-        if app.pr_matches and app.pr_matches.contains(query):
-            item = app.pr_matches.search(query)
-            return cls(**item[0])
+                return pr_item
         return None
 
     def save(self, app: App) -> None:
@@ -174,6 +209,16 @@ class PullRequestItem:
         Returns:
             None
         """
+        # Validate data consistency before saving
+        if not self.validate_data_consistency():
+            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.error(
+                "Refusing to save PR item with inconsistent data: ado_pr_id=%s, url=%s, title='%s'",
+                self.ado_pr_id, self.url, self.title
+            )
+            return
+
         pr_data = {
             "ado_pr_id": self.ado_pr_id,
             "ado_repository_id": self.ado_repository_id,
@@ -190,21 +235,146 @@ class PullRequestItem:
         }
 
         # Query for unique combination of PR ID and reviewer
-        query = Query()
-        unique_query = (query.ado_pr_id == pr_data["ado_pr_id"]) & (
-            query.reviewer_gid == pr_data["reviewer_gid"]
-        )
+        def unique_query_func(record):
+            return (record.get("ado_pr_id") == pr_data["ado_pr_id"] and
+                    record.get("reviewer_gid") == pr_data["reviewer_gid"])
 
         if app.pr_matches is None:
             raise ValueError("app.pr_matches is None")
         if app.db_lock is None:
             raise ValueError("app.db_lock is None")
-        if app.pr_matches.contains(unique_query):
-            with app.db_lock:
-                app.pr_matches.update(pr_data, unique_query)
-        else:
-            with app.db_lock:
+
+        # Use a larger critical section to ensure atomicity
+        with app.db_lock:
+            # Clean up any corrupted records for this PR/reviewer combination first
+            self._cleanup_corrupted_records(app, pr_data)
+
+            # Now save the current record
+            if app.pr_matches.contains(unique_query_func):
+                app.pr_matches.update(pr_data, unique_query_func)
+            else:
                 app.pr_matches.insert(pr_data)
+
+    def _cleanup_corrupted_records(self, app: App, current_pr_data: dict) -> None:
+        """Clean up corrupted records that don't match current data consistency."""
+        if app.pr_matches is None:
+            return
+
+        # Find all records for this PR ID
+        def pr_query_func(record):
+            return record.get("ado_pr_id") == current_pr_data["ado_pr_id"]
+
+        matching_records = app.pr_matches.search(pr_query_func)
+
+        # Handle case where matching_records might be None or empty, or a mock
+        if not matching_records:
+            return
+
+        # Handle mock objects in tests
+        try:
+            iter(matching_records)
+        except TypeError:
+            # If it's not iterable (e.g., a Mock), just return
+            return
+
+        corrupted_record_count = 0
+        for record in matching_records:
+            if self._should_remove_record(record, current_pr_data):
+                if self._remove_corrupted_record(app, record):
+                    corrupted_record_count += 1
+
+        if corrupted_record_count > 0:
+            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.info(
+                "Cleaned up %d corrupted PR records for PR ID %s",
+                corrupted_record_count, current_pr_data["ado_pr_id"]
+            )
+
+    def _should_remove_record(self, record: dict, current_pr_data: dict) -> bool:
+        """Check if a record should be removed due to corruption."""
+        # Skip the record we're about to save
+        if record.get("reviewer_gid") == current_pr_data["reviewer_gid"]:
+            return False
+
+        try:
+            # Check if this record has consistent data
+            clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
+            temp_item = PullRequestItem(**clean_record)
+            return not temp_item.validate_data_consistency()
+        except Exception:
+            # If we can't even create the object, it's definitely corrupted
+            return True
+
+    def _remove_corrupted_record(self, app: App, record: dict) -> bool:
+        """Remove a corrupted record from the database."""
+        try:
+            def delete_query_func(r):
+                return (r.get("ado_pr_id") == record.get("ado_pr_id") and
+                        r.get("reviewer_gid") == record.get("reviewer_gid"))
+
+            app.pr_matches.remove(delete_query_func)
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def cleanup_all_corrupted_records(cls, app: App) -> int:
+        """
+        Clean up all corrupted PR records in the database.
+
+        This should be called during application startup to remove any existing corrupted data.
+
+        Args:
+            app (App): The App instance.
+
+        Returns:
+            int: Number of corrupted records cleaned up.
+        """
+        if app.pr_matches is None:
+            return 0
+
+        all_records = app.pr_matches.all()
+        corrupted_count = 0
+
+        if app.db_lock is None:
+            raise ValueError("app.db_lock is None")
+
+        with app.db_lock:
+            for record in all_records:
+                if cls._is_record_corrupted(record):
+                    if cls._remove_corrupted_record_static(app, record):
+                        corrupted_count += 1
+
+        if corrupted_count > 0:
+            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.info("Cleaned up %d corrupted PR records during startup", corrupted_count)
+
+        return corrupted_count
+
+    @classmethod
+    def _is_record_corrupted(cls, record: dict) -> bool:
+        """Check if a database record is corrupted."""
+        try:
+            clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
+            temp_item = cls(**clean_record)
+            return not temp_item.validate_data_consistency()
+        except Exception:
+            return True
+
+    @classmethod
+    def _remove_corrupted_record_static(cls, app: App, record: dict) -> bool:
+        """Remove a corrupted record from the database (static version)."""
+        try:
+            def delete_query_func(r):
+                return (r.get("ado_pr_id") == record.get("ado_pr_id") and
+                        r.get("reviewer_gid") == record.get("reviewer_gid"))
+
+            app.pr_matches.remove(delete_query_func)
+            return True
+        except Exception:
+            return False
 
     def is_current(self, app: App, ado_pr, reviewer=None) -> bool:
         """
@@ -234,15 +404,41 @@ class PullRequestItem:
             return False
 
         # Check if Asana task has been updated
-        if asana_task and asana_task["modified_at"] != self.asana_updated:
+        if asana_task and asana_task.get("modified_at") != self.asana_updated:
             return False
 
         # Check if reviewer's vote status has changed
         if reviewer is not None:
-            from .pull_request_sync import extract_reviewer_vote
-
             current_review_status = extract_reviewer_vote(reviewer)
             if current_review_status != self.review_status:
                 return False
+
+        return True
+
+    def validate_data_consistency(self) -> bool:
+        """
+        Validate that the PR item's data is internally consistent.
+
+        Specifically checks that the URL contains the same PR ID as ado_pr_id,
+        which helps detect data corruption where PR ID and title don't match.
+
+        Returns:
+            bool: True if data is consistent, False otherwise.
+        """
+        if not self.url or not self.ado_pr_id:
+            return True  # Can't validate without URL or ID
+
+        # Extract PR ID from URL
+        url_parts = self.url.split('/')
+        try:
+            # URL format: .../pullrequest/{pr_id}
+            if 'pullrequest' in url_parts:
+                pr_index = url_parts.index('pullrequest')
+                if pr_index + 1 < len(url_parts):
+                    url_pr_id = int(url_parts[pr_index + 1])
+                    return url_pr_id == self.ado_pr_id
+        except (ValueError, IndexError):
+            # If we can't parse the URL, assume it's valid
+            return True
 
         return True
