@@ -734,7 +734,13 @@ def process_closed_pull_requests(  # noqa: C901
         def repo_query_func(record):
             return record.get("ado_repository_id") == repository_id
         repo_pr_tasks = app.pr_matches.search(repo_query_func)
-        _LOGGER.info("Second pass: processing repository %s database PR tasks not handled in active PR sync", repository.name)
+        _LOGGER.info("Second pass: processing repository %s (ID: %s) database PR tasks not handled in active PR sync",
+                     repository.name, repository.id)
+
+        # Log which PR tasks were found for this repository
+        if repo_pr_tasks:
+            pr_task_info = [(task.get("ado_pr_id"), task.get("ado_repository_id")) for task in repo_pr_tasks]
+            _LOGGER.debug("Second pass: Found PR tasks for repository %s: %s", repository.name, pr_task_info)
     else:
         repo_pr_tasks = app.pr_matches.all()
         _LOGGER.info("Second pass: processing all database PR tasks not handled in active PR sync")
@@ -767,16 +773,31 @@ def process_closed_pull_requests(  # noqa: C901
             continue
 
         # Try to get the current PR from ADO to check its status
+        if repository:
+            _LOGGER.debug(
+                "Second pass: Attempting to retrieve PR %d from repository %s (current repo ID: %s, stored repo ID: %s)",
+                pr_item.ado_pr_id, repository.name, repository.id, pr_item.ado_repository_id
+            )
+        else:
+            _LOGGER.debug(
+                "Second pass: Attempting to retrieve PR %d (stored repo ID: %s)",
+                pr_item.ado_pr_id, pr_item.ado_repository_id
+            )
 
         try:
-            # Try to get the current PR from ADO using the correct repository object
             if app.ado_git_client is None:
                 raise ValueError("app.ado_git_client is None")
             if repository is None:
                 raise ValueError("Repository object is required for PR API calls")
+
             # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, repository_id)
             pr = app.ado_git_client.get_pull_request_by_id(
                 pr_item.ado_pr_id, repository.id
+            )
+
+            _LOGGER.debug(
+                "Second pass: Successfully retrieved PR %d with status '%s'",
+                pr_item.ado_pr_id, pr.status
             )
 
             _LOGGER.debug(
