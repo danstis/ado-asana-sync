@@ -31,6 +31,7 @@ class PullRequestItem:
         asana_gid (str): The ID of the corresponding reviewer task in Asana.
         asana_updated (str): The last updated time of the Asana task in ISO 8601 format.
         review_status (str): The review status for this reviewer (approved, waiting_for_author, etc.).
+        processing_state (str): The processing state (open, closed) to avoid redundant processing.
     """
 
     def __init__(
@@ -47,6 +48,7 @@ class PullRequestItem:
         created_date: Optional[str] = None,
         updated_date: Optional[str] = None,
         review_status: Optional[str] = None,
+        processing_state: Optional[str] = None,
     ) -> None:
         self.ado_pr_id = ado_pr_id
         self.ado_repository_id = ado_repository_id
@@ -60,6 +62,7 @@ class PullRequestItem:
         self.created_date = created_date
         self.updated_date = updated_date
         self.review_status = review_status
+        self.processing_state = processing_state or "open"  # Default to open for new items
 
         # Validate data consistency to catch potential corruption early
         if not self.validate_data_consistency():
@@ -88,6 +91,7 @@ class PullRequestItem:
             and self.created_date == other.created_date
             and self.updated_date == other.updated_date
             and self.review_status == other.review_status
+            and self.processing_state == other.processing_state
         )
 
     def __str__(self) -> str:
@@ -232,6 +236,7 @@ class PullRequestItem:
             "created_date": self.created_date,
             "updated_date": self.updated_date,
             "review_status": self.review_status,
+            "processing_state": self.processing_state,
         }
 
         # Query for unique combination of PR ID and reviewer

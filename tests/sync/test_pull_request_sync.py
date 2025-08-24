@@ -683,7 +683,7 @@ class TestPullRequestSync(unittest.TestCase):
         
         # Mock app with pr_matches that returns results with doc_id
         mock_app = Mock()
-        mock_app.pr_matches.all.return_value = [
+        mock_pr_data = [
             {
                 "ado_pr_id": 789,
                 "ado_repository_id": "repo-789",
@@ -693,9 +693,11 @@ class TestPullRequestSync(unittest.TestCase):
                 "reviewer_gid": "reviewer-789",
                 "reviewer_name": "Test Reviewer",
                 "asana_gid": "asana-task-789",
+                "processing_state": "open",  # Make sure it's not filtered out
                 "doc_id": 333  # This should be filtered out
             }
         ]
+        mock_app.pr_matches.search.return_value = mock_pr_data
         
         # Mock required parameters
         asana_users = []
@@ -938,7 +940,7 @@ class TestPullRequestSync(unittest.TestCase):
         
         # Mock empty database
         mock_app = Mock()
-        mock_app.pr_matches.all.return_value = []
+        mock_app.pr_matches.search.return_value = []
         
         # Should not raise exception with None parameter
         try:
@@ -1162,7 +1164,7 @@ class TestPullRequestSync(unittest.TestCase):
         
         # Mock empty database
         mock_app = Mock()
-        mock_app.pr_matches.all.return_value = []
+        mock_app.pr_matches.search.return_value = []
         
         # Should not raise exception with None repository
         try:
