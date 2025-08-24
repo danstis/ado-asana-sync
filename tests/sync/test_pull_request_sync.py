@@ -532,7 +532,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertEqual(create_call_args["data"]["projects"], [{"gid": "project-456"}])
         self.assertFalse(create_call_args["data"]["completed"])  # Should not be completed for active PR
 
-    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
     @patch('asana.TasksApi')
     def test_create_asana_pr_task_completed_pr(self, mock_tasks_api_class, mock_find_custom_field):
         """Test creation of Asana PR task for completed PR."""

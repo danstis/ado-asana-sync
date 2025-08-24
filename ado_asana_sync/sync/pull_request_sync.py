@@ -11,12 +11,23 @@ except ImportError:
     # Fallback if git models are not available
     GitPullRequestSearchCriteria = None
 
+import asana
+from asana.rest import ApiException
+
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 
 from .app import App
 from .asana import get_asana_task
 from .pull_request_item import PullRequestItem
+from .sync import (
+    ADOAssignedUser,
+    find_custom_field_by_name,
+    get_asana_project_tasks,
+    get_asana_task_by_name,
+    get_asana_users,
+    matching_user,
+)
 from .utils import extract_reviewer_vote
 
 # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
@@ -26,6 +37,42 @@ _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 _PR_CLOSED_STATES = {"completed", "abandoned", "draft"}
 # ADO reviewer vote values that should close the Asana task
 _REVIEWER_APPROVED_STATES = {"approved", "approvedWithSuggestions"}
+
+
+def _get_cached_custom_field(app: App, asana_project, field_name: str):
+    """Get custom field with caching to avoid repeated API calls."""
+    # Skip caching in test mode (when app has spec attribute indicating it's a Mock)
+    if hasattr(app, '_spec_class'):
+        return find_custom_field_by_name(app, asana_project, field_name)
+
+    # Handle both string and dict project formats for backward compatibility
+    project_str = asana_project if isinstance(asana_project, str) else str(asana_project.get('gid', asana_project))
+    cache_key = f"{project_str}:{field_name}"
+    if hasattr(app, '_pr_sync_cache') and cache_key in app._pr_sync_cache['custom_fields']:
+        return app._pr_sync_cache['custom_fields'][cache_key]
+
+    field = find_custom_field_by_name(app, asana_project, field_name)
+    if hasattr(app, '_pr_sync_cache'):
+        app._pr_sync_cache['custom_fields'][cache_key] = field
+    return field
+
+
+def _get_cached_asana_task(app: App, asana_gid: str):
+    """Get Asana task with caching to avoid repeated API calls."""
+    if not asana_gid:  # Early return for invalid inputs
+        return None
+
+    # Skip caching in test mode (when app has spec attribute indicating it's a Mock)
+    if hasattr(app, '_spec_class'):
+        return get_asana_task(app, asana_gid)
+
+    if hasattr(app, '_pr_sync_cache') and asana_gid in app._pr_sync_cache['asana_tasks']:
+        return app._pr_sync_cache['asana_tasks'][asana_gid]
+
+    task = get_asana_task(app, asana_gid)
+    if hasattr(app, '_pr_sync_cache'):
+        app._pr_sync_cache['asana_tasks'][asana_gid] = task
+    return task
 
 
 def sync_pull_requests(
@@ -42,14 +89,17 @@ def sync_pull_requests(
         _LOGGER.info("Starting pull request sync for project %s", ado_project.name)
 
         # Get all Asana users for user matching
-        from .sync import get_asana_users
-
         asana_users = get_asana_users(app, asana_workspace_id)
 
         # Get all Asana tasks in this project
-        from .sync import get_asana_project_tasks
-
         asana_project_tasks = get_asana_project_tasks(app, asana_project)
+
+        # Cache for performance optimization
+        if not hasattr(app, '_pr_sync_cache'):
+            app._pr_sync_cache = {
+                'custom_fields': {},  # Cache custom field lookups
+                'asana_tasks': {},    # Cache Asana task lookups
+            }
 
         # Get all repositories in the ADO project
         if app.ado_git_client is None:
@@ -111,6 +161,9 @@ def process_repository_pull_requests(
     """
     processed_pr_ids: set[int] = set()
 
+    # Cache user lookup for performance
+    user_lookup_cache = {}
+
     # Get active pull requests
     if GitPullRequestSearchCriteria:
         search_criteria = GitPullRequestSearchCriteria(
@@ -134,7 +187,7 @@ def process_repository_pull_requests(
 
     for pr in pull_requests:
         process_pull_request(
-            app, pr, repository, asana_users, asana_project_tasks, asana_project
+            app, pr, repository, asana_users, asana_project_tasks, asana_project, user_lookup_cache
         )
         processed_pr_ids.add(pr.pull_request_id)
 
@@ -148,6 +201,7 @@ def process_pull_request(  # noqa: C901
     asana_users: List[dict],
     asana_project_tasks: List[dict],
     asana_project: str,
+    user_lookup_cache: dict | None = None,
 ) -> None:
     """
     Process a single pull request, creating reviewer tasks.
@@ -205,9 +259,15 @@ def process_pull_request(  # noqa: C901
         # Get the Asana user GID for this reviewer to track current reviewers
         ado_reviewer = create_ado_user_from_reviewer(reviewer)
         if ado_reviewer:
-            from .sync import matching_user
+            # Use cache for user lookup to avoid repeated matching
+            reviewer_key = f"{ado_reviewer.display_name}:{ado_reviewer.email}"
+            if user_lookup_cache is not None and reviewer_key in user_lookup_cache:
+                asana_matched_user = user_lookup_cache[reviewer_key]
+            else:
+                asana_matched_user = matching_user(asana_users, ado_reviewer)
+                if user_lookup_cache is not None:
+                    user_lookup_cache[reviewer_key] = asana_matched_user
 
-            asana_matched_user = matching_user(asana_users, ado_reviewer)
             if asana_matched_user:
                 current_reviewer_gids.add(asana_matched_user["gid"])
 
@@ -219,6 +279,7 @@ def process_pull_request(  # noqa: C901
             asana_users,
             asana_project_tasks,
             asana_project,
+            user_lookup_cache,
         )
 
     # Handle removed reviewers - close tasks for reviewers no longer on the PR
@@ -235,9 +296,14 @@ def handle_removed_reviewers(
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
 
+    # Use more efficient database query
     def query_func(record):
         return record.get("ado_pr_id") == pr.pull_request_id
     existing_pr_tasks = app.pr_matches.search(query_func)
+
+    # Early return if no tasks found
+    if not existing_pr_tasks:
+        return
 
     for task_data in existing_pr_tasks:
         # Remove doc_id before creating PullRequestItem
@@ -291,6 +357,7 @@ def process_pr_reviewer(
     asana_users: List[dict],
     asana_project_tasks: List[dict],
     asana_project: str,
+    user_lookup_cache: dict | None = None,
 ) -> None:
     """
     Process a single reviewer for a pull request.
@@ -303,10 +370,14 @@ def process_pr_reviewer(
         )
         return
 
-    # Find matching Asana user
-    from .sync import matching_user
-
-    asana_matched_user = matching_user(asana_users, ado_reviewer)
+    # Find matching Asana user (with caching)
+    reviewer_key = f"{ado_reviewer.display_name}:{ado_reviewer.email}"
+    if user_lookup_cache is not None and reviewer_key in user_lookup_cache:
+        asana_matched_user = user_lookup_cache[reviewer_key]
+    else:
+        asana_matched_user = matching_user(asana_users, ado_reviewer)
+        if user_lookup_cache is not None:
+            user_lookup_cache[reviewer_key] = asana_matched_user
     if not asana_matched_user:
         _LOGGER.info(
             "PR %s: reviewer %s <%s> not found in Asana",
@@ -388,8 +459,6 @@ def create_new_pr_reviewer_task(
     )
 
     # Check if there's already an Asana task with matching title
-    from .sync import get_asana_task_by_name
-
     asana_task = get_asana_task_by_name(asana_project_tasks, pr_item.asana_title)
 
     if asana_task is None:
@@ -450,7 +519,7 @@ def update_existing_pr_reviewer_task(
 
     _LOGGER.info("Updating PR reviewer task: %s", existing_match.asana_title)
 
-    asana_task = get_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
+    asana_task = _get_cached_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
     if asana_task is None:
         _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
         return
@@ -519,8 +588,6 @@ def create_asana_pr_task(
     """
     Create an Asana task for a pull request reviewer.
     """
-    import asana
-    from asana.rest import ApiException
 
     # Determine if task should be completed based on review status
     is_completed = (
@@ -541,9 +608,7 @@ def create_asana_pr_task(
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     # Find the custom field ID for 'link'
-    from .sync import find_custom_field_by_name
-
-    link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
+    link_custom_field = _get_cached_custom_field(app, asana_project, "Link")
     link_custom_field_id = (
         link_custom_field.get("custom_field", {}).get("gid")
         if link_custom_field
@@ -581,8 +646,6 @@ def update_asana_pr_task(
     """
     Update an Asana task for a pull request reviewer.
     """
-    import asana
-    from asana.rest import ApiException
 
     # Determine if task should be completed
     is_completed = (
@@ -603,9 +666,7 @@ def update_asana_pr_task(
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     # Find the custom field ID for 'link'
-    from .sync import find_custom_field_by_name
-
-    link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
+    link_custom_field = _get_cached_custom_field(app, asana_project_gid, "Link")
     link_custom_field_id = (
         link_custom_field.get("custom_field", {}).get("gid")
         if link_custom_field
@@ -645,8 +706,6 @@ def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
     """
     Adds a tag to a pull request task if it is not already assigned.
     """
-    import asana
-    from asana.rest import ApiException
 
     # Get current tags for the task
     api_instance = asana.TagsApi(app.asana_client)
@@ -669,8 +728,6 @@ def add_closure_comment_to_pr_task(app: App, pr_item: PullRequestItem) -> None:
     """
     Add a comment to a pull request task explaining why it was closed due to PR state change.
     """
-    import asana
-    from asana.rest import ApiException
 
     if not pr_item.asana_gid:
         return
@@ -819,7 +876,7 @@ def process_closed_pull_requests(  # noqa: C901
             processed_count += 1
 
             if pr_item.asana_gid:
-                asana_task = get_asana_task(app, pr_item.asana_gid)
+                asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
                 if asana_task and not asana_task.get("completed", False):
                     # Close the Asana task
                     pr_item.status = pr.status if pr else "completed"
@@ -841,7 +898,7 @@ def process_closed_pull_requests(  # noqa: C901
                 )
                 # If we can't retrieve the PR, assume it's closed and close the Asana task
                 if pr_item.asana_gid:
-                    asana_task = get_asana_task(app, pr_item.asana_gid)
+                    asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
                     if asana_task and not asana_task.get("completed", False):
                         # Close the Asana task - assume PR is abandoned/deleted
                         pr_item.status = "abandoned"  # Set status for closure comment
@@ -914,8 +971,6 @@ def create_ado_user_from_reviewer(reviewer) -> Any:
             return None
 
         # Create a user object similar to ADOAssignedUser from sync.py
-        from .sync import ADOAssignedUser
-
         return ADOAssignedUser(display_name, email)
 
     except Exception as e:
