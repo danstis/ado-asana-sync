@@ -291,6 +291,7 @@ class Database:
             if "no such table: schema_version" in str(exc):
                 return 1
             raise
+
     def _record_migration(self, conn, version: int, description: str):
         """Record a completed migration in the schema_version table."""
         conn.execute("""
@@ -473,7 +474,7 @@ class Database:
             _LOGGER.info("Migration completed successfully")
             return True
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             _LOGGER.error("Migration failed: %s", e)
             return False
 
@@ -509,14 +510,14 @@ class Database:
                 # Checkpoint the WAL file to merge changes back to main database
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 conn.close()
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Error closing database connection: %s", e)
 
         # Clean up thread-local connection if it exists
         if hasattr(self._local, 'connection'):
             try:
                 delattr(self._local, 'connection')
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Error cleaning up thread-local connection: %s", e)
 
         _LOGGER.debug("All database connections closed")

@@ -62,3 +62,52 @@ Follow these steps to set up your development environment:
 ## Commits
 
 - Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for all commit messages.
+# Repository Guidelines
+
+## Project Structure & Module Organization
+
+- Source: `ado_asana_sync/`
+  - `sync/app.py`: entry point
+  - `sync/sync.py`: ADO ↔ Asana sync core
+  - `sync/asana.py`: Asana API helpers
+  - `sync/task_item.py`, `sync/pull_request_item.py`: data models
+  - `sync/pull_request_sync.py`: PR reviewer task sync
+  - `utils/`: logging/tracing, time helpers
+  - `database/`: TinyDB persistence
+- Config example: `data/projects.json.example`
+- Tests: `tests/`
+
+## Setup & Configuration
+
+- Install dependencies: `poetry install`
+- Configure env: copy `.env.example` → `.env` and fill required values
+- Dependencies: manage with Poetry only (`poetry add <name>`)
+
+## Quality & Tooling (use tox.ini settings)
+
+- Linting: `poetry run tox -e flake8` (max line length 127, complexity 10)
+- Pylint: `poetry run tox -e pylint`
+- Security: `poetry run tox -e bandit`
+- Types: `poetry run tox -e mypy`
+- All at once: `poetry run tox -e flake8,pylint,bandit,mypy`
+- Tests + coverage: `poetry run tox -e pytest` (coverage enforced ≥ 60%)
+- Markdown: `poetry run mdformat --check *.md` then `poetry run mdformat *.md`
+- Optional Python formatting: `poetry run black .` (line length 127)
+
+## Coding Style & Naming
+
+- Python 3.13, 4‑space indent, `snake_case` for modules/functions
+- Follow `.pylintrc`, `.editorconfig`, and `tox.ini` strictly
+
+## Testing Guidelines
+
+- Framework: `pytest` with coverage/branch coverage
+- Name tests `test_*.py` under `tests/`
+- Write small, deterministic tests around sync logic and API boundaries
+
+## Commits, PRs, and CI
+
+- Commits: Conventional Commits (e.g., `feat: add PR reviewer sync cache`)
+- PRs: clear description, linked issues, screenshots/notes if user‑visible
+- Before submitting: run flake8, pylint, bandit, mypy, pytest, and mdformat (as above)
+- CI: GitHub Actions runs builds, CodeQL analysis, and releases; keep docs/examples current

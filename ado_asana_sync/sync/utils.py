@@ -39,6 +39,6 @@ def extract_reviewer_vote(reviewer) -> str:
         _LOGGER.debug("No vote found for reviewer")
         return "noVote"
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Failed to extract vote from reviewer: %s", e)
         return "noVote"

@@ -53,8 +53,8 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_reviewer.unique_name = "john.doe@example.com"
         self.mock_reviewer.vote = "waiting_for_author"
 
-    @patch('ado_asana_sync.sync.sync.get_asana_users')
-    @patch('ado_asana_sync.sync.sync.get_asana_project_tasks')
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_users')
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_project_tasks')
     @patch('ado_asana_sync.sync.pull_request_sync.process_closed_pull_requests')
     def test_sync_pull_requests(self, mock_process_closed, mock_get_tasks, mock_get_users):
         """Test the main sync_pull_requests function."""
@@ -85,9 +85,10 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Verify calls
         self.mock_app.ado_git_client.get_pull_requests.assert_called_once()
-        mock_process_pr.assert_called_once_with(
-            self.mock_app, self.mock_pr, self.mock_repository, [], [], "project-456"
-        )
+        # Check that the call was made with the expected parameters plus the cache
+        args, kwargs = mock_process_pr.call_args
+        self.assertEqual(args[:6], (self.mock_app, self.mock_pr, self.mock_repository, [], [], "project-456"))
+        self.assertIsInstance(args[6], dict)  # user_lookup_cache should be a dict
 
     @patch('ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers')
     @patch('ado_asana_sync.sync.pull_request_sync.process_pr_reviewer')
@@ -123,7 +124,7 @@ class TestPullRequestSync(unittest.TestCase):
             mock_handle_removed.assert_called_once_with(self.mock_app, self.mock_pr, set(), "project-456")
 
     @patch('ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer')
-    @patch('ado_asana_sync.sync.sync.matching_user')
+    @patch('ado_asana_sync.sync.pull_request_sync.matching_user')
     @patch('ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task')
     def test_process_pr_reviewer_new_task(self, mock_create_task, mock_matching_user, mock_create_user):
         """Test processing a reviewer when no existing task exists."""
@@ -148,7 +149,7 @@ class TestPullRequestSync(unittest.TestCase):
             mock_create_task.assert_called_once()
 
     @patch('ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer')
-    @patch('ado_asana_sync.sync.sync.matching_user')
+    @patch('ado_asana_sync.sync.pull_request_sync.matching_user')
     @patch('ado_asana_sync.sync.pull_request_sync.update_existing_pr_reviewer_task')
     def test_process_pr_reviewer_existing_task(self, mock_update_task, mock_matching_user, mock_create_user):
         """Test processing a reviewer when an existing task exists."""
@@ -192,7 +193,7 @@ class TestPullRequestSync(unittest.TestCase):
                 # Verify no task creation
                 mock_create_task.assert_not_called()
 
-    @patch('ado_asana_sync.sync.sync.get_asana_task_by_name')
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name')
     @patch('ado_asana_sync.sync.pull_request_sync.create_asana_pr_task')
     @patch('ado_asana_sync.sync.pull_request_sync.iso8601_utc')
     def test_create_new_pr_reviewer_task(self, mock_iso8601, mock_create_task, mock_get_task_by_name):
@@ -431,8 +432,8 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_app.ado_git_client.reset_mock()
         self.mock_app.ado_git_client.get_repositories.side_effect = Exception("permission denied")
         
-        with patch('ado_asana_sync.sync.sync.get_asana_users') as mock_get_users:
-            with patch('ado_asana_sync.sync.sync.get_asana_project_tasks') as mock_get_tasks:
+        with patch('ado_asana_sync.sync.pull_request_sync.get_asana_users') as mock_get_users:
+            with patch('ado_asana_sync.sync.pull_request_sync.get_asana_project_tasks') as mock_get_tasks:
                 mock_get_users.return_value = []
                 mock_get_tasks.return_value = []
                 
@@ -498,7 +499,7 @@ class TestPullRequestSync(unittest.TestCase):
                 # Verify it tried to get PRs but handled the error
                 self.mock_app.ado_git_client.get_pull_requests.assert_called_once()
 
-    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
     @patch('asana.TasksApi')
     def test_create_asana_pr_task_success(self, mock_tasks_api_class, mock_find_custom_field):
         """Test successful creation of Asana PR task."""
@@ -532,7 +533,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertEqual(create_call_args["data"]["projects"], [{"gid": "project-456"}])
         self.assertFalse(create_call_args["data"]["completed"])  # Should not be completed for active PR
 
-    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
     @patch('asana.TasksApi')
     def test_create_asana_pr_task_completed_pr(self, mock_tasks_api_class, mock_find_custom_field):
         """Test creation of Asana PR task for completed PR."""
@@ -562,7 +563,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertTrue(create_call_args["data"]["completed"])  # Should be completed
 
     @patch('ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task')
-    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
     @patch('asana.TasksApi')
     def test_update_asana_pr_task_success(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag):
         """Test successful update of Asana PR task."""
@@ -595,7 +596,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertTrue(update_call_args[0]["data"]["completed"])  # Should be completed for approved
 
     @patch('ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task')
-    @patch('ado_asana_sync.sync.sync.find_custom_field_by_name')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
     @patch('asana.TasksApi')
     def test_update_asana_pr_task_no_custom_field(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag):
         """Test update of Asana PR task when custom field is not found."""
@@ -682,7 +683,7 @@ class TestPullRequestSync(unittest.TestCase):
         
         # Mock app with pr_matches that returns results with doc_id
         mock_app = Mock()
-        mock_app.pr_matches.all.return_value = [
+        mock_pr_data = [
             {
                 "ado_pr_id": 789,
                 "ado_repository_id": "repo-789",
@@ -692,9 +693,11 @@ class TestPullRequestSync(unittest.TestCase):
                 "reviewer_gid": "reviewer-789",
                 "reviewer_name": "Test Reviewer",
                 "asana_gid": "asana-task-789",
+                "processing_state": "open",  # Make sure it's not filtered out
                 "doc_id": 333  # This should be filtered out
             }
         ]
+        mock_app.pr_matches.search.return_value = mock_pr_data
         
         # Mock required parameters
         asana_users = []
@@ -712,6 +715,465 @@ class TestPullRequestSync(unittest.TestCase):
                 raise  # Re-raise if it's a different error
         
         self.assertTrue(success, "PullRequestItem creation should not fail due to doc_id")
+
+    @patch('ado_asana_sync.sync.pull_request_sync.add_closure_comment_to_pr_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
+    @patch('asana.TasksApi')
+    def test_create_asana_pr_task_draft_pr(self, mock_tasks_api_class, mock_find_custom_field, mock_add_comment):
+        """Test creation of Asana PR task for draft PR."""
+        from ado_asana_sync.sync.pull_request_sync import create_asana_pr_task
+        
+        # Setup mocks
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.create_task.return_value = {"gid": "new-task-789", "modified_at": "2023-12-01T10:00:00Z"}
+        
+        mock_find_custom_field.return_value = {"custom_field": {"gid": "link-field-123"}}
+        
+        mock_asana_project = {"gid": "project-456"}
+        mock_pr_item = Mock()
+        mock_pr_item.asana_title = "PR 789: Draft PR"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 789</a>: Draft PR"
+        mock_pr_item.status = "draft"  # Draft PR
+        mock_pr_item.review_status = "noVote"
+        mock_pr_item.url = "http://test.com/pr/789"
+        
+        # Call function
+        result = create_asana_pr_task(self.mock_app, mock_asana_project, mock_pr_item, "tag-gid")
+        
+        # Verify task creation
+        self.assertIsNone(result)  # Function doesn't return anything
+        create_call_args = mock_tasks_api.create_task.call_args[0][0]
+        self.assertTrue(create_call_args["data"]["completed"])  # Should be completed for draft PR
+
+    @patch('ado_asana_sync.sync.pull_request_sync.add_closure_comment_to_pr_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name')
+    @patch('asana.TasksApi')
+    def test_update_asana_pr_task_draft_transition(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag, mock_add_comment):
+        """Test update of Asana PR task when PR transitions to draft."""
+        from ado_asana_sync.sync.pull_request_sync import update_asana_pr_task
+        
+        # Setup mocks
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.update_task.return_value = {"modified_at": "2023-12-01T11:00:00Z"}
+        
+        mock_find_custom_field.return_value = {"custom_field": {"gid": "link-field-123"}}
+        
+        mock_asana_project = {"gid": "project-456"}
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "existing-task-999"
+        mock_pr_item.asana_title = "PR 999: Moved to Draft"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 999</a>: Moved to Draft"
+        mock_pr_item.status = "draft"  # Transitioned to draft
+        mock_pr_item.review_status = "waitingForAuthor"  # Reviewer hasn't voted yet
+        mock_pr_item.url = "http://test.com/pr/999"
+        
+        # Call function
+        update_asana_pr_task(self.mock_app, mock_pr_item, "tag-gid", mock_asana_project)
+        
+        # Verify task update
+        mock_tasks_api.update_task.assert_called_once()
+        update_call_args = mock_tasks_api.update_task.call_args[0]
+        self.assertEqual(update_call_args[1], "existing-task-999")  # Task GID is second parameter
+        self.assertTrue(update_call_args[0]["data"]["completed"])  # Should be completed for draft PR
+        
+        # Verify closure comment was added
+        mock_add_comment.assert_called_once_with(self.mock_app, mock_pr_item)
+
+    @patch('asana.StoriesApi')
+    def test_add_closure_comment_to_pr_task_draft(self, mock_stories_api_class):
+        """Test adding closure comment when PR moves to draft state."""
+        from ado_asana_sync.sync.pull_request_sync import add_closure_comment_to_pr_task
+        
+        # Setup mocks
+        mock_stories_api = Mock()
+        mock_stories_api_class.return_value = mock_stories_api
+        
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-123"
+        mock_pr_item.asana_title = "PR 123: Test Title"
+        mock_pr_item.status = "draft"
+        mock_pr_item.review_status = "noVote"  # Reviewer hasn't voted
+        
+        # Call function
+        add_closure_comment_to_pr_task(self.mock_app, mock_pr_item)
+        
+        # Verify comment was added
+        mock_stories_api.create_story_for_task.assert_called_once()
+        call_args = mock_stories_api.create_story_for_task.call_args[0]
+        self.assertEqual(call_args[1], "task-123")  # Task GID
+        self.assertIn("draft status", call_args[0]["data"]["text"])  # Comment mentions draft
+
+    @patch('asana.StoriesApi')
+    def test_add_closure_comment_to_pr_task_no_comment_for_approved(self, mock_stories_api_class):
+        """Test that no closure comment is added when reviewer has already approved."""
+        from ado_asana_sync.sync.pull_request_sync import add_closure_comment_to_pr_task
+        
+        # Setup mocks
+        mock_stories_api = Mock()
+        mock_stories_api_class.return_value = mock_stories_api
+        
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-456"
+        mock_pr_item.asana_title = "PR 456: Approved PR"
+        mock_pr_item.status = "completed"
+        mock_pr_item.review_status = "approved"  # Reviewer has approved
+        
+        # Call function
+        add_closure_comment_to_pr_task(self.mock_app, mock_pr_item)
+        
+        # Verify no comment was added for approved reviewers
+        mock_stories_api.create_story_for_task.assert_not_called()
+
+    def test_pr_closed_states_includes_draft(self):
+        """Test that draft is included in PR closed states."""
+        from ado_asana_sync.sync.pull_request_sync import _PR_CLOSED_STATES
+        
+        # Verify draft is now included in closed states
+        self.assertIn("draft", _PR_CLOSED_STATES)
+        self.assertIn("completed", _PR_CLOSED_STATES)
+        self.assertIn("abandoned", _PR_CLOSED_STATES)
+
+    @patch('ado_asana_sync.sync.pull_request_sync.process_pull_request')
+    def test_process_repository_pull_requests_returns_processed_ids(self, mock_process_pr):
+        """Test that process_repository_pull_requests returns processed PR IDs."""
+        from ado_asana_sync.sync.pull_request_sync import process_repository_pull_requests
+        
+        # Setup mocks
+        mock_pr1 = Mock()
+        mock_pr1.pull_request_id = 100
+        mock_pr2 = Mock()
+        mock_pr2.pull_request_id = 200
+        
+        self.mock_app.ado_git_client.get_pull_requests.return_value = [mock_pr1, mock_pr2]
+        
+        # Call function
+        result = process_repository_pull_requests(
+            self.mock_app, self.mock_repository, [], [], "project-456"
+        )
+        
+        # Verify returned PR IDs
+        self.assertEqual(result, {100, 200})
+        self.assertEqual(mock_process_pr.call_count, 2)
+
+    def test_process_repository_pull_requests_returns_empty_on_error(self):
+        """Test that process_repository_pull_requests returns empty set on API error."""
+        from ado_asana_sync.sync.pull_request_sync import process_repository_pull_requests
+        
+        # Setup mock to raise exception
+        self.mock_app.ado_git_client.get_pull_requests.side_effect = Exception("API Error")
+        
+        # Call function
+        result = process_repository_pull_requests(
+            self.mock_app, self.mock_repository, [], [], "project-456"
+        )
+        
+        # Verify empty set is returned
+        self.assertEqual(result, set())
+
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
+    def test_process_closed_pull_requests_skips_processed_prs(self, mock_update_task, mock_get_task):
+        """Test that process_closed_pull_requests skips PRs already processed in first pass."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock database PR tasks
+        mock_app = Mock()
+        mock_app.pr_matches.all.return_value = [
+            {
+                "ado_pr_id": 100,  # This will be skipped (in processed_pr_ids)
+                "ado_repository_id": "repo-1",
+                "title": "Active PR",
+                "status": "active",
+                "url": "https://example.com/pr/100",
+                "reviewer_gid": "reviewer-1",
+                "reviewer_name": "Test User 1",
+                "asana_gid": "task-1"
+            },
+            {
+                "ado_pr_id": 200,  # This will be processed (not in processed_pr_ids)
+                "ado_repository_id": "repo-2",
+                "title": "Closed PR",
+                "status": "completed",
+                "url": "https://example.com/pr/200",
+                "reviewer_gid": "reviewer-2",
+                "reviewer_name": "Test User 2",
+                "asana_gid": "task-2"
+            }
+        ]
+        mock_app.ado_git_client.get_pull_request_by_id.return_value = Mock(status="completed")
+        mock_app.asana_tag_gid = "tag-123"
+        mock_get_task.return_value = {"completed": False}
+        
+        # Create mock repository object (required for API calls)
+        mock_repo = Mock()
+        mock_repo.id = "repo-2"  # Use repo-2 since PR 200 belongs to repo-2
+        mock_repo.name = "test-repo"
+        mock_project = Mock()
+        mock_project.id = "project-456"
+        mock_repo.project = mock_project
+        
+        # Mock search to return only repo-2 PRs
+        def search_side_effect(query_func):
+            all_tasks = [
+                {"ado_pr_id": 100, "ado_repository_id": "repo-1", "title": "Active PR", "status": "active", "url": "https://example.com/pr/100", "reviewer_gid": "reviewer-1", "reviewer_name": "Test User 1", "asana_gid": "task-1"},
+                {"ado_pr_id": 200, "ado_repository_id": "repo-2", "title": "Closed PR", "status": "completed", "url": "https://example.com/pr/200", "reviewer_gid": "reviewer-2", "reviewer_name": "Test User 2", "asana_gid": "task-2"}
+            ]
+            return [task for task in all_tasks if query_func(task)]
+        mock_app.pr_matches.search.side_effect = search_side_effect
+        
+        # Call function with processed_pr_ids containing PR 100
+        process_closed_pull_requests(mock_app, [], "project-456", {100}, mock_repo)
+        
+        # Verify that only PR 200 was processed (PR 100 was skipped)
+        self.assertEqual(mock_app.ado_git_client.get_pull_request_by_id.call_count, 1)
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(200, "repo-2")
+        
+        # Verify update was called for the unprocessed PR
+        mock_update_task.assert_called_once()
+
+    def test_process_closed_pull_requests_handles_none_processed_ids(self):
+        """Test that process_closed_pull_requests handles None processed_pr_ids parameter."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock empty database
+        mock_app = Mock()
+        mock_app.pr_matches.search.return_value = []
+        
+        # Should not raise exception with None parameter
+        try:
+            process_closed_pull_requests(mock_app, [], "project-456", None, None)
+            success = True
+        except Exception:
+            success = False
+        
+        self.assertTrue(success, "Function should handle None processed_pr_ids gracefully")
+
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
+    def test_process_closed_pull_requests_filters_by_repository(self, mock_update_task, mock_get_task):
+        """Test that process_closed_pull_requests filters PR tasks by repository ID."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock database PR tasks for different repositories
+        mock_app = Mock()
+        all_tasks = [
+            {
+                "ado_pr_id": 100,  
+                "ado_repository_id": "repo-1",  # This repository
+                "title": "PR for repo-1",
+                "status": "active",
+                "url": "https://example.com/pr/100",
+                "reviewer_gid": "reviewer-1",
+                "reviewer_name": "Test User 1",
+                "asana_gid": "task-1"
+            },
+            {
+                "ado_pr_id": 200,  
+                "ado_repository_id": "repo-2",  # Different repository  
+                "title": "PR for repo-2",
+                "status": "active",
+                "url": "https://example.com/pr/200",
+                "reviewer_gid": "reviewer-2",
+                "reviewer_name": "Test User 2",
+                "asana_gid": "task-2"
+            }
+        ]
+        
+        # Mock search to return only repo-1 tasks when filtered
+        def search_side_effect(query_func):
+            return [task for task in all_tasks if query_func(task)]
+        mock_app.pr_matches.search.side_effect = search_side_effect
+        mock_app.pr_matches.all.return_value = all_tasks
+        mock_app.ado_git_client.get_pull_request_by_id.return_value = Mock(status="completed")
+        mock_app.asana_tag_gid = "tag-123"
+        mock_get_task.return_value = {"completed": False}
+        
+        # Create mock repository object
+        mock_repo = Mock()
+        mock_repo.id = "repo-1"
+        mock_repo.name = "test-repo-1"
+        mock_project = Mock()
+        mock_project.id = "project-456"
+        mock_repo.project = mock_project
+        
+        # Call function filtering by repo-1
+        process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
+        
+        # Verify only repo-1 PR was processed
+        self.assertEqual(mock_app.ado_git_client.get_pull_request_by_id.call_count, 1)
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(100, "repo-1")
+        
+        # Verify update was called for the correct PR
+        mock_update_task.assert_called_once()
+
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
+    def test_process_closed_pull_requests_api_failure_with_string_repository_id(self, mock_update_task, mock_get_task):
+        """Test that API failures occur when repository ID string is passed instead of repository object."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock database PR tasks
+        mock_app = Mock()
+        pr_tasks = [
+            {
+                "ado_pr_id": 5,
+                "ado_repository_id": "e7264829-58d0-48b5-879a-10fd01a8f815",
+                "title": "Abandoned PR",
+                "status": "active",
+                "url": "https://example.com/pr/5",
+                "reviewer_gid": "reviewer-1",
+                "reviewer_name": "Test User",
+                "asana_gid": "task-5"
+            }
+        ]
+        mock_app.pr_matches.all.return_value = pr_tasks
+        mock_app.pr_matches.search.return_value = pr_tasks
+        
+        # Mock API to throw the exact error we encountered
+        mock_app.ado_git_client.get_pull_request_by_id.side_effect = Exception(
+            "VS800075: The project with id 'e7264829-58d0-48b5-879a-10fd01a8f815' does not exist, or you do not have permission to access it."
+        )
+        
+        # Mock repository object (this should work)
+        mock_repo = Mock()
+        mock_repo.id = "e7264829-58d0-48b5-879a-10fd01a8f815"
+        mock_repo.name = "test-board"
+        mock_project = Mock()
+        mock_project.id = "project-123"
+        mock_repo.project = mock_project
+        
+        # Call function - should handle the API error gracefully
+        process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
+        
+        # Verify API was called but failed  
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5, "e7264829-58d0-48b5-879a-10fd01a8f815")
+        
+        # Verify no update was called due to API failure
+        mock_update_task.assert_not_called()
+
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')
+    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
+    def test_process_closed_pull_requests_successful_abandoned_pr_processing(self, mock_update_task, mock_get_task):
+        """Test that abandoned PRs are processed correctly when API succeeds."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock database PR tasks
+        mock_app = Mock()
+        pr_tasks = [
+            {
+                "ado_pr_id": 5,
+                "ado_repository_id": "e7264829-58d0-48b5-879a-10fd01a8f815",
+                "title": "Abandoned PR",
+                "status": "active",  # Status in database (old)
+                "url": "https://example.com/pr/5",
+                "reviewer_gid": "reviewer-1",
+                "reviewer_name": "Test User",
+                "asana_gid": "task-5"
+            }
+        ]
+        mock_app.pr_matches.all.return_value = pr_tasks
+        mock_app.pr_matches.search.return_value = pr_tasks
+        
+        # Mock API to return abandoned PR
+        mock_abandoned_pr = Mock()
+        mock_abandoned_pr.status = "abandoned"
+        mock_app.ado_git_client.get_pull_request_by_id.return_value = mock_abandoned_pr
+        mock_app.asana_tag_gid = "tag-123"
+        
+        # Mock Asana task as not completed
+        mock_get_task.return_value = {"completed": False}
+        
+        # Mock repository object
+        mock_repo = Mock()
+        mock_repo.id = "e7264829-58d0-48b5-879a-10fd01a8f815"
+        mock_repo.name = "test-board"
+        mock_project = Mock()
+        mock_project.id = "project-456"
+        mock_repo.project = mock_project
+        
+        # Call function
+        process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
+        
+        # Verify API was called with correct parameters
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5, "e7264829-58d0-48b5-879a-10fd01a8f815")
+        
+        # Verify task update was called for abandoned PR
+        mock_update_task.assert_called_once()
+        
+        # Verify Asana task was checked
+        mock_get_task.assert_called_once_with(mock_app, "task-5")
+
+    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')  
+    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
+    def test_process_closed_pull_requests_draft_pr_processing(self, mock_update_task, mock_get_task):
+        """Test that draft PRs are processed correctly."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock database PR tasks
+        mock_app = Mock()
+        pr_tasks = [
+            {
+                "ado_pr_id": 6,
+                "ado_repository_id": "repo-123",
+                "title": "Draft PR", 
+                "status": "active",  # Status in database (old)
+                "url": "https://example.com/pr/6",
+                "reviewer_gid": "reviewer-1",
+                "reviewer_name": "Test User",
+                "asana_gid": "task-6"
+            }
+        ]
+        mock_app.pr_matches.all.return_value = pr_tasks
+        mock_app.pr_matches.search.return_value = pr_tasks
+        
+        # Mock API to return draft PR
+        mock_draft_pr = Mock()
+        mock_draft_pr.status = "draft"
+        mock_app.ado_git_client.get_pull_request_by_id.return_value = mock_draft_pr
+        mock_app.asana_tag_gid = "tag-123"
+        
+        # Mock Asana task as not completed
+        mock_get_task.return_value = {"completed": False}
+        
+        # Mock repository object
+        mock_repo = Mock()
+        mock_repo.id = "repo-123"
+        mock_repo.name = "test-repo"
+        mock_project = Mock()
+        mock_project.id = "project-456"
+        mock_repo.project = mock_project
+        
+        # Call function
+        process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
+        
+        # Verify API was called
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(6, "repo-123")
+        
+        # Verify task update was called for draft PR
+        mock_update_task.assert_called_once()
+        
+        # Verify Asana task was checked
+        mock_get_task.assert_called_once_with(mock_app, "task-6")
+
+    def test_process_closed_pull_requests_handles_missing_repository_gracefully(self):
+        """Test that function handles missing repository parameter gracefully."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+        
+        # Mock empty database
+        mock_app = Mock()
+        mock_app.pr_matches.search.return_value = []
+        
+        # Should not raise exception with None repository
+        try:
+            process_closed_pull_requests(mock_app, [], "project-456", set(), None)
+            success = True
+        except Exception:
+            success = False
+        
+        self.assertTrue(success, "Function should handle None repository gracefully")
 
 
 if __name__ == "__main__":

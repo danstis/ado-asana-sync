@@ -1,47 +1,84 @@
-This document provides guidance for AI agents to interact with and contribute to this project.
+# Copilot Agent Guide
 
-## Project Overview
+This document provides guidance for Copilot agents contributing to the Azure DevOps (ADO) and Asana synchronization project. Please read carefully to understand the project context, setup, and contribution guidelines.
 
-This repository implements a robust synchronization tool between Azure DevOps (ADO) and Asana. All core logic resides in the `ado_asana_sync` directory, with a primary focus on synchronizing tasks between these platforms.
+## Project Context
+
+This repository provides a robust tool for synchronizing tasks between Azure DevOps and Asana. The main logic is located in the `ado_asana_sync` directory, focusing on seamless task synchronization between the two platforms.
 
 ## Getting Started
 
-Follow these steps to set up your development environment:
+- Install [Poetry](https://python-poetry.org/) to manage dependencies and environments.
+- Run `poetry install` to set up all required dependencies.
+- Copy `.env.example` to `.env` and fill in all necessary environment variables as described in the example file.
 
-1. Install [Poetry](https://python-poetry.org/).
-2. Run `poetry install` to install all project dependencies.
-3. Copy `.env.example` to `.env` and provide the required environment variable values.
+## Development Practices
 
-## Development
+Key files:
 
-### Main Components
-
-- `ado_asana_sync/sync/app.py`: Serves as the main application entry point.
-- `ado_asana_sync/sync/sync.py`: Contains the core synchronization logic between ADO and Asana.
-- `ado_asana_sync/sync/asana.py`: Manages all interactions with the Asana API.
-- `ado_asana_sync/sync/task_item.py`: Defines the `TaskItem` data structure for task representation.
-- `data/projects.json.example`: Provides an example of the project data structure required for configuration.
-
-### Coding Conventions
+- `ado_asana_sync/sync/app.py`: Main entry point.
+- `ado_asana_sync/sync/sync.py`: Core sync logic.
+- `ado_asana_sync/sync/asana.py`: Handles Asana API.
+- `ado_asana_sync/sync/task_item.py`: Task data structure.
+- `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
+- `ado_asana_sync/sync/pull_request_sync.py`: Pull request sync logic.
+- `data/projects.json.example`: Example project configuration.
 
 - Write all code in Python.
-- Enforce linting with `pylint` (see `.pylintrc`).
-- Adhere to formatting rules defined in `.editorconfig`.
-- Ensure all code matches `flake8` standards.
+- Enforce linting with `pylint` and `flake8` (see `.pylintrc` and `.editorconfig`).
+- Enforce markdown formatting with `mdformat` for all `.md` files.
+- Add dependencies only with `poetry add <dependency>`.
+- Run tools using `poetry run`.
+- Always update the readme and other documentation based on the changes made.
 
-## Testing
+## Code Quality Requirements
 
-- Place all tests in the `tests/` directory.
-- Use `pytest` as the testing framework.
-- Run the test suite with the `tox` command, as configured in `tox.ini`.
-- Ensure that test coverage remains above 60% for all changes. Add or update tests as necessary to maintain this threshold.
-- Check coverage with `pytest-cov`.
+- **Python Code**: Use `pylint` and `flake8` for linting
+- **Markdown Files**: Use `mdformat` to ensure consistent formatting
+- **Testing**: Place all tests in the `tests/` directory and use `pytest`
+- **Coverage**: Ensure test coverage remains above 60% for all changes
+- **Tool Configuration**: **ALWAYS** use the settings defined in `tox.ini` for all code quality and linting tools
 
-## CI/CD
+### Code Quality Tool Configuration
 
-- Use GitHub Actions for all CI/CD workflows.
-- Define workflows in the `.github/workflows/` directory.
-- Ensure all code is built, analyzed with CodeQL, and released through these workflows.
+All linting and code quality tools are configured in `tox.ini` with specific settings and individual environments:
+
+- **flake8**: Uses `--max-line-length=127` and `--max-complexity=10` - Run with `poetry run tox -e flake8`
+- **pylint**: Configured for recursive checking - Run with `poetry run tox -e pylint`
+- **pytest**: Includes coverage reporting with branch coverage - Run with `poetry run tox -e pytest`
+- **bandit**: Security scanning with recursive mode - Run with `poetry run tox -e bandit`
+- **mypy**: Static type checking with missing import ignoring - Run with `poetry run tox -e mypy`
+
+**IMPORTANT**: Always use `poetry run tox -e <environment>` to run each tool individually, or `poetry run tox -e flake8,pylint,bandit,mypy` to run multiple tools. This ensures exact consistency with CI/CD pipelines and uses the precise settings defined in `tox.ini`.
+
+### Markdown Linting Workflow
+
+When editing markdown files (`.md`), always run the markdown formatter:
+
+1. **Check formatting**: `poetry run mdformat --check *.md`
+1. **Auto-fix formatting**: `poetry run mdformat *.md`
+1. **Verify changes**: Review any changes made by the formatter before committing
+
+The markdown formatter ensures:
+
+- Consistent heading styles
+- Proper list formatting
+- Table formatting (with GitHub Flavored Markdown support)
+- Line ending consistency
+
+## CI/CD Workflow
+
+- All CI/CD is managed with GitHub Actions, defined in `.github/workflows/`.
+- Workflows must build, analyze (CodeQL), and release the code.
+- **IMPORTANT**: When you modify any code or markdown files, you MUST run quality checks before completing your work:
+  - **Individual Code Quality Tools**:
+    - Linting: `poetry run tox -e flake8` and `poetry run tox -e pylint`
+    - Security: `poetry run tox -e bandit`
+    - Type Checking: `poetry run tox -e mypy`
+    - All Together: `poetry run tox -e flake8,pylint,bandit,mypy`
+  - **Testing**: `poetry run tox -e pytest` to run tests with coverage
+  - **Markdown**: `poetry run mdformat --check *.md` to check formatting, `poetry run mdformat *.md` to fix
+  - All tools use the exact settings defined in `tox.ini` for consistency with CI/CD
 
 ## Dependencies
 
@@ -50,9 +87,11 @@ Follow these steps to set up your development environment:
 
 ## Configuration
 
-- Manage all configuration through environment variables. Reference `.env.example` for required variables.
-- Configure project data in JSON format, as demonstrated in `data/projects.json.example`.
+- All configuration is via environment variables (see `.env.example`).
+- Project data is managed in JSON format, as shown in `data/projects.json.example`.
 
-## Commits
+## Commit Standards
 
-- Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for all commit messages.
+- All commits must follow the [Conventional Commits specification](https://www.conventionalcommits.org/).
+
+Thank you for contributing as a Copilot agent! If you have questions, refer to this guide or the main AGENTS.md for further context.
