@@ -23,7 +23,7 @@ from .utils import extract_reviewer_vote
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 # PR status mapping - determines when to close Asana tasks
-_PR_CLOSED_STATES = {"completed", "abandoned"}
+_PR_CLOSED_STATES = {"completed", "abandoned", "draft"}
 # ADO reviewer vote values that should close the Asana task
 _REVIEWER_APPROVED_STATES = {"approved", "approvedWithSuggestions"}
 
@@ -69,12 +69,18 @@ def sync_pull_requests(
             )
             return
 
-        # Process pull requests for each repository
+        # Process pull requests for each repository using two-pass approach
         for repo in repositories:
             _LOGGER.info("Processing repository %s", repo.name)
             try:
-                process_repository_pull_requests(
+                # First Pass: Process active PRs from ADO
+                repo_processed_prs = process_repository_pull_requests(
                     app, repo, asana_users, asana_project_tasks, asana_project
+                )
+
+                # Second Pass: Process database PR tasks for this repository that weren't in first pass
+                process_closed_pull_requests(
+                    app, asana_users, asana_project, repo_processed_prs, repo
                 )
             except Exception as e:
                 error_msg = str(e)
@@ -87,9 +93,6 @@ def sync_pull_requests(
                 else:
                     _LOGGER.error("Failed to process repository %s: %s", repo.name, e)
 
-        # Process existing PR matches that may no longer be active
-        process_closed_pull_requests(app, asana_users, asana_project)
-
         _LOGGER.info("Completed pull request sync for project %s", ado_project.name)
 
 
@@ -99,10 +102,15 @@ def process_repository_pull_requests(
     asana_users: List[dict],
     asana_project_tasks: List[dict],
     asana_project: str,
-) -> None:
+) -> set[int]:
     """
     Process pull requests for a specific repository.
+
+    Returns:
+        set[int]: Set of PR IDs that were processed in this repository.
     """
+    processed_pr_ids = set()
+
     # Get active pull requests
     if GitPullRequestSearchCriteria:
         search_criteria = GitPullRequestSearchCriteria(
@@ -122,12 +130,15 @@ def process_repository_pull_requests(
         _LOGGER.error(
             "Failed to get pull requests for repository %s: %s", repository.name, e
         )
-        return
+        return processed_pr_ids
 
     for pr in pull_requests:
         process_pull_request(
             app, pr, repository, asana_users, asana_project_tasks, asana_project
         )
+        processed_pr_ids.add(pr.pull_request_id)
+
+    return processed_pr_ids
 
 
 def process_pull_request(  # noqa: C901
@@ -622,6 +633,10 @@ def update_asana_pr_task(
 
         # Add the tag to the updated item if it does not already have it assigned.
         add_tag_to_pr_task(app, pr_item, tag)
+
+        # Add closure comment if task was closed due to PR state change
+        if is_completed:
+            add_closure_comment_to_pr_task(app, pr_item)
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
 
@@ -650,22 +665,98 @@ def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
         _LOGGER.error("Exception when adding tag to PR task: %s\n", exception)
 
 
+def add_closure_comment_to_pr_task(app: App, pr_item: PullRequestItem) -> None:
+    """
+    Add a comment to a pull request task explaining why it was closed due to PR state change.
+    """
+    import asana
+    from asana.rest import ApiException
+
+    if not pr_item.asana_gid:
+        return
+
+    # Determine closure reason based on PR status
+    closure_reasons = {
+        "completed": "Pull request has been completed and merged",
+        "abandoned": "Pull request has been abandoned",
+        "draft": "Pull request has been moved to draft status",
+        "reviewer_removed": "You have been removed as a reviewer from this pull request"
+    }
+
+    closure_reason = closure_reasons.get(
+        pr_item.status, f"Pull request status changed to {pr_item.status}"
+    )
+
+    # Only add comment if task was closed due to PR state change (not reviewer approval)
+    if (pr_item.status in _PR_CLOSED_STATES or pr_item.status == "reviewer_removed" or
+            pr_item.review_status == "removed") and \
+       pr_item.review_status not in _REVIEWER_APPROVED_STATES:
+
+        stories_api_instance = asana.StoriesApi(app.asana_client)
+        try:
+            body = {
+                "data": {
+                    "text": f"Task closed automatically: {closure_reason}",
+                    "type": "comment"
+                }
+            }
+            stories_api_instance.create_story_for_task(body, pr_item.asana_gid, opts={})
+            _LOGGER.debug("Added closure comment to PR task %s: %s", pr_item.asana_title, closure_reason)
+        except ApiException as exception:
+            _LOGGER.error("Exception when adding closure comment to PR task: %s\n", exception)
+
+
 def process_closed_pull_requests(  # noqa: C901
-    app: App, _asana_users: List[dict], asana_project: str
+    app: App, _asana_users: List[dict], asana_project: str, processed_pr_ids: set[int] = None, repository=None
 ) -> None:
     """
     Process pull requests that are no longer active but still have tasks in the database.
+
+    Args:
+        app: The App instance
+        _asana_users: List of Asana users (unused in current implementation)
+        asana_project: Asana project identifier
+        processed_pr_ids: Set of PR IDs that were already processed in first pass
+        repository: Repository object to filter PR tasks and make API calls (if provided)
 
     Note: Complexity justified by necessary error handling and cleanup logic.
     """
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
-    all_pr_tasks = app.pr_matches.all()
 
-    for pr_task_data in all_pr_tasks:
+    if processed_pr_ids is None:
+        processed_pr_ids = set()
+
+    # Filter PR tasks by repository if specified
+    if repository:
+        repository_id = repository.id
+
+        def repo_query_func(record):
+            return record.get("ado_repository_id") == repository_id
+        repo_pr_tasks = app.pr_matches.search(repo_query_func)
+        _LOGGER.info("Second pass: processing repository %s database PR tasks not handled in active PR sync", repository.name)
+    else:
+        repo_pr_tasks = app.pr_matches.all()
+        _LOGGER.info("Second pass: processing all database PR tasks not handled in active PR sync")
+        _LOGGER.debug("Second pass: found %d total PR tasks in database", len(repo_pr_tasks))
+    skipped_count = 0
+    processed_count = 0
+
+    for pr_task_data in repo_pr_tasks:
         # Remove doc_id before creating PullRequestItem
         clean_pr_task_data = {k: v for k, v in pr_task_data.items() if k != 'doc_id'}
         pr_item = PullRequestItem(**clean_pr_task_data)
+
+        _LOGGER.debug("Second pass examining PR %d", pr_item.ado_pr_id)
+
+        # Skip PRs that were already processed in first pass (active PRs)
+        if pr_item.ado_pr_id in processed_pr_ids:
+            _LOGGER.debug(
+                "Second pass skipping PR %d (already processed as active)",
+                pr_item.ado_pr_id
+            )
+            skipped_count += 1
+            continue
 
         # Skip processing if data consistency validation fails
         if not pr_item.validate_data_consistency():
@@ -675,21 +766,35 @@ def process_closed_pull_requests(  # noqa: C901
             )
             continue
 
+        # Try to get the current PR from ADO to check its status
+
         try:
-            # Try to get the current PR from ADO
+            # Try to get the current PR from ADO using the correct repository object
             if app.ado_git_client is None:
                 raise ValueError("app.ado_git_client is None")
-            repository_id = pr_item.ado_repository_id
+            if repository is None:
+                raise ValueError("Repository object is required for PR API calls")
+            # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, repository_id)
             pr = app.ado_git_client.get_pull_request_by_id(
-                pr_item.ado_pr_id, repository_id
+                pr_item.ado_pr_id, repository.id
+            )
+
+            _LOGGER.debug(
+                "Second pass PR %d status is '%s'",
+                pr_item.ado_pr_id, pr.status if pr else "not found"
             )
 
             if pr and pr.status not in _PR_CLOSED_STATES:
                 # PR is still active, skip
+                _LOGGER.debug(
+                    "Skipping PR %d (status '%s' not in closed states)",
+                    pr_item.ado_pr_id, pr.status
+                )
                 continue
 
             # PR is closed/completed, update the Asana task accordingly
-            _LOGGER.info("Processing closed PR %s", pr_item.ado_pr_id)
+            _LOGGER.info("Processing closed PR %s with status '%s'", pr_item.ado_pr_id, pr.status if pr else "not found")
+            processed_count += 1
 
             if pr_item.asana_gid:
                 asana_task = get_asana_task(app, pr_item.asana_gid)
@@ -703,18 +808,41 @@ def process_closed_pull_requests(  # noqa: C901
         except Exception as e:
             # Check if it's a permission/project not found error
             error_msg = str(e)
-            if "does not exist" in error_msg or "permission" in error_msg:
-                _LOGGER.debug(
-                    "Skipping closed PR %s due to project access: %s",
-                    pr_item.ado_pr_id,
-                    e,
+            _LOGGER.debug(
+                "Exception getting PR %d from ADO: %s",
+                pr_item.ado_pr_id, e
+            )
+            if "does not exist" in error_msg or "permission" in error_msg or "invalid literal for int()" in error_msg:
+                _LOGGER.info(
+                    "PR %d cannot be retrieved from ADO (likely abandoned/deleted). Closing associated Asana task.",
+                    pr_item.ado_pr_id
                 )
-                # The project may have been deleted or access revoked, skip silently
+                # If we can't retrieve the PR, assume it's closed and close the Asana task
+                if pr_item.asana_gid:
+                    asana_task = get_asana_task(app, pr_item.asana_gid)
+                    if asana_task and not asana_task.get("completed", False):
+                        # Close the Asana task - assume PR is abandoned/deleted
+                        pr_item.status = "abandoned"  # Set status for closure comment
+                        pr_item.updated_date = iso8601_utc(datetime.now())
+                        if app.asana_tag_gid is not None:
+                            update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
+                        processed_count += 1
+                        _LOGGER.info("Closed Asana task for inaccessible PR %d", pr_item.ado_pr_id)
                 continue
             else:
                 _LOGGER.warning(
                     "Failed to process closed PR %s: %s", pr_item.ado_pr_id, e
                 )
+    if repository:
+        _LOGGER.info(
+            "Second pass completed for repository %s: processed %d closed PRs, skipped %d active PRs",
+            repository.name, processed_count, skipped_count
+        )
+    else:
+        _LOGGER.info(
+            "Second pass completed: processed %d closed PRs, skipped %d active PRs",
+            processed_count, skipped_count
+        )
 
 
 def create_ado_user_from_reviewer(reviewer) -> Any:
