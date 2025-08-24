@@ -204,7 +204,7 @@ class App:
                 self.db.sync_projects_from_json(projects_data)
                 _LOGGER.debug("Successfully synced %d projects from JSON", len(projects_data))
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             _LOGGER.error("Failed to sync projects from JSON: %s", e)
 
     def _cleanup_corrupted_pr_data(self) -> None:
@@ -212,14 +212,15 @@ class App:
         Clean up corrupted PR data during application startup.
         """
         try:
-            from .pull_request_item import PullRequestItem
+            # Import here to avoid circular import issues
+            from .pull_request_item import PullRequestItem  # pylint: disable=import-outside-toplevel
 
             if self.pr_matches is not None:
                 cleaned_count = PullRequestItem.cleanup_all_corrupted_records(self)
                 if cleaned_count > 0:
                     _LOGGER.info("Startup cleanup removed %d corrupted PR records", cleaned_count)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             _LOGGER.error("Failed to cleanup corrupted PR data: %s", e)
 
     def close(self) -> None:

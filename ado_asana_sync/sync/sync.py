@@ -68,7 +68,7 @@ def start_sync(app: App) -> None:
             workspace,
             app.asana_tag_name,
         )
-    except Exception as exception:
+    except Exception as exception:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Failed to create or get Asana tag: %s", exception)
         return
     while True:
@@ -97,7 +97,7 @@ def start_sync(app: App) -> None:
             ) as executor:
                 try:
                     executor.map(sync_project, [app] * len(projects), projects)
-                except Exception as exception:
+                except Exception as exception:  # pylint: disable=broad-exception-caught
                     _LOGGER.error("Error in sync_project thread: %s", exception)
 
             _LOGGER.info(
@@ -120,7 +120,7 @@ def read_projects(app: App) -> list:
                 if projects:
                     _LOGGER.debug("Read %d projects from database", len(projects))
                     return projects
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Failed to read projects from database: %s", e)
 
         # Fallback to JSON file
@@ -278,7 +278,7 @@ def sync_project(app: App, project):
         ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(
             app, project
         )
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Error getting project IDs: %s", e)
         return
 
@@ -335,11 +335,11 @@ def sync_project(app: App, project):
 
     # Sync pull requests for this project
     try:
-        from .pull_request_sync import sync_pull_requests
+        from .pull_request_sync import sync_pull_requests  # pylint: disable=import-outside-toplevel
 
         if asana_project is not None:
             sync_pull_requests(app, ado_project, asana_workspace_id, asana_project)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error(
             "Error syncing pull requests for project %s: %s",
             project["adoProjectName"],
@@ -430,7 +430,7 @@ def process_backlog_items(
                 existing_match = TaskItem.search(app, ado_id=ado_task.id)
                 ado_assigned = get_task_user(ado_task)
                 asana_matched_user = matching_user(asana_users, ado_assigned) if ado_assigned else None
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 _LOGGER.error("Error checking work item %d: %s", ado_task.id, e)
 
             if (ado_assigned is None and existing_match is None) or \
@@ -446,7 +446,7 @@ def process_backlog_items(
             )
             _LOGGER.info("Completed processing work item ID: %d", wi.target.id)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
             _LOGGER.error("Failed to process work item %d: %s", wi.target.id, e)
             continue
 
@@ -613,7 +613,7 @@ def process_closed_items(
 
             try:
                 ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 _LOGGER.warning(
                     "Failed to fetch work item %s: %s", existing_match.ado_id, e
                 )
@@ -925,7 +925,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
             exception,
         )
         return []
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
 
@@ -983,6 +983,6 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
     except ApiException as exception:
         _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)
         return []
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []

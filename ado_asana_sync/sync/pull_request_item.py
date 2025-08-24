@@ -4,11 +4,12 @@ Azure DevOps (ADO) and Asana."""
 from __future__ import annotations
 
 from html import escape
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from .app import App
 from .asana import get_asana_task
 from .utils import extract_reviewer_vote
+from ..utils.logging_tracing import setup_logging_and_tracing
 
 
 class PullRequestItem:
@@ -67,7 +68,6 @@ class PullRequestItem:
         # Validate data consistency to catch potential corruption early
         if not self.validate_data_consistency():
             # This is a critical error that indicates data corruption
-            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
             logger, _ = setup_logging_and_tracing(__name__)
             logger.error(
                 "Data consistency validation failed for PR item: ado_pr_id=%s, url=%s, title='%s'. "
@@ -131,9 +131,9 @@ class PullRequestItem:
         ado_pr_id: Optional[int] = None,
         reviewer_gid: Optional[str] = None,
         asana_gid: Optional[str] = None,
-    ):
+    ) -> Callable[[dict], bool]:
         """Create a query function for database search."""
-        def query_func(record):
+        def query_func(record: dict) -> bool:
             # Check for PR ID and reviewer GID combination first (most specific)
             if ado_pr_id is not None and reviewer_gid is not None:
                 return (record.get("ado_pr_id") == ado_pr_id and
@@ -151,10 +151,9 @@ class PullRequestItem:
         return query_func
 
     @classmethod
-    def _validate_search_result(cls, pr_item, ado_pr_id: Optional[int], item_data: dict) -> bool:
+    def _validate_search_result(cls, pr_item: PullRequestItem, ado_pr_id: Optional[int], item_data: dict) -> bool:
         """Validate that search result matches expected criteria."""
         if ado_pr_id is not None and pr_item.ado_pr_id != ado_pr_id:
-            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
             logger, _ = setup_logging_and_tracing(__name__)
             logger.warning(
                 "Database corruption detected: searched for PR ID %s but got item with ID %s. "
@@ -215,7 +214,6 @@ class PullRequestItem:
         """
         # Validate data consistency before saving
         if not self.validate_data_consistency():
-            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
             logger, _ = setup_logging_and_tracing(__name__)
             logger.error(
                 "Refusing to save PR item with inconsistent data: ado_pr_id=%s, url=%s, title='%s'",
@@ -289,7 +287,6 @@ class PullRequestItem:
                     corrupted_record_count += 1
 
         if corrupted_record_count > 0:
-            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
             logger, _ = setup_logging_and_tracing(__name__)
             logger.info(
                 "Cleaned up %d corrupted PR records for PR ID %s",
@@ -307,7 +304,7 @@ class PullRequestItem:
             clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
             temp_item = PullRequestItem(**clean_record)
             return not temp_item.validate_data_consistency()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # If we can't even create the object, it's definitely corrupted
             return True
 
@@ -318,9 +315,9 @@ class PullRequestItem:
                 return (r.get("ado_pr_id") == record.get("ado_pr_id") and
                         r.get("reviewer_gid") == record.get("reviewer_gid"))
 
-            app.pr_matches.remove(delete_query_func)
+            app.pr_matches.remove(delete_query_func)  # type: ignore[arg-type,union-attr]
             return True
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return False
 
     @classmethod
@@ -352,7 +349,6 @@ class PullRequestItem:
                         corrupted_count += 1
 
         if corrupted_count > 0:
-            from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
             logger, _ = setup_logging_and_tracing(__name__)
             logger.info("Cleaned up %d corrupted PR records during startup", corrupted_count)
 
@@ -365,7 +361,7 @@ class PullRequestItem:
             clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
             temp_item = cls(**clean_record)
             return not temp_item.validate_data_consistency()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return True
 
     @classmethod
@@ -376,9 +372,9 @@ class PullRequestItem:
                 return (r.get("ado_pr_id") == record.get("ado_pr_id") and
                         r.get("reviewer_gid") == record.get("reviewer_gid"))
 
-            app.pr_matches.remove(delete_query_func)
+            app.pr_matches.remove(delete_query_func)  # type: ignore[arg-type,union-attr]
             return True
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return False
 
     def is_current(self, app: App, ado_pr, reviewer=None) -> bool:

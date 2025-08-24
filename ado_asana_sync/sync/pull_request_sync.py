@@ -75,7 +75,7 @@ def _get_cached_asana_task(app: App, asana_gid: str):
     return task
 
 
-def _should_skip_closed_pr(app: App, pr_item: PullRequestItem) -> bool:
+def _should_skip_closed_pr(pr_item: PullRequestItem) -> bool:
     """
     Check if a PR should be skipped because it's already closed and processed.
 
@@ -116,7 +116,7 @@ def sync_pull_requests(
             raise ValueError("app.ado_git_client is None")
         try:
             repositories = app.ado_git_client.get_repositories(ado_project.id)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
             error_msg = str(e)
             if "does not exist" in error_msg or "permission" in error_msg:
                 _LOGGER.info(
@@ -142,7 +142,7 @@ def sync_pull_requests(
                 process_closed_pull_requests(
                     app, asana_users, asana_project, repo_processed_prs, repo
                 )
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 error_msg = str(e)
                 if "does not exist" in error_msg or "permission" in error_msg:
                     _LOGGER.debug(
@@ -189,7 +189,7 @@ def process_repository_pull_requests(
         pull_requests = app.ado_git_client.get_pull_requests(
             repository.id, search_criteria
         )
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error(
             "Failed to get pull requests for repository %s: %s", repository.name, e
         )
@@ -227,7 +227,7 @@ def process_pull_request(  # noqa: C901
         reviewers = app.ado_git_client.get_pull_request_reviewers(
             repository.id, pr.pull_request_id
         )
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Failed to get reviewers for PR %s: %s", pr.pull_request_id, e)
         return
 
@@ -351,7 +351,7 @@ def handle_removed_reviewers(  # noqa: C901
                         "Closed Asana task for removed reviewer: %s",
                         pr_item.asana_title,
                     )
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                     _LOGGER.error(
                         "Failed to close Asana task for removed reviewer %s: %s",
                         pr_item.asana_title,
@@ -865,7 +865,7 @@ def process_closed_pull_requests(  # noqa: C901
             continue
 
         # Skip PRs that are already closed and have completed Asana tasks to avoid redundant API calls
-        if _should_skip_closed_pr(app, pr_item):
+        if _should_skip_closed_pr(pr_item):
             _LOGGER.info(
                 "Skipping PR %d (status='%s', Asana task already completed) - avoiding redundant API call",
                 pr_item.ado_pr_id, pr_item.status
@@ -928,7 +928,7 @@ def process_closed_pull_requests(  # noqa: C901
                     if app.asana_tag_gid is not None:
                         update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
             # Check if it's a permission/project not found error
             error_msg = str(e)
             _LOGGER.debug(
@@ -952,14 +952,13 @@ def process_closed_pull_requests(  # noqa: C901
                         processed_count += 1
                         _LOGGER.info("Closed Asana task for inaccessible PR %d", pr_item.ado_pr_id)
                 continue
-            else:
-                _LOGGER.warning(
-                    "Failed to process closed PR %s: %s", pr_item.ado_pr_id, e
-                )
+            _LOGGER.warning(
+                "Failed to process closed PR %s: %s", pr_item.ado_pr_id, e
+            )
     if repository:
         _LOGGER.info(
-            "Second pass completed for repository %s: processed %d closed PRs, skipped %d active PRs, "
-            "skipped %d already-closed PRs",
+            "Second pass completed for repository %s: processed %d closed PRs, "
+            "skipped %d active PRs, skipped %d already-closed PRs",
             repository.name,
             processed_count,
             skipped_active_count,
@@ -967,7 +966,8 @@ def process_closed_pull_requests(  # noqa: C901
         )
     else:
         _LOGGER.info(
-            "Second pass completed: processed %d closed PRs, skipped %d active PRs, skipped %d already-closed PRs",
+            "Second pass completed: processed %d closed PRs, "
+            "skipped %d active PRs, skipped %d already-closed PRs",
             processed_count, skipped_active_count, skipped_closed_count
         )
 
@@ -1021,6 +1021,6 @@ def create_ado_user_from_reviewer(reviewer) -> Any:
         # Create a user object similar to ADOAssignedUser from sync.py
         return ADOAssignedUser(display_name, email)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Failed to extract user info from reviewer: %s", e)
         return None
