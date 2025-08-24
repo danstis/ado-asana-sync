@@ -291,6 +291,7 @@ class Database:
             if "no such table: schema_version" in str(exc):
                 return 1
             raise
+
     def _record_migration(self, conn, version: int, description: str):
         """Record a completed migration in the schema_version table."""
         conn.execute("""

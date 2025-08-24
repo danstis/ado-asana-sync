@@ -109,7 +109,7 @@ def process_repository_pull_requests(
     Returns:
         set[int]: Set of PR IDs that were processed in this repository.
     """
-    processed_pr_ids = set()
+    processed_pr_ids: set[int] = set()
 
     # Get active pull requests
     if GitPullRequestSearchCriteria:
@@ -707,7 +707,7 @@ def add_closure_comment_to_pr_task(app: App, pr_item: PullRequestItem) -> None:
 
 
 def process_closed_pull_requests(  # noqa: C901
-    app: App, _asana_users: List[dict], asana_project: str, processed_pr_ids: set[int] = None, repository=None
+    app: App, _asana_users: List[dict], asana_project: str, processed_pr_ids: set[int] | None = None, repository=None
 ) -> None:
     """
     Process pull requests that are no longer active but still have tasks in the database.
@@ -788,7 +788,8 @@ def process_closed_pull_requests(  # noqa: C901
             if app.ado_git_client is None:
                 raise ValueError("app.ado_git_client is None")
             if repository is None:
-                raise ValueError("Repository object is required for PR API calls")
+                _LOGGER.debug("Repository not provided; skipping ADO lookup for PR %s", pr_item.ado_pr_id)
+                continue
 
             # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, repository_id)
             pr = app.ado_git_client.get_pull_request_by_id(
