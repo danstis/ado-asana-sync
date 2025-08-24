@@ -48,12 +48,12 @@ def _get_cached_custom_field(app: App, asana_project, field_name: str):
     # Handle both string and dict project formats for backward compatibility
     project_str = asana_project if isinstance(asana_project, str) else str(asana_project.get('gid', asana_project))
     cache_key = f"{project_str}:{field_name}"
-    if hasattr(app, '_pr_sync_cache') and cache_key in app._pr_sync_cache['custom_fields']:
-        return app._pr_sync_cache['custom_fields'][cache_key]
+    if hasattr(app, 'pr_sync_cache') and cache_key in app.pr_sync_cache['custom_fields']:  # type: ignore[attr-defined]
+        return app.pr_sync_cache['custom_fields'][cache_key]  # type: ignore[attr-defined]
 
     field = find_custom_field_by_name(app, asana_project, field_name)
-    if hasattr(app, '_pr_sync_cache'):
-        app._pr_sync_cache['custom_fields'][cache_key] = field
+    if hasattr(app, 'pr_sync_cache'):
+        app.pr_sync_cache['custom_fields'][cache_key] = field  # type: ignore[attr-defined]
     return field
 
 
@@ -66,12 +66,12 @@ def _get_cached_asana_task(app: App, asana_gid: str):
     if hasattr(app, '_spec_class'):
         return get_asana_task(app, asana_gid)
 
-    if hasattr(app, '_pr_sync_cache') and asana_gid in app._pr_sync_cache['asana_tasks']:
-        return app._pr_sync_cache['asana_tasks'][asana_gid]
+    if hasattr(app, 'pr_sync_cache') and asana_gid in app.pr_sync_cache['asana_tasks']:  # type: ignore[attr-defined]
+        return app.pr_sync_cache['asana_tasks'][asana_gid]  # type: ignore[attr-defined]
 
     task = get_asana_task(app, asana_gid)
-    if hasattr(app, '_pr_sync_cache'):
-        app._pr_sync_cache['asana_tasks'][asana_gid] = task
+    if hasattr(app, 'pr_sync_cache'):
+        app.pr_sync_cache['asana_tasks'][asana_gid] = task  # type: ignore[attr-defined]
     return task
 
 
@@ -95,8 +95,8 @@ def sync_pull_requests(
         asana_project_tasks = get_asana_project_tasks(app, asana_project)
 
         # Cache for performance optimization
-        if not hasattr(app, '_pr_sync_cache'):
-            app._pr_sync_cache = {
+        if not hasattr(app, 'pr_sync_cache'):
+            app.pr_sync_cache = {  # type: ignore[attr-defined]
                 'custom_fields': {},  # Cache custom field lookups
                 'asana_tasks': {},    # Cache Asana task lookups
             }
@@ -162,7 +162,7 @@ def process_repository_pull_requests(
     processed_pr_ids: set[int] = set()
 
     # Cache user lookup for performance
-    user_lookup_cache = {}
+    user_lookup_cache: dict[str, dict | None] = {}
 
     # Get active pull requests
     if GitPullRequestSearchCriteria:
