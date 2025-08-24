@@ -5,14 +5,25 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python: Module",
+      "name": "ℹ️ Sync (Info Logging)",
       "type": "debugpy",
       "request": "launch",
       "module": "ado_asana_sync.sync",
       "justMyCode": true,
       "envFile": "${workspaceFolder}/.env",
       "env": {
-        "LOG_LEVEL": "INFO"
+        "LOGLEVEL": "INFO"
+      }
+    },
+    {
+      "name": "🐞 Sync (Debug Logging)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ado_asana_sync.sync",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "LOGLEVEL": "DEBUG"
       }
     }
   ]
