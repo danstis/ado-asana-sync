@@ -78,12 +78,11 @@ def _get_cached_asana_task(app: App, asana_gid: str):
 def _should_skip_closed_pr(app: App, pr_item: PullRequestItem) -> bool:
     """
     Check if a PR should be skipped because it's already closed and processed.
-    
+
     Uses the database processing_state field to avoid API calls.
     Skips PRs that have processing_state = "closed".
     """
     return pr_item.processing_state == "closed"
-
 
 
 def sync_pull_requests(
@@ -297,7 +296,7 @@ def process_pull_request(  # noqa: C901
     handle_removed_reviewers(app, pr, current_reviewer_gids, asana_project)
 
 
-def handle_removed_reviewers(
+def handle_removed_reviewers(  # noqa: C901
     app: App, pr, current_reviewer_gids: set, asana_project: str
 ) -> None:
     """
@@ -646,7 +645,7 @@ def create_asana_pr_task(
         pr_item.asana_gid = result["gid"]
         pr_item.asana_updated = result["modified_at"]
         pr_item.updated_date = iso8601_utc(datetime.now())
-        
+
         # Set processing state based on initial task completion
         if is_completed:
             pr_item.processing_state = "closed"
@@ -654,7 +653,7 @@ def create_asana_pr_task(
         else:
             pr_item.processing_state = "open"
             _LOGGER.debug("Setting new PR %d processing_state to 'open' (created as active)", pr_item.ado_pr_id)
-        
+
         pr_item.save(app)
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
@@ -710,7 +709,7 @@ def update_asana_pr_task(
         result = tasks_api_instance.update_task(body, pr_item.asana_gid, opts={})
         pr_item.asana_updated = result["modified_at"]
         pr_item.updated_date = iso8601_utc(datetime.now())
-        
+
         # Update processing state based on task completion
         if is_completed:
             pr_item.processing_state = "closed"
@@ -719,7 +718,7 @@ def update_asana_pr_task(
             # Ensure it's marked as open if task was reopened
             pr_item.processing_state = "open"
             _LOGGER.debug("Setting PR %d processing_state to 'open' (task reopened)", pr_item.ado_pr_id)
-        
+
         pr_item.save(app)
 
         # Add the tag to the updated item if it does not already have it assigned.
@@ -819,8 +818,10 @@ def process_closed_pull_requests(  # noqa: C901
         repository_id = repository.id
 
         def repo_query_func(record):
-            return (record.get("ado_repository_id") == repository_id and 
-                    record.get("processing_state", "open") != "closed")
+            return (
+                record.get("ado_repository_id") == repository_id
+                and record.get("processing_state", "open") != "closed"
+            )
         repo_pr_tasks = app.pr_matches.search(repo_query_func)
         _LOGGER.info("Second pass: processing repository %s (ID: %s) open database PR tasks not handled in active PR sync",
                      repository.name, repository.id)
@@ -957,8 +958,12 @@ def process_closed_pull_requests(  # noqa: C901
                 )
     if repository:
         _LOGGER.info(
-            "Second pass completed for repository %s: processed %d closed PRs, skipped %d active PRs, skipped %d already-closed PRs",
-            repository.name, processed_count, skipped_active_count, skipped_closed_count
+            "Second pass completed for repository %s: processed %d closed PRs, skipped %d active PRs, "
+            "skipped %d already-closed PRs",
+            repository.name,
+            processed_count,
+            skipped_active_count,
+            skipped_closed_count,
         )
     else:
         _LOGGER.info(
