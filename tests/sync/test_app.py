@@ -27,12 +27,15 @@ class TestApp(unittest.TestCase):
         self.assertIsNone(app.ado_wit_client)
         self.assertIsNone(app.asana_client)
 
-    @patch.dict(os.environ, {
-        'ADO_PAT': 'env_pat',
-        'ADO_URL': 'https://dev.azure.com/env',
-        'ASANA_TOKEN': 'env_token',
-        'ASANA_WORKSPACE_NAME': 'env_workspace'
-    })
+    @patch.dict(
+        os.environ,
+        {
+            "ADO_PAT": "env_pat",
+            "ADO_URL": "https://dev.azure.com/env",
+            "ASANA_TOKEN": "env_token",
+            "ASANA_WORKSPACE_NAME": "env_workspace",
+        },
+    )
     def test_app_instance_created_from_environment(self):
         """Test App instance creation using environment variables."""
         app = App()
@@ -84,6 +87,7 @@ class TestApp(unittest.TestCase):
 
         # Simulate having a database
         from unittest.mock import MagicMock
+
         mock_db = MagicMock()
         app.db = mock_db
 

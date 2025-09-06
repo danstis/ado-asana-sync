@@ -16,9 +16,9 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 
 - Key files:
   - `ado_asana_sync/sync/app.py`: Main entry point.
-  - `ado_asana_sync/sync/sync.py`: Core sync logic.
+  - `ado_asana_sync/sync/sync.py`: Core sync logic including due date synchronization.
   - `ado_asana_sync/sync/asana.py`: Handles Asana API.
-  - `ado_asana_sync/sync/task_item.py`: Task data structure.
+  - `ado_asana_sync/sync/task_item.py`: Task data structure with due_date field support.
   - `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
   - `ado_asana_sync/sync/pull_request_sync.py`: Pull request sync logic.
   - `data/projects.json.example`: Example project configuration.
@@ -42,7 +42,7 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 
 All linting and code quality tools are configured in `pyproject.toml` and orchestrated via Python scripts:
 
-- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run lint` or `uv run format-check`
+- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run lint` or `uv run format-check` (scans entire project, respects `.gitignore`)
 - **pytest**: Includes coverage reporting with branch coverage - Run with `uv run test`
 - **mypy**: Static type checking with missing import ignoring - Run with `uv run type-check`
 - **All together**: Run all quality checks in parallel - Run with `uv run check`
@@ -72,11 +72,22 @@ The markdown formatter ensures:
   - **Code Quality Tools**: 
     - Linting: `uv run lint`
     - Formatting check: `uv run format-check` 
+    - **Auto-fix formatting**: `uv run ruff format` on modified files to ensure correct formatting
     - Type Checking: `uv run type-check`
     - All Together: `uv run check` (runs in parallel)
   - **Testing**: `uv run test` to run tests with coverage
   - **Markdown**: `uv run mdformat --check *.md` to check formatting, `uv run mdformat *.md` to fix
   - All tools use the exact settings defined in `tox.ini` for consistency with CI/CD
+
+## Current Features
+
+### Due Date Synchronization (Feature 001)
+- Syncs due dates from ADO work items to Asana tasks during **initial creation only**
+- Preserves user modifications in Asana to prevent data loss
+- Uses ADO field: `Microsoft.VSTS.Scheduling.DueDate` → Asana field: `due_on`
+- Handles invalid dates gracefully with warning logs, continues sync operation
+- TaskItem extended with optional `due_date` field stored in JSON database
+- Performance tested for 5000+ work items without degradation
 
 ## Configuration
 

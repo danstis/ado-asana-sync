@@ -103,7 +103,9 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_asana_notes_link(self):
         """Test asana_notes_link property."""
-        expected = '<a href="https://dev.azure.com/test/project/_git/repo/pullrequest/123">Pull Request 123</a>: Update documentation'
+        expected = (
+            '<a href="https://dev.azure.com/test/project/_git/repo/pullrequest/123">Pull Request 123</a>: Update documentation'
+        )
         self.assertEqual(self.pr_item.asana_notes_link, expected)
 
     def test_asana_notes_link_escapes_html(self):
@@ -116,7 +118,7 @@ class TestPullRequestItem(unittest.TestCase):
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/123",
             reviewer_gid="asana-user-789",
         )
-        
+
         expected = '<a href="https://dev.azure.com/test/project/_git/repo/pullrequest/123">Pull Request 123</a>: Fix &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; vulnerability'
         self.assertEqual(pr_item.asana_notes_link, expected)
 
@@ -179,9 +181,9 @@ class TestPullRequestItem(unittest.TestCase):
                 "review_status": "approved",
             }
         ]
-        
+
         result = PullRequestItem.search(self.mock_app, ado_pr_id=456)
-        
+
         self.assertIsInstance(result, PullRequestItem)
         self.assertEqual(result.ado_pr_id, 456)
         self.assertEqual(result.title, "Feature addition")
@@ -205,9 +207,9 @@ class TestPullRequestItem(unittest.TestCase):
                 "review_status": "rejected",
             }
         ]
-        
+
         result = PullRequestItem.search(self.mock_app, reviewer_gid="asana-user-333")
-        
+
         self.assertIsInstance(result, PullRequestItem)
         self.assertEqual(result.reviewer_gid, "asana-user-333")
         self.assertEqual(result.reviewer_name, "Bob Smith")
@@ -231,9 +233,9 @@ class TestPullRequestItem(unittest.TestCase):
                 "review_status": "waiting_for_author",
             }
         ]
-        
+
         result = PullRequestItem.search(self.mock_app, asana_gid="asana-task-404")
-        
+
         self.assertIsInstance(result, PullRequestItem)
         self.assertEqual(result.asana_gid, "asana-task-404")
         self.assertEqual(result.title, "Documentation update")
@@ -266,7 +268,7 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(call_args["reviewer_gid"], "asana-user-789")
         self.assertEqual(call_args["reviewer_name"], "Dan Anstis")
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_true(self, mock_get_asana_task):
         """Test is_current returns True when item is up to date."""
         mock_ado_pr = Mock()
@@ -284,13 +286,13 @@ class TestPullRequestItem(unittest.TestCase):
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr)
         self.assertTrue(result)
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_false_no_ado_pr(self, mock_get_asana_task):
         """Test is_current returns False when ADO PR is None."""
         result = self.pr_item.is_current(self.mock_app, None)
         self.assertFalse(result)
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_false_asana_updated(self, mock_get_asana_task):
         """Test is_current returns False when Asana task has been updated."""
         mock_ado_pr = Mock()
@@ -306,43 +308,43 @@ class TestPullRequestItem(unittest.TestCase):
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr)
         self.assertFalse(result)
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_false_review_status_changed(self, mock_get_asana_task):
         """Test is_current returns False when reviewer's vote status has changed."""
         mock_ado_pr = Mock()
         mock_ado_pr.title = "Update documentation"  # Match the PR item title
         mock_ado_pr.status = "active"  # Match the PR item status
-        
+
         mock_reviewer = Mock()
         mock_reviewer.vote = "approved"  # Current reviewer vote is approved
-        
+
         # Mock Asana task as not updated
         mock_get_asana_task.return_value = {"modified_at": "2023-12-01T10:00:00Z"}
-        
+
         # Set up PR item with different review status
         self.pr_item.review_status = "noVote"  # Stored status is noVote
         self.pr_item.asana_updated = "2023-12-01T10:00:00Z"
-        
+
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr, mock_reviewer)
         self.assertFalse(result)  # Should return False because review status changed
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_true_with_matching_review_status(self, mock_get_asana_task):
         """Test is_current returns True when reviewer's vote status matches."""
         mock_ado_pr = Mock()
         mock_ado_pr.title = "Update documentation"  # Match the PR item title
         mock_ado_pr.status = "active"  # Match the PR item status
-        
+
         mock_reviewer = Mock()
         mock_reviewer.vote = "approved"  # Current reviewer vote is approved
-        
+
         # Mock Asana task as not updated
         mock_get_asana_task.return_value = {"modified_at": "2023-12-01T10:00:00Z"}
-        
+
         # Set up PR item with matching review status
         self.pr_item.review_status = "approved"  # Stored status matches current
         self.pr_item.asana_updated = "2023-12-01T10:00:00Z"
-        
+
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr, mock_reviewer)
         self.assertTrue(result)  # Should return True because everything matches
 
@@ -350,7 +352,7 @@ class TestPullRequestItem(unittest.TestCase):
         """Regression test: Ensure doc_id is filtered out when creating PullRequestItem from database results."""
         # Setup mocks
         self.mock_app.pr_matches.contains.return_value = True
-        
+
         # Mock database result that includes doc_id (this would cause constructor error if not filtered)
         mock_db_result = {
             "ado_pr_id": 789,
@@ -365,24 +367,24 @@ class TestPullRequestItem(unittest.TestCase):
             "created_date": "2023-12-01T09:00:00Z",
             "updated_date": "2023-12-01T10:00:00Z",
             "review_status": "waiting_for_author",
-            "doc_id": 888  # This should be filtered out
+            "doc_id": 888,  # This should be filtered out
         }
         self.mock_app.pr_matches.search.return_value = [mock_db_result]
-        
+
         # This should not raise an error about unexpected doc_id argument
         result = PullRequestItem.search(self.mock_app, ado_pr_id=789)
-        
+
         self.assertIsNotNone(result)
         self.assertEqual(result.ado_pr_id, 789)
         self.assertEqual(result.title, "Test PR")
         # Verify doc_id is not present in the created object
-        self.assertFalse(hasattr(result, 'doc_id'))
+        self.assertFalse(hasattr(result, "doc_id"))
 
     def test_search_with_multiple_criteria_filters_doc_id(self):
         """Regression test: Ensure doc_id filtering works with multiple search criteria."""
         # Setup mocks
         self.mock_app.pr_matches.contains.return_value = True
-        
+
         # Mock database result with doc_id
         mock_db_result = {
             "ado_pr_id": 999,
@@ -393,31 +395,27 @@ class TestPullRequestItem(unittest.TestCase):
             "reviewer_gid": "reviewer-456",
             "reviewer_name": "Another Reviewer",
             "asana_gid": "asana-999",
-            "doc_id": 111  # This should be filtered out
+            "doc_id": 111,  # This should be filtered out
         }
         self.mock_app.pr_matches.search.return_value = [mock_db_result]
-        
+
         # Test search with both PR ID and reviewer GID
-        result = PullRequestItem.search(
-            self.mock_app, 
-            ado_pr_id=999, 
-            reviewer_gid="reviewer-456"
-        )
-        
+        result = PullRequestItem.search(self.mock_app, ado_pr_id=999, reviewer_gid="reviewer-456")
+
         self.assertIsNotNone(result)
         self.assertEqual(result.ado_pr_id, 999)
         self.assertEqual(result.reviewer_gid, "reviewer-456")
         # Verify doc_id is not present in the created object
-        self.assertFalse(hasattr(result, 'doc_id'))
+        self.assertFalse(hasattr(result, "doc_id"))
 
     def test_save_with_none_app_pr_matches_raises_error(self):
         """Test save raises ValueError when app.pr_matches is None."""
         mock_app = Mock()
         mock_app.pr_matches = None
-        
+
         with self.assertRaises(ValueError) as context:
             self.pr_item.save(mock_app)
-        
+
         self.assertIn("app.pr_matches is None", str(context.exception))
 
     def test_save_with_none_app_db_lock_raises_error(self):
@@ -426,56 +424,56 @@ class TestPullRequestItem(unittest.TestCase):
         mock_app.pr_matches = Mock()
         mock_app.pr_matches.contains.return_value = False
         mock_app.db_lock = None
-        
+
         with self.assertRaises(ValueError) as context:
             self.pr_item.save(mock_app)
-        
+
         self.assertIn("app.db_lock is None", str(context.exception))
 
     def test_search_returns_none_when_no_items_found(self):
         """Test search returns None when pr_matches.search returns empty list."""
         self.mock_app.pr_matches.contains.return_value = True
         self.mock_app.pr_matches.search.return_value = []
-        
+
         result = PullRequestItem.search(self.mock_app, ado_pr_id=123)
-        
+
         self.assertIsNone(result)
 
     def test_search_returns_none_when_pr_matches_is_none(self):
         """Test search returns None when app.pr_matches is None."""
         mock_app = Mock()
         mock_app.pr_matches = None
-        
+
         result = PullRequestItem.search(mock_app, ado_pr_id=123)
-        
+
         self.assertIsNone(result)
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_false_title_changed(self, mock_get_asana_task):
         """Test is_current returns False when PR title has changed."""
         mock_ado_pr = Mock()
         mock_ado_pr.title = "Different Title"  # Different from PR item title
         mock_ado_pr.status = "active"
-        
+
         mock_get_asana_task.return_value = {"modified_at": "2023-12-01T10:00:00Z"}
         self.pr_item.asana_updated = "2023-12-01T10:00:00Z"
-        
+
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr)
-        
+
         self.assertFalse(result)
 
-    @patch('ado_asana_sync.sync.pull_request_item.get_asana_task')
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_false_status_changed(self, mock_get_asana_task):
         """Test is_current returns False when PR status has changed."""
         mock_ado_pr = Mock()
         mock_ado_pr.title = "Update documentation"  # Match the PR item title
         mock_ado_pr.status = "completed"  # Different from PR item status
-        
+
         mock_get_asana_task.return_value = {"modified_at": "2023-12-01T10:00:00Z"}
         self.pr_item.asana_updated = "2023-12-01T10:00:00Z"
-        
+
         result = self.pr_item.is_current(self.mock_app, mock_ado_pr)
-        
+
         self.assertFalse(result)
 
     def test_is_current_false_asana_gid_none(self):
@@ -483,7 +481,7 @@ class TestPullRequestItem(unittest.TestCase):
         mock_ado_pr = Mock()
         mock_ado_pr.title = "Update documentation"
         mock_ado_pr.status = "active"
-        
+
         # Create PR item without asana_gid
         pr_item_no_asana = PullRequestItem(
             ado_pr_id=123,
@@ -495,9 +493,9 @@ class TestPullRequestItem(unittest.TestCase):
             reviewer_name="Dan Anstis",
             asana_gid=None,
         )
-        
+
         result = pr_item_no_asana.is_current(self.mock_app, mock_ado_pr)
-        
+
         self.assertTrue(result)  # Should return True when asana_gid is None
 
     def test_init_with_minimal_parameters(self):
@@ -508,9 +506,9 @@ class TestPullRequestItem(unittest.TestCase):
             title="Minimal PR",
             status="active",
             url="https://example.com/pr/999",
-            reviewer_gid="reviewer-999"
+            reviewer_gid="reviewer-999",
         )
-        
+
         self.assertEqual(pr_item.ado_pr_id, 999)
         self.assertEqual(pr_item.ado_repository_id, "repo-999")
         self.assertEqual(pr_item.title, "Minimal PR")
@@ -532,21 +530,21 @@ class TestPullRequestItem(unittest.TestCase):
             title="Test PR",
             status="active",
             url="https://example.com/pr/123",
-            reviewer_gid="reviewer-789"
+            reviewer_gid="reviewer-789",
         )
-        
+
         pr_item2 = PullRequestItem(
             ado_pr_id=123,
             ado_repository_id="repo-456",
             title="Test PR",
             status="active",
             url="https://example.com/pr/123",
-            reviewer_gid="reviewer-789"
+            reviewer_gid="reviewer-789",
         )
-        
+
         # Test equality
         self.assertEqual(pr_item1, pr_item2)
-        
+
         # Test that they have same string representation
         self.assertEqual(str(pr_item1), str(pr_item2))
 
@@ -554,7 +552,7 @@ class TestPullRequestItem(unittest.TestCase):
         """Test the search query logic comprehensively."""
         # Setup mocks with different scenarios
         self.mock_app.pr_matches.contains.return_value = True
-        
+
         # Test case: Search with PR ID and reviewer GID (both match)
         mock_db_result = {
             "ado_pr_id": 123,
@@ -567,7 +565,7 @@ class TestPullRequestItem(unittest.TestCase):
             "asana_gid": "asana-123",
         }
         self.mock_app.pr_matches.search.return_value = [mock_db_result]
-        
+
         # This should find the item because both PR ID and reviewer GID match
         result = PullRequestItem.search(self.mock_app, ado_pr_id=123, reviewer_gid="reviewer-789")
         self.assertIsNotNone(result)

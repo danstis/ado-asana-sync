@@ -3,6 +3,7 @@
 Quality assurance commands for ado-asana-sync.
 Cross-platform Python scripts to replace tox functionality.
 """
+
 import subprocess
 import sys
 import concurrent.futures
@@ -13,12 +14,7 @@ def run_command(cmd: List[str], description: str) -> Tuple[str, int]:
     """Run a command and return its output and exit code."""
     print(f"🔍 {description}...")
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         return description, result.returncode
     except Exception as e:
         print(f"❌ Error running {description}: {e}")
@@ -27,19 +23,19 @@ def run_command(cmd: List[str], description: str) -> Tuple[str, int]:
 
 def lint():
     """Run ruff linting."""
-    result = subprocess.run(["ruff", "check", "ado_asana_sync"], check=False)
+    result = subprocess.run(["ruff", "check", "."], check=False)
     sys.exit(result.returncode)
 
 
 def format_code():
     """Format code with ruff."""
-    result = subprocess.run(["ruff", "format", "ado_asana_sync"], check=False)
+    result = subprocess.run(["ruff", "format", "."], check=False)
     sys.exit(result.returncode)
 
 
 def format_check():
     """Check if code is properly formatted."""
-    result = subprocess.run(["ruff", "format", "--check", "ado_asana_sync"], check=False)
+    result = subprocess.run(["ruff", "format", "--check", "."], check=False)
     sys.exit(result.returncode)
 
 
@@ -51,34 +47,26 @@ def type_check():
 
 def test():
     """Run pytest with coverage."""
-    result = subprocess.run([
-        "pytest", 
-        "--cov=.", 
-        "--cov-report=xml", 
-        "--cov-branch"
-    ], check=False)
+    result = subprocess.run(["pytest", "--cov=.", "--cov-report=xml", "--cov-branch"], check=False)
     sys.exit(result.returncode)
 
 
 def check_all():
     """Run all quality checks in parallel (like tox)."""
     print("🚀 Running all quality checks in parallel...")
-    
+
     # Define all checks to run
     checks = [
-        (["ruff", "check", "ado_asana_sync"], "Ruff linting"),
-        (["ruff", "format", "--check", "ado_asana_sync"], "Ruff formatting check"),
+        (["ruff", "check", "."], "Ruff linting"),
+        (["ruff", "format", "--check", "."], "Ruff formatting check"),
         (["mypy", "ado_asana_sync", "--ignore-missing-imports"], "MyPy type checking"),
     ]
-    
+
     # Run checks in parallel
     failed_checks = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(checks)) as executor:
-        future_to_check = {
-            executor.submit(run_command, cmd, desc): (cmd, desc) 
-            for cmd, desc in checks
-        }
-        
+        future_to_check = {executor.submit(run_command, cmd, desc): (cmd, desc) for cmd, desc in checks}
+
         for future in concurrent.futures.as_completed(future_to_check):
             cmd, description = future_to_check[future]
             try:
@@ -91,7 +79,7 @@ def check_all():
             except Exception as exc:
                 print(f"❌ {description} generated an exception: {exc}")
                 failed_checks.append(description)
-    
+
     # Summary
     if failed_checks:
         print(f"\n❌ {len(failed_checks)} check(s) failed:")
@@ -106,6 +94,7 @@ def check_all():
 if __name__ == "__main__":
     # Allow running individual functions from command line
     import sys
+
     if len(sys.argv) > 1:
         func_name = sys.argv[1]
         if func_name in globals() and callable(globals()[func_name]):
