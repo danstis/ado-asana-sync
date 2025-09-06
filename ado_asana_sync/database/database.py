@@ -37,7 +37,7 @@ class DatabaseTable:
             json_data = json.dumps(data, default=str)
             cursor = conn.execute(
                 f"INSERT INTO {self.table_name} (data) VALUES (?)",  # nosec B608 - table_name is controlled
-                (json_data,)
+                (json_data,),
             )
             return cursor.lastrowid
 
@@ -50,18 +50,18 @@ class DatabaseTable:
 
             for row_id, json_data in cursor:
                 record = json.loads(json_data)
-                record['doc_id'] = row_id  # Add doc_id for TinyDB compatibility
+                record["doc_id"] = row_id  # Add doc_id for TinyDB compatibility
                 if query_func(record):
                     matching_ids.append(row_id)
 
             # Update matching records
             if matching_ids:
                 json_data = json.dumps(data, default=str)
-                placeholders = ','.join(['?' for _ in matching_ids])
+                placeholders = ",".join(["?" for _ in matching_ids])
                 conn.execute(
                     f"UPDATE {self.table_name} SET data = ?, updated_at = CURRENT_TIMESTAMP "  # nosec B608
                     f"WHERE id IN ({placeholders})",
-                    [json_data] + matching_ids
+                    [json_data] + matching_ids,
                 )
 
             return matching_ids
@@ -74,14 +74,14 @@ class DatabaseTable:
 
             for row_id, json_data in cursor:
                 record = json.loads(json_data)
-                record['doc_id'] = row_id
+                record["doc_id"] = row_id
                 if query_func(record):
                     # Update existing record
                     json_data = json.dumps(data, default=str)
                     conn.execute(
                         f"UPDATE {self.table_name} SET data = ?, updated_at = CURRENT_TIMESTAMP "  # nosec B608
                         f"WHERE id = ?",
-                        (json_data, row_id)
+                        (json_data, row_id),
                     )
                     return row_id
 
@@ -96,7 +96,7 @@ class DatabaseTable:
 
             for row_id, json_data in cursor:
                 record = json.loads(json_data)
-                record['doc_id'] = row_id
+                record["doc_id"] = row_id
                 if query_func(record):
                     results.append(record)
 
@@ -112,12 +112,12 @@ class DatabaseTable:
             if doc_id is not None:
                 cursor = conn.execute(
                     f"SELECT id, data FROM {self.table_name} WHERE id = ?",  # nosec B608
-                    (doc_id,)
+                    (doc_id,),
                 )
                 row = cursor.fetchone()
                 if row:
                     record = json.loads(row[1])
-                    record['doc_id'] = row[0]
+                    record["doc_id"] = row[0]
                     return record
 
             # Handle other criteria (for config table compatibility)
@@ -125,7 +125,7 @@ class DatabaseTable:
                 cursor = conn.execute(f"SELECT id, data FROM {self.table_name}")  # nosec B608 - table_name is controlled
                 for row_id, json_data in cursor:
                     record = json.loads(json_data)
-                    record['doc_id'] = row_id
+                    record["doc_id"] = row_id
 
                     # Check if record matches all criteria
                     matches = all(record.get(k) == v for k, v in kwargs.items())
@@ -142,7 +142,7 @@ class DatabaseTable:
 
             for row_id, json_data in cursor:
                 record = json.loads(json_data)
-                record['doc_id'] = row_id
+                record["doc_id"] = row_id
                 results.append(record)
 
             return results
@@ -153,10 +153,10 @@ class DatabaseTable:
             removed_ids = []
 
             if doc_ids:
-                placeholders = ','.join(['?' for _ in doc_ids])
+                placeholders = ",".join(["?" for _ in doc_ids])
                 conn.execute(
                     f"DELETE FROM {self.table_name} WHERE id IN ({placeholders})",  # nosec B608
-                    doc_ids
+                    doc_ids,
                 )
                 removed_ids = doc_ids
             elif query_func:
@@ -165,16 +165,16 @@ class DatabaseTable:
 
                 for row_id, json_data in cursor:
                     record = json.loads(json_data)
-                    record['doc_id'] = row_id
+                    record["doc_id"] = row_id
                     if query_func(record):
                         removed_ids.append(row_id)
 
                 # Remove matching records
                 if removed_ids:
-                    placeholders = ','.join(['?' for _ in removed_ids])
+                    placeholders = ",".join(["?" for _ in removed_ids])
                     conn.execute(
                         f"DELETE FROM {self.table_name} WHERE id IN ({placeholders})",  # nosec B608
-                        removed_ids
+                        removed_ids,
                     )
 
             return removed_ids
@@ -294,10 +294,13 @@ class Database:
 
     def _record_migration(self, conn, version: int, description: str):
         """Record a completed migration in the schema_version table."""
-        conn.execute("""
+        conn.execute(
+            """
             INSERT INTO schema_version (version, description)
             VALUES (?, ?)
-        """, (version, description))
+        """,
+            (version, description),
+        )
         _LOGGER.info("Recorded migration to version %d: %s", version, description)
 
     def _apply_migrations(self, conn):
@@ -373,10 +376,13 @@ class Database:
 
             # Insert the existing data back
             for project in existing_projects:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
                     VALUES (?, ?, ?)
-                """, project)
+                """,
+                    project,
+                )
 
             _LOGGER.info("Successfully migrated %d project records", len(existing_projects))
         else:
@@ -385,12 +391,8 @@ class Database:
     @contextmanager
     def get_connection(self):
         """Get a thread-local database connection."""
-        if not hasattr(self._local, 'connection'):
-            self._local.connection = sqlite3.connect(
-                self.db_path,
-                timeout=30.0,
-                check_same_thread=False
-            )
+        if not hasattr(self._local, "connection"):
+            self._local.connection = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
             self._local.connection.row_factory = sqlite3.Row
 
             # Track connection for cleanup
@@ -416,14 +418,13 @@ class Database:
 
             # Insert new projects
             for project in projects_data:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
                     VALUES (?, ?, ?)
-                """, (
-                    project["adoProjectName"],
-                    project["adoTeamName"],
-                    project["asanaProjectName"]
-                ))
+                """,
+                    (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
+                )
 
             _LOGGER.info("Synced %d projects to database", len(projects_data))
 
@@ -438,11 +439,7 @@ class Database:
 
             projects = []
             for row in cursor:
-                projects.append({
-                    "adoProjectName": row[0],
-                    "adoTeamName": row[1],
-                    "asanaProjectName": row[2]
-                })
+                projects.append({"adoProjectName": row[0], "adoTeamName": row[1], "asanaProjectName": row[2]})
 
             return projects
 
@@ -463,13 +460,13 @@ class Database:
         try:
             _LOGGER.info("Starting migration from %s", appdata_path)
 
-            with open(appdata_path, 'r', encoding='utf-8') as f:
+            with open(appdata_path, "r", encoding="utf-8") as f:
                 tinydb_data = json.load(f)
 
             with self.get_connection() as conn:
-                self._migrate_table_data(conn, tinydb_data, 'matches')
-                self._migrate_table_data(conn, tinydb_data, 'pr_matches')
-                self._migrate_table_data(conn, tinydb_data, 'config')
+                self._migrate_table_data(conn, tinydb_data, "matches")
+                self._migrate_table_data(conn, tinydb_data, "pr_matches")
+                self._migrate_table_data(conn, tinydb_data, "config")
 
             _LOGGER.info("Migration completed successfully")
             return True
@@ -483,19 +480,19 @@ class Database:
         if table_name in tinydb_data:
             table_data = tinydb_data[table_name]
             for doc_id, record in table_data.items():
-                if doc_id == '_default':
+                if doc_id == "_default":
                     continue
 
                 # Clean up the record (remove doc_id if present)
-                clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
+                clean_record = {k: v for k, v in record.items() if k != "doc_id"}
                 json_data = json.dumps(clean_record, default=str)
 
                 conn.execute(
                     f"INSERT INTO {table_name} (data) VALUES (?)",  # nosec B608 - table_name is controlled
-                    (json_data,)
+                    (json_data,),
                 )
 
-            count = len(table_data) - 1 if '_default' in table_data else len(table_data)
+            count = len(table_data) - 1 if "_default" in table_data else len(table_data)
             _LOGGER.info("Migrated %d %s records", count, table_name)
 
     def close(self):
@@ -514,9 +511,9 @@ class Database:
                 _LOGGER.warning("Error closing database connection: %s", e)
 
         # Clean up thread-local connection if it exists
-        if hasattr(self._local, 'connection'):
+        if hasattr(self._local, "connection"):
             try:
-                delattr(self._local, 'connection')
+                delattr(self._local, "connection")
             except Exception as e:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Error cleaning up thread-local connection: %s", e)
 

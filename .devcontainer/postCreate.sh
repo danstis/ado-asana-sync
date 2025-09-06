@@ -1,4 +1,4 @@
 #!/bin/bash
 
 pipx install aider-chat
-poetry install
+uv sync --dev

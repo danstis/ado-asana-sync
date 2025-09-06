@@ -115,6 +115,7 @@ class TaskItem:
             TaskItem: The TaskItem object with the matching ADO ID.
             None: If there is no matching item.
         """
+
         def query_func(record):
             return record.get("ado_id") == ado_id
 
@@ -122,14 +123,12 @@ class TaskItem:
             items = app.matches.search(query_func)
             if items:
                 # Remove doc_id before creating TaskItem
-                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
                 return cls(**item_data)
         return None
 
     @classmethod
-    def search(
-        cls, app: App, ado_id: Optional[int] = None, asana_gid: Optional[str] = None
-    ) -> TaskItem | None:
+    def search(cls, app: App, ado_id: Optional[int] = None, asana_gid: Optional[str] = None) -> TaskItem | None:
         """
         Search for a task item in the App object based on the given ADO ID or Asana GID.
 
@@ -153,7 +152,7 @@ class TaskItem:
             items = app.matches.search(query_func)
             if items:
                 # Remove doc_id before creating TaskItem
-                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
                 return cls(**item_data)
         return None
 
@@ -216,10 +215,7 @@ class TaskItem:
         if not ado_task or not asana_task:
             return False
 
-        if (
-            ado_task.rev != self.ado_rev
-            or (asana_task and asana_task.get("modified_at")) != self.asana_updated
-        ):
+        if ado_task.rev != self.ado_rev or (asana_task and asana_task.get("modified_at")) != self.asana_updated:
             return False
 
         return True

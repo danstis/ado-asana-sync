@@ -13,13 +13,12 @@ __pycache__
 .tox
 .vscode
 *.ignore*
-bandit.out
 coverage.xml
 data
 dist
-flake8.out
 GitVersion.yml
 mypy.out
-pylint.out
+ruff.json
+ruff.out
 sonar-project.properties
 tox.ini

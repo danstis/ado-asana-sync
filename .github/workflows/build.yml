@@ -48,23 +48,12 @@ jobs:
         id: setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
+        run: uv sync --dev
       - name: Test with pytest
-        run: poetry run tox -e pytest
+        run: uv run tox -e pytest
       - uses: actions/upload-artifact@v4
         with:
           name: test-output
@@ -82,34 +71,17 @@ jobs:
         id: setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
-      - name: Lint with flake8
+        run: uv sync --dev
+      - name: Lint and format with ruff
         run: |
-          # exit-zero treats all errors as warnings
-          poetry run flake8 ado_asana_sync --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics | tee flake8.out
-      - name: Lint with Pylint
-        run: |
-          poetry run pylint --output-format=parseable --recursive=true ado_asana_sync | tee pylint.out
-      - name: Security lint with bandit
-        run: |
-          poetry run bandit --format json --output bandit.out --exit-zero --recursive ado_asana_sync
+          uv run ruff check --output-format=json ado_asana_sync > ruff.json || true
+          uv run ruff check ado_asana_sync | tee ruff.out || true
       - name: Static type check with mypy
         run: |
-          poetry run mypy ado_asana_sync | tee mypy.out
+          uv run mypy ado_asana_sync | tee mypy.out
       - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.1.0 # https://github.com/marketplace/actions/hadolint-action
         with:

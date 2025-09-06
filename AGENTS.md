@@ -10,8 +10,8 @@ This repository implements a robust synchronization tool between Azure DevOps (A
 
 Follow these steps to set up your development environment:
 
-1. Install [Poetry](https://python-poetry.org/).
-1. Run `poetry install` to install all project dependencies.
+1. Install [uv](https://docs.astral.sh/uv/).
+1. Run `uv sync --dev` to install all project dependencies.
 1. Copy `.env.example` to `.env` and provide the required environment variable values.
 
 ## Development
@@ -29,10 +29,10 @@ Follow these steps to set up your development environment:
 ### Coding Conventions
 
 - Write all code in Python.
-- Run tools using `poetry run`.
-- Enforce linting with `pylint` (see `.pylintrc`).
+- Run tools using `uv run`.
+- Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 - Adhere to formatting rules defined in `.editorconfig`.
-- Ensure all code matches `flake8` standards.
+- Ensure all code passes `ruff` checks for style, formatting, and security.
 - Always update the readme and other documentation based on the changes made.
 
 ## Testing
@@ -51,8 +51,8 @@ Follow these steps to set up your development environment:
 
 ## Dependencies
 
-- Manage dependencies exclusively with Poetry. All dependencies are listed in `pyproject.toml`.
-- Add new dependencies using `poetry add <dependency>`.
+- Manage dependencies exclusively with uv. All dependencies are listed in `pyproject.toml`.
+- Add new dependencies using `uv add <dependency>`.
 
 ## Configuration
 
@@ -79,25 +79,22 @@ Follow these steps to set up your development environment:
 
 ## Setup & Configuration
 
-- Install dependencies: `poetry install`
+- Install dependencies: `uv sync --dev`
 - Configure env: copy `.env.example` → `.env` and fill required values
-- Dependencies: manage with Poetry only (`poetry add <name>`)
+- Dependencies: manage with uv only (`uv add <name>`)
 
 ## Quality & Tooling (use tox.ini settings)
 
-- Linting: `poetry run tox -e flake8` (max line length 127, complexity 10)
-- Pylint: `poetry run tox -e pylint`
-- Security: `poetry run tox -e bandit`
-- Types: `poetry run tox -e mypy`
-- All at once: `poetry run tox -e flake8,pylint,bandit,mypy`
-- Tests + coverage: `poetry run tox -e pytest` (coverage enforced ≥ 60%)
-- Markdown: `poetry run mdformat --check *.md` then `poetry run mdformat *.md`
-- Optional Python formatting: `poetry run black .` (line length 127)
+- Linting, formatting, security: `uv run tox -e ruff` (max line length 127, complexity 10)
+- Types: `uv run tox -e mypy`
+- All at once: `uv run tox -e ruff,mypy`
+- Tests + coverage: `uv run tox -e pytest` (coverage enforced ≥ 60%)
+- Markdown: `uv run mdformat --check *.md` then `uv run mdformat *.md`
 
 ## Coding Style & Naming
 
 - Python 3.13, 4‑space indent, `snake_case` for modules/functions
-- Follow `.pylintrc`, `.editorconfig`, and `tox.ini` strictly
+- Follow `pyproject.toml`, `.editorconfig`, and `tox.ini` strictly
 
 ## Testing Guidelines
 
@@ -109,5 +106,5 @@ Follow these steps to set up your development environment:
 
 - Commits: Conventional Commits (e.g., `feat: add PR reviewer sync cache`)
 - PRs: clear description, linked issues, screenshots/notes if user‑visible
-- Before submitting: run flake8, pylint, bandit, mypy, pytest, and mdformat (as above)
+- Before submitting: run ruff, mypy, pytest, and mdformat (as above)
 - CI: GitHub Actions runs builds, CodeQL analysis, and releases; keep docs/examples current

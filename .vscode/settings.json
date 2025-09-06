@@ -1,6 +1,6 @@
 {
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter"
+    "editor.defaultFormatter": "charliermarsh.ruff"
   },
   "python.analysis.typeCheckingMode": "off",
   "cSpell.words": ["msrest", "pytz", "rtype", "timezones", "tinydb", "VSTS"],

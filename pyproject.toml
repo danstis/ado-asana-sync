@@ -1,35 +1,57 @@
-[tool.poetry]
+[project]
 name = "ado-asana-sync"
 version = "0.0.0-dev"
 description = "Tool to sync work items and pull requests from Azure DevOps to Asana"
-authors = ["Dan Anstis <dan@bsod.co.nz>"]
-license = "MIT"
+authors = [{name = "Dan Anstis", email = "dan@bsod.co.nz"}]
+license = {text = "MIT"}
 readme = "README.md"
-packages = [{ include = "ado_asana_sync" }]
+requires-python = ">=3.13"
 
-[tool.poetry.dependencies]
-python = "^3.13"
-asana = "^5.0.3"
-azure-devops = "^7.1.0b3"
-tinydb = "^4.8.0"
-pytz = ">=2023.3,<2026.0"
-azure-monitor-opentelemetry = "^1.0.0"
+dependencies = [
+    "asana>=5.0.3",
+    "azure-devops>=7.1.0b3",
+    "tinydb>=4.8.0",
+    "pytz>=2023.3,<2026.0",
+    "azure-monitor-opentelemetry>=1.0.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-bandit = "^1.7.5"
-flake8 = ">=6.1,<8.0"
-mypy = "^1.5.1"
-pylint = ">=2.17.5,<4.0.0"
-pytest-cov = ">=4.1,<7.0"
-pytest = ">=7.4,<9.0"
-tox = "^4.9"
-black = ">=23.7,<26.0"
-mdformat = "^0.7.0"
-mdformat-gfm = ">=0.3,<0.5"
+[dependency-groups]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.5.1",
+    "pytest-cov>=4.1,<7.0",
+    "pytest>=7.4,<9.0",
+    "tox>=4.9",
+    "mdformat>=0.7.0",
+    "mdformat-gfm>=0.3,<0.5",
+]
 
-[tool.black]
+[tool.ruff]
 line-length = 127
 
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "S",   # bandit security
+]
+ignore = [
+    "S608",  # hardcoded-sql-expression - handled with nosec comments
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.coverage.run]
+relative_files = true
+omit = ["tests/*"]
+branch = true
+
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"

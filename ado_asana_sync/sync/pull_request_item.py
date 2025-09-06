@@ -6,10 +6,10 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Callable, Optional
 
+from ..utils.logging_tracing import setup_logging_and_tracing
 from .app import App
 from .asana import get_asana_task
 from .utils import extract_reviewer_vote
-from ..utils.logging_tracing import setup_logging_and_tracing
 
 
 class PullRequestItem:
@@ -72,7 +72,9 @@ class PullRequestItem:
             logger.error(
                 "Data consistency validation failed for PR item: ado_pr_id=%s, url=%s, title='%s'. "
                 "This indicates potential data corruption where PR ID and URL don't match.",
-                self.ado_pr_id, self.url, self.title
+                self.ado_pr_id,
+                self.url,
+                self.title,
             )
 
     def __eq__(self, other: Any) -> bool:
@@ -133,11 +135,11 @@ class PullRequestItem:
         asana_gid: Optional[str] = None,
     ) -> Callable[[dict], bool]:
         """Create a query function for database search."""
+
         def query_func(record: dict) -> bool:
             # Check for PR ID and reviewer GID combination first (most specific)
             if ado_pr_id is not None and reviewer_gid is not None:
-                return (record.get("ado_pr_id") == ado_pr_id and
-                        record.get("reviewer_gid") == reviewer_gid)
+                return record.get("ado_pr_id") == ado_pr_id and record.get("reviewer_gid") == reviewer_gid
 
             # Check individual conditions
             if ado_pr_id is not None and record.get("ado_pr_id") == ado_pr_id:
@@ -148,6 +150,7 @@ class PullRequestItem:
                 return True
 
             return False
+
         return query_func
 
     @classmethod
@@ -158,7 +161,9 @@ class PullRequestItem:
             logger.warning(
                 "Database corruption detected: searched for PR ID %s but got item with ID %s. "
                 "This could cause title/ID mismatches. Item data: %s",
-                ado_pr_id, pr_item.ado_pr_id, item_data
+                ado_pr_id,
+                pr_item.ado_pr_id,
+                item_data,
             )
             return False
         return True
@@ -192,7 +197,7 @@ class PullRequestItem:
             items = app.pr_matches.search(query_func)
             if items:
                 # Remove doc_id before creating PullRequestItem
-                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
                 pr_item = cls(**item_data)
 
                 # Validate search result for corruption
@@ -217,7 +222,9 @@ class PullRequestItem:
             logger, _ = setup_logging_and_tracing(__name__)
             logger.error(
                 "Refusing to save PR item with inconsistent data: ado_pr_id=%s, url=%s, title='%s'",
-                self.ado_pr_id, self.url, self.title
+                self.ado_pr_id,
+                self.url,
+                self.title,
             )
             return
 
@@ -239,8 +246,7 @@ class PullRequestItem:
 
         # Query for unique combination of PR ID and reviewer
         def unique_query_func(record):
-            return (record.get("ado_pr_id") == pr_data["ado_pr_id"] and
-                    record.get("reviewer_gid") == pr_data["reviewer_gid"])
+            return record.get("ado_pr_id") == pr_data["ado_pr_id"] and record.get("reviewer_gid") == pr_data["reviewer_gid"]
 
         if app.pr_matches is None:
             raise ValueError("app.pr_matches is None")
@@ -289,8 +295,7 @@ class PullRequestItem:
         if corrupted_record_count > 0:
             logger, _ = setup_logging_and_tracing(__name__)
             logger.info(
-                "Cleaned up %d corrupted PR records for PR ID %s",
-                corrupted_record_count, current_pr_data["ado_pr_id"]
+                "Cleaned up %d corrupted PR records for PR ID %s", corrupted_record_count, current_pr_data["ado_pr_id"]
             )
 
     def _should_remove_record(self, record: dict, current_pr_data: dict) -> bool:
@@ -301,7 +306,7 @@ class PullRequestItem:
 
         try:
             # Check if this record has consistent data
-            clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
+            clean_record = {k: v for k, v in record.items() if k != "doc_id"}
             temp_item = PullRequestItem(**clean_record)
             return not temp_item.validate_data_consistency()
         except Exception:  # pylint: disable=broad-exception-caught
@@ -311,9 +316,9 @@ class PullRequestItem:
     def _remove_corrupted_record(self, app: App, record: dict) -> bool:
         """Remove a corrupted record from the database."""
         try:
+
             def delete_query_func(r):
-                return (r.get("ado_pr_id") == record.get("ado_pr_id") and
-                        r.get("reviewer_gid") == record.get("reviewer_gid"))
+                return r.get("ado_pr_id") == record.get("ado_pr_id") and r.get("reviewer_gid") == record.get("reviewer_gid")
 
             app.pr_matches.remove(delete_query_func)  # type: ignore[arg-type,union-attr]
             return True
@@ -358,7 +363,7 @@ class PullRequestItem:
     def _is_record_corrupted(cls, record: dict) -> bool:
         """Check if a database record is corrupted."""
         try:
-            clean_record = {k: v for k, v in record.items() if k != 'doc_id'}
+            clean_record = {k: v for k, v in record.items() if k != "doc_id"}
             temp_item = cls(**clean_record)
             return not temp_item.validate_data_consistency()
         except Exception:  # pylint: disable=broad-exception-caught
@@ -368,9 +373,9 @@ class PullRequestItem:
     def _remove_corrupted_record_static(cls, app: App, record: dict) -> bool:
         """Remove a corrupted record from the database (static version)."""
         try:
+
             def delete_query_func(r):
-                return (r.get("ado_pr_id") == record.get("ado_pr_id") and
-                        r.get("reviewer_gid") == record.get("reviewer_gid"))
+                return r.get("ado_pr_id") == record.get("ado_pr_id") and r.get("reviewer_gid") == record.get("reviewer_gid")
 
             app.pr_matches.remove(delete_query_func)  # type: ignore[arg-type,union-attr]
             return True
@@ -430,11 +435,11 @@ class PullRequestItem:
             return True  # Can't validate without URL or ID
 
         # Extract PR ID from URL
-        url_parts = self.url.split('/')
+        url_parts = self.url.split("/")
         try:
             # URL format: .../pullrequest/{pr_id}
-            if 'pullrequest' in url_parts:
-                pr_index = url_parts.index('pullrequest')
+            if "pullrequest" in url_parts:
+                pr_index = url_parts.index("pullrequest")
                 if pr_index + 1 < len(url_parts):
                     url_pr_id = int(url_parts[pr_index + 1])
                     return url_pr_id == self.ado_pr_id

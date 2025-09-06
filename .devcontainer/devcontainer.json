@@ -10,13 +10,8 @@
   ],
   "features": {
     // https://containers.dev/features
-    "ghcr.io/devcontainers-contrib/features/black:2": {},
+    "ghcr.io/astral-sh/uv-devcontainer-features/uv:1": {},
     "ghcr.io/devcontainers-contrib/features/pipx-package:1": {},
-    "ghcr.io/devcontainers-contrib/features/poetry:2": {},
-    "ghcr.io/devcontainers-contrib/features/pylint:2": {},
-    "ghcr.io/devcontainers-contrib/features/mypy:2": {},
-    "ghcr.io/devcontainers-contrib/features/bandit:2": {},
-    "ghcr.io/devcontainers-contrib/features/flake8:2": {},
     "ghcr.io/devcontainers-contrib/features/coverage-py:2": {},
     "ghcr.io/devcontainers-contrib/features/tox:2": {},
     "ghcr.io/devcontainers/features/docker-in-docker": {},
@@ -42,7 +37,7 @@
       // Set *default* container specific settings.json values on container create.
       "settings": {
         "[python]": {
-          "editor.defaultFormatter": "ms-python.black-formatter"
+          "editor.defaultFormatter": "charliermarsh.ruff"
         }
       },
       "extensions": [
@@ -61,7 +56,7 @@
         "github.vscode-github-actions",
         "eamodio.gitlens",
         "SonarSource.sonarlint-vscode",
-        "ms-python.black-formatter",
+        "charliermarsh.ruff",
         "Codium.codium",
         "ryanluker.vscode-coverage-gutters"
       ]

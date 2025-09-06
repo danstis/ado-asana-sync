@@ -11,22 +11,22 @@ FROM base AS builder
 
 ENV PIP_DEFAULT_TIMEOUT=100 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
-    POETRY_VERSION=1.6.1
+    PIP_NO_CACHE_DIR=1
 
-RUN pip install "poetry==${POETRY_VERSION}"
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY pyproject.toml poetry.lock /app/
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-root --no-interaction --no-ansi
-
-COPY ado_asana_sync/ /app/ado_asana_sync/
-COPY tests/ /app/tests/
+# Copy project files needed for dependency resolution
+COPY pyproject.toml uv.lock /app/
 COPY README.md LICENSE /app/
+COPY ado_asana_sync/ /app/ado_asana_sync/
+
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
 ARG VERSION=0.0.1
-RUN poetry version ${VERSION} \
-    && poetry build
+RUN sed -i "s/version = \"0.0.0-dev\"/version = \"${VERSION}\"/g" pyproject.toml \
+    && uv build
 
 # Final Image
 FROM base AS final
