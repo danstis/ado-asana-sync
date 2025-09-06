@@ -1,50 +1,32 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# ADO-Asana-Sync Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Module-First Development
+Every feature starts as a standalone module within the `ado_asana_sync` package; Modules must be self-contained, independently testable, and well-documented; Each module should have a single, clear responsibility (sync, database, API clients); No circular dependencies between modules allowed
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Poetry-Managed Dependencies
+All dependencies managed through Poetry with exact version constraints; Development tools (pytest, pylint, flake8, mypy, bandit) configured in `tox.ini`; Run all tools via `poetry run` to ensure environment consistency; New dependencies added only via `poetry add` with justification
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-First Development (NON-NEGOTIABLE)
+TDD mandatory: Tests written → Tests fail → Implementation → Tests pass; All tests in `tests/` directory using pytest framework; Maintain >60% test coverage for all changes; Integration tests required for API client interactions and sync logic
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. API Integration Testing
+Integration tests required for: Azure DevOps API interactions, Asana API interactions, Database operations, Cross-platform sync operations; Mock external APIs for unit tests, use real APIs for integration tests; Test error handling and rate limiting scenarios
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Code Quality & Standards
+All code must pass: `poetry run tox -e flake8,pylint,bandit,mypy` before commit; Line length max 127 characters; Markdown files formatted with `mdformat`; Follow Conventional Commits specification; Use GitVersion for semantic versioning
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Security & Configuration Requirements
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+All secrets and tokens managed via environment variables (`.env` file for development); Never commit secrets to repository - use `.env.example` for documentation; Personal Access Tokens (PAT) required for both Azure DevOps and Asana APIs; Database operations must be atomic to prevent data corruption during sync; Rate limiting respect for both Azure DevOps and Asana APIs
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+All changes go through Pull Request review process; GitHub Actions CI/CD must pass (build, test, lint, security scan); SonarCloud quality gates must be satisfied; Container images built and published to GitHub Container Registry; Manual testing checklist must be completed for sync-related changes; Breaking changes require version bump and migration documentation
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other development practices; All PRs must verify compliance with code quality tools; Complexity must be justified with documentation; Use `CLAUDE.md` for runtime development guidance; Breaking changes to sync logic require extensive testing with real ADO/Asana instances
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2025-09-06 | **Last Amended**: 2025-09-06
