@@ -38,17 +38,18 @@ Key files:
 - **Markdown Files**: Use `mdformat` to ensure consistent formatting
 - **Testing**: Place all tests in the `tests/` directory and use `pytest`
 - **Coverage**: Ensure test coverage remains above 60% for all changes
-- **Tool Configuration**: **ALWAYS** use the settings defined in `tox.ini` for all code quality and linting tools
+- **Tool Configuration**: **ALWAYS** use the settings defined in `pyproject.toml` for all code quality and linting tools
 
 ### Code Quality Tool Configuration
 
-All linting and code quality tools are configured in `tox.ini` with specific settings and individual environments:
+All linting and code quality tools are configured in `pyproject.toml` and orchestrated via Python scripts:
 
-- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run tox -e ruff`
-- **pytest**: Includes coverage reporting with branch coverage - Run with `uv run tox -e pytest`
-- **mypy**: Static type checking with missing import ignoring - Run with `uv run tox -e mypy`
+- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run lint` or `uv run format-check`
+- **pytest**: Includes coverage reporting with branch coverage - Run with `uv run test`
+- **mypy**: Static type checking with missing import ignoring - Run with `uv run type-check`
+- **All together**: Run all quality checks in parallel - Run with `uv run check`
 
-**IMPORTANT**: Always use `uv run tox -e <environment>` to run each tool individually, or `uv run tox -e ruff,mypy` to run multiple tools. This ensures exact consistency with CI/CD pipelines and uses the precise settings defined in `tox.ini`.
+**IMPORTANT**: Always use `uv run <command>` to run quality checks. This ensures exact consistency with CI/CD pipelines and uses the precise settings defined in `pyproject.toml`.
 
 ### Markdown Linting Workflow
 
@@ -71,12 +72,13 @@ The markdown formatter ensures:
 - Workflows must build, analyze (CodeQL), and release the code.
 - **IMPORTANT**: When you modify any code or markdown files, you MUST run quality checks before completing your work:
   - **Code Quality Tools**:
-    - Linting, formatting, and security: `uv run tox -e ruff`
-    - Type Checking: `uv run tox -e mypy`
-    - All Together: `uv run tox -e ruff,mypy`
-  - **Testing**: `uv run tox -e pytest` to run tests with coverage
+    - Linting: `uv run lint`
+    - Formatting check: `uv run format-check`
+    - Type Checking: `uv run type-check`
+    - All Together: `uv run check` (runs in parallel)
+  - **Testing**: `uv run test` to run tests with coverage
   - **Markdown**: `uv run mdformat --check *.md` to check formatting, `uv run mdformat *.md` to fix
-  - All tools use the exact settings defined in `tox.ini` for consistency with CI/CD
+  - All tools use the exact settings defined in `pyproject.toml` for consistency with CI/CD
 
 ## Dependencies
 

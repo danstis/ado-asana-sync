@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Test with pytest
-        run: uv run tox -e pytest
+        run: uv run test
       - uses: actions/upload-artifact@v4
         with:
           name: test-output
@@ -75,13 +75,12 @@ jobs:
         uses: astral-sh/setup-uv@v3
       - name: Install dependencies
         run: uv sync --dev
-      - name: Lint and format with ruff
+      - name: Run quality checks
         run: |
+          # Run all quality checks and capture outputs for SonarCloud
           uv run ruff check --output-format=json ado_asana_sync > ruff.json || true
-          uv run ruff check ado_asana_sync | tee ruff.out || true
-      - name: Static type check with mypy
-        run: |
-          uv run mypy ado_asana_sync | tee mypy.out
+          uv run lint | tee ruff.out || true  
+          uv run type-check | tee mypy.out || true
       - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.1.0 # https://github.com/marketplace/actions/hadolint-action
         with:

@@ -6,7 +6,7 @@
 Every feature starts as a standalone module within the `ado_asana_sync` package; Modules must be self-contained, independently testable, and well-documented; Each module should have a single, clear responsibility (sync, database, API clients); No circular dependencies between modules allowed
 
 ### II. uv-Managed Dependencies
-All dependencies managed through uv with exact version constraints; Development tools (pytest, ruff, mypy) configured in `tox.ini`; Run all tools via `uv run` to ensure environment consistency; New dependencies added only via `uv add` with justification
+All dependencies managed through uv with exact version constraints; Development tools (pytest, ruff, mypy) configured in `pyproject.toml`; Run all tools via `uv run` to ensure environment consistency; New dependencies added only via `uv add` with justification
 
 ### III. Test-First Development (NON-NEGOTIABLE)
 TDD mandatory: Tests written → Tests fail → Implementation → Tests pass; All tests in `tests/` directory using pytest framework; Maintain >60% test coverage for all changes; Integration tests required for API client interactions and sync logic
@@ -15,7 +15,7 @@ TDD mandatory: Tests written → Tests fail → Implementation → Tests pass; A
 Integration tests required for: Azure DevOps API interactions, Asana API interactions, Database operations, Cross-platform sync operations; Mock external APIs for unit tests, use real APIs for integration tests; Test error handling and rate limiting scenarios
 
 ### V. Code Quality & Standards
-All code must pass: `uv run tox -e ruff,mypy` before commit; Ruff handles linting, formatting, and security checks; Line length max 127 characters; Markdown files formatted with `mdformat`; Follow Conventional Commits specification; Use GitVersion for semantic versioning
+All code must pass: `uv run check` before commit; Ruff handles linting, formatting, and security checks; Line length max 127 characters; Markdown files formatted with `mdformat`; Follow Conventional Commits specification; Use GitVersion for semantic versioning
 
 ## Security & Configuration Requirements
 

@@ -3,22 +3,14 @@
 {
   "name": "Python 3",
   // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "mcr.microsoft.com/devcontainers/python:0-3.13",
-  "runArgs": [
-    "--env-file",
-    ".env"
-  ],
+  "image": "mcr.microsoft.com/devcontainers/python:3.13",
+  "runArgs": ["--env-file", ".env"],
   "features": {
     // https://containers.dev/features
-    "ghcr.io/astral-sh/uv-devcontainer-features/uv:1": {},
-    "ghcr.io/devcontainers-contrib/features/pipx-package:1": {},
-    "ghcr.io/devcontainers-contrib/features/coverage-py:2": {},
-    "ghcr.io/devcontainers-contrib/features/tox:2": {},
-    "ghcr.io/devcontainers/features/docker-in-docker": {},
-    "ghcr.io/devcontainers/features/node:1": {},
-    "ghcr.io/danstis/devcontainers-features/gitversion:1.0.0": {
-      "version": "5.11.1"
-    }
+    "ghcr.io/devcontainers/features/docker-in-docker": {
+      "moby": false
+    },
+    "ghcr.io/devcontainers/features/node:1": {}
   },
   // Features to add to the dev container. More info: https://containers.dev/features.
   // "features": {},

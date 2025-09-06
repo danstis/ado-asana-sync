@@ -85,16 +85,16 @@ Follow these steps to set up your development environment:
 
 ## Quality & Tooling (use tox.ini settings)
 
-- Linting, formatting, security: `uv run tox -e ruff` (max line length 127, complexity 10)
-- Types: `uv run tox -e mypy`
-- All at once: `uv run tox -e ruff,mypy`
-- Tests + coverage: `uv run tox -e pytest` (coverage enforced ≥ 60%)
+- Linting: `uv run lint`, Formatting check: `uv run format-check` (max line length 127, complexity 10)
+- Types: `uv run type-check`
+- All at once: `uv run check` (runs in parallel)
+- Tests + coverage: `uv run test` (coverage enforced ≥ 60%)
 - Markdown: `uv run mdformat --check *.md` then `uv run mdformat *.md`
 
 ## Coding Style & Naming
 
 - Python 3.13, 4‑space indent, `snake_case` for modules/functions
-- Follow `pyproject.toml`, `.editorconfig`, and `tox.ini` strictly
+- Follow `pyproject.toml` and `.editorconfig` strictly
 
 ## Testing Guidelines
 
@@ -106,5 +106,5 @@ Follow these steps to set up your development environment:
 
 - Commits: Conventional Commits (e.g., `feat: add PR reviewer sync cache`)
 - PRs: clear description, linked issues, screenshots/notes if user‑visible
-- Before submitting: run ruff, mypy, pytest, and mdformat (as above)
+- Before submitting: run `uv run check`, `uv run test`, and mdformat (as above)
 - CI: GitHub Actions runs builds, CodeQL analysis, and releases; keep docs/examples current

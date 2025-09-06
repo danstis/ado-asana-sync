@@ -7,7 +7,7 @@
   "git.branchProtection": ["main"],
   "python.formatting.provider": "none",
   "sonarlint.connectedMode.project": {
-    "connectionId": "danstis",
+    "connectionId": "SonarLint",
     "projectKey": "danstis_ado-asana-sync"
   },
   "python.testing.pytestArgs": ["tests"],

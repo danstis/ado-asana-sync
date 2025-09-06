@@ -21,7 +21,6 @@ dev = [
     "mypy>=1.5.1",
     "pytest-cov>=4.1,<7.0",
     "pytest>=7.4,<9.0",
-    "tox>=4.9",
     "mdformat>=0.7.0",
     "mdformat-gfm>=0.3,<0.5",
 ]
@@ -51,6 +50,17 @@ relative_files = true
 omit = ["tests/*"]
 branch = true
 
+[project.scripts]
+# Main application
+ado-asana-sync = "ado_asana_sync.sync.__main__:main"
+
+# Quality assurance scripts
+lint = "scripts.quality:lint"
+format = "scripts.quality:format_code"
+format-check = "scripts.quality:format_check"
+type-check = "scripts.quality:type_check"
+test = "scripts.quality:test"
+check = "scripts.quality:check_all"
 
 [build-system]
 requires = ["hatchling"]

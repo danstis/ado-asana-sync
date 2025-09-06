@@ -10,7 +10,6 @@ __pycache__
 .hadolint
 .mypy_cache
 .py*
-.tox
 .vscode
 *.ignore*
 coverage.xml
@@ -21,4 +20,3 @@ mypy.out
 ruff.json
 ruff.out
 sonar-project.properties
-tox.ini
