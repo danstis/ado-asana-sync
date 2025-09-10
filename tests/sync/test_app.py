@@ -1,5 +1,5 @@
-import unittest
 import os
+import unittest
 from unittest.mock import patch
 
 from ado_asana_sync.sync.app import App

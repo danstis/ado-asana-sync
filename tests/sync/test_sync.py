@@ -1,43 +1,29 @@
 import unittest
-from unittest.mock import MagicMock, patch, Mock
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
-from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from asana.rest import ApiException
 
 from ado_asana_sync.sync.sync import (
     ADOAssignedUser,
-    get_task_user,
-    matching_user,
+    cleanup_invalid_work_items,
+    create_tag_if_not_existing,
+    get_asana_project,
+    get_asana_project_tasks,
     get_asana_task_by_name,
+    get_asana_task_tags,
+    get_asana_users,
+    get_asana_workspace,
+    get_tag_by_name,
+    get_task_user,
+    is_item_older_than_threshold,
+    matching_user,
     process_backlog_item,
     read_projects,
-    get_asana_workspace,
-    get_asana_project,
-    create_tag_if_not_existing,
-    get_tag_by_name,
-    get_asana_task_tags,
-    tag_asana_item,
-    get_project_ids,
-    process_backlog_items,
-    create_new_task_mapping,
-    update_existing_task,
-    process_closed_items,
-    is_item_older_than_threshold,
     remove_mapping,
-    get_existing_match,
-    update_task_if_needed,
-    get_asana_project_tasks,
-    create_asana_task,
-    update_asana_task,
-    get_asana_project_custom_fields,
-    find_custom_field_by_name,
-    cleanup_invalid_work_items,
-    get_asana_users,
-    start_sync,
-    sync_project,
 )
 from ado_asana_sync.sync.task_item import TaskItem
+from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 
 class TestTaskItem(unittest.TestCase):

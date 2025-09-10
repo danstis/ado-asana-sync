@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.sync import (
     create_tag_if_not_existing,
-    get_tag_by_name,
     get_asana_task_tags,
+    get_tag_by_name,
 )
 from ado_asana_sync.sync.task_item import TaskItem
 

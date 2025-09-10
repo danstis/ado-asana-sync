@@ -6,10 +6,6 @@
   "cSpell.words": ["msrest", "pytz", "rtype", "timezones", "tinydb", "VSTS"],
   "git.branchProtection": ["main"],
   "python.formatting.provider": "none",
-  "sonarlint.connectedMode.project": {
-    "connectionId": "SonarLint",
-    "projectKey": "danstis_ado-asana-sync"
-  },
   "python.testing.pytestArgs": ["tests"],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
@@ -22,5 +18,9 @@
     {
       "text": "Use conventional commit message format for the Pull Request title. Include a summary of the commits in the description."
     }
-  ]
+  ],
+  "sonarlint.connectedMode.project": {
+    "connectionId": "danstis",
+    "projectKey": "danstis_ado-asana-sync"
+  }
 }

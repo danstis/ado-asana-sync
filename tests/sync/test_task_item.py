@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-import pytest
 
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.task_item import TaskItem
@@ -541,10 +540,25 @@ class TestTaskItemDueDateContract(unittest.TestCase):
 
     def test_task_item_save_includes_due_date(self):
         """Contract: TaskItem.save() must include due_date in serialized data"""
-        task = TaskItem(ado_id="123", title="Test", item_type="Task", ado_rev=1, url="http://test.com", due_date="2025-12-31")
+        from unittest.mock import MagicMock
+        from ado_asana_sync.sync.app import App
 
-        # This will fail initially - save method needs due_date support
-        saved_data = task.save()
+        task = TaskItem(ado_id=123, title="Test", item_type="Task", ado_rev=1, url="http://test.com", due_date="2025-12-31")
+
+        # Mock app with database mocks
+        mock_app = MagicMock(spec=App)
+        mock_app.matches = MagicMock()
+        mock_app.db_lock = MagicMock()
+        mock_app.db_lock.__enter__ = MagicMock(return_value=mock_app.db_lock)
+        mock_app.db_lock.__exit__ = MagicMock(return_value=None)
+        mock_app.matches.contains.return_value = False
+
+        # Call save method
+        task.save(mock_app)
+
+        # Verify the insert was called with due_date included
+        mock_app.matches.insert.assert_called_once()
+        saved_data = mock_app.matches.insert.call_args[0][0]
         self.assertIn("due_date", saved_data)
         self.assertEqual(saved_data["due_date"], "2025-12-31")
 

@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, patch
 
 from asana.rest import ApiException
 
-from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync import sync
+from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.sync import (
-    get_asana_project_tasks,
     get_asana_project_custom_fields,
+    get_asana_project_tasks,
 )
 
 

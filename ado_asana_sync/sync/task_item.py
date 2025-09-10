@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from .app import App
 from .asana import get_asana_task
+from .utils import validate_due_date
 
 
 class TaskItem:
@@ -29,6 +30,7 @@ class TaskItem:
         created_date (str): The creation date of the task in ISO 8601 format.
         updated_date (str): The last updated date of the task in ISO 8601 format.
         state (str): The item state, for example New, Active, Closed.
+        due_date (str): The due date in YYYY-MM-DD format from ADO, synchronized to Asana on initial creation only.
     """
 
     def __init__(
@@ -44,7 +46,12 @@ class TaskItem:
         created_date: Optional[str] = None,
         updated_date: Optional[str] = None,
         state: Optional[str] = None,
+        due_date: Optional[str] = None,
     ) -> None:
+        # Validate due_date format
+        if due_date is not None and not validate_due_date(due_date):
+            raise ValueError(f"Invalid due_date format: {due_date}. Expected YYYY-MM-DD format or None.")
+
         self.ado_id = ado_id
         self.ado_rev = ado_rev
         self.title = title
@@ -56,6 +63,7 @@ class TaskItem:
         self.created_date = created_date
         self.updated_date = updated_date
         self.state = state
+        self.due_date = due_date
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, TaskItem):
@@ -71,6 +79,8 @@ class TaskItem:
             and self.assigned_to == other.assigned_to
             and self.created_date == other.created_date
             and self.updated_date == other.updated_date
+            and self.state == other.state
+            and self.due_date == other.due_date
         )
 
     def __str__(self) -> str:
@@ -178,6 +188,7 @@ class TaskItem:
             "assigned_to": self.assigned_to,
             "created_date": self.created_date,
             "updated_date": self.updated_date,
+            "due_date": self.due_date,
         }
 
         def query_func(record):

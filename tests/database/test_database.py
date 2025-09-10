@@ -9,7 +9,6 @@ import json
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from ado_asana_sync.database.database import Database
 

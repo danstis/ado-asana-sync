@@ -5,18 +5,16 @@ ID and title combinations, e.g., "Pull Request 123: test PR" but with
 link to PR 456 instead of PR 123.
 """
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-from threading import Thread
 import time
+import unittest
+from threading import Thread
+from unittest.mock import Mock, patch
 
-from ado_asana_sync.sync.pull_request_sync import (
-    process_pull_request,
-    create_new_pr_reviewer_task,
-    update_existing_pr_reviewer_task,
-)
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.pull_request_item import PullRequestItem
+from ado_asana_sync.sync.pull_request_sync import (
+    update_existing_pr_reviewer_task,
+)
 
 
 class TestPRIdTitleMismatch(unittest.TestCase):

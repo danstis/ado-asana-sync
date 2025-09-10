@@ -1,19 +1,19 @@
 """Tests for the pull request sync functionality."""
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from ado_asana_sync.sync.pull_request_sync import (
-    sync_pull_requests,
-    process_repository_pull_requests,
-    process_pull_request,
-    process_pr_reviewer,
-    create_new_pr_reviewer_task,
-    update_existing_pr_reviewer_task,
-    create_ado_user_from_reviewer,
-)
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.pull_request_item import PullRequestItem
+from ado_asana_sync.sync.pull_request_sync import (
+    create_ado_user_from_reviewer,
+    create_new_pr_reviewer_task,
+    process_pr_reviewer,
+    process_pull_request,
+    process_repository_pull_requests,
+    sync_pull_requests,
+    update_existing_pr_reviewer_task,
+)
 
 
 class TestPullRequestSync(unittest.TestCase):

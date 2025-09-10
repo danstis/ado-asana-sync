@@ -38,6 +38,7 @@ _THREAD_COUNT = max(1, int(os.environ.get("THREAD_COUNT", 8)))
 ADO_STATE = "System.State"
 ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
+ADO_DUE_DATE = "Microsoft.VSTS.Scheduling.DueDate"
 
 # Cache for custom fields
 CUSTOM_FIELDS_CACHE: dict[str, Any] = {}
@@ -426,6 +427,65 @@ def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asan
     _LOGGER.info("Backlog processing complete: %d processed, %d skipped", processed_count, skipped_count)
 
 
+def extract_due_date_from_ado(ado_work_item) -> str | None:
+    """
+    Extract due date from ADO work item and convert to YYYY-MM-DD format.
+
+    Args:
+        ado_work_item: Azure DevOps work item object
+
+    Returns:
+        str | None: Due date in YYYY-MM-DD format, or None if not present or invalid
+    """
+    try:
+        due_date_value = ado_work_item.fields.get(ADO_DUE_DATE)
+        if not due_date_value or (isinstance(due_date_value, str) and not due_date_value.strip()):
+            return None
+
+        # Parse the ISO 8601 datetime string and extract date portion
+        if isinstance(due_date_value, str):
+            # Handle various ISO formats like "2025-12-31T23:59:59.000Z"
+            dt = datetime.fromisoformat(due_date_value.replace("Z", "+00:00"))
+            return dt.strftime("%Y-%m-%d")
+
+    except (ValueError, TypeError, AttributeError) as e:
+        _LOGGER.warning(
+            "Invalid due date format in ADO work item %s: %s. Error: %s",
+            getattr(ado_work_item, "id", "unknown"),
+            due_date_value,
+            e,
+        )
+
+    return None
+
+
+def create_asana_task_body(task: TaskItem, is_initial_sync: bool = True) -> dict[str, Any]:
+    """
+    Create the request body for Asana task API calls.
+
+    Args:
+        task: TaskItem object containing task data
+        is_initial_sync: Whether this is initial creation (True) or update (False)
+
+    Returns:
+        dict: Request body for Asana API
+    """
+    body = {
+        "data": {
+            "name": task.asana_title,
+            "html_notes": f"<body>{task.asana_notes_link}</body>",
+            "assignee": task.assigned_to,
+            "completed": task.state in _CLOSED_STATES if task.state else False,
+        }
+    }
+
+    # Only include due_on for initial sync to preserve user changes
+    if is_initial_sync and task.due_date:
+        body["data"]["due_on"] = task.due_date
+
+    return body
+
+
 def process_backlog_item(app, ado_task, asana_users, asana_project_tasks, asana_project):
     """
     Processes a single backlog item.
@@ -465,6 +525,8 @@ def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tas
     """
     _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
     current_utc_time = iso8601_utc(datetime.now(timezone.utc))
+    # Extract due date from ADO work item
+    ado_due_date = extract_due_date_from_ado(ado_task)
     existing_match = TaskItem(
         ado_id=ado_task.id,
         ado_rev=ado_task.rev,
@@ -475,6 +537,7 @@ def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tas
         updated_date=current_utc_time,
         url=safe_get(ado_task, "_links", "additional_properties", "html", "href"),
         assigned_to=(asana_matched_user.get("gid", None) if asana_matched_user is not None else None),
+        due_date=ado_due_date,
     )
     # Check if there is a matching asana task with a matching title.
     asana_task = get_asana_task_by_name(asana_project_tasks, existing_match.asana_title)
@@ -523,6 +586,8 @@ def update_existing_task(app, ado_task, existing_match, asana_matched_user, asan
     existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
     existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
     existing_match.asana_updated = asana_task["modified_at"]
+    # Update due date from ADO work item
+    existing_match.due_date = extract_due_date_from_ado(ado_task)
     update_asana_task(
         app,
         existing_match,
@@ -751,6 +816,8 @@ def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
 def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) -> None:
     """
     Create an Asana task in the specified project.
+
+    Due dates from ADO are synced during initial creation only.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
     # Find the custom field ID for 'link'
@@ -768,6 +835,10 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         },
     }
 
+    # Add due_on field for initial creation if due_date is present
+    if task.due_date:
+        body["data"]["due_on"] = task.due_date
+
     if link_custom_field_id:
         body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
 
@@ -778,13 +849,39 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         task.asana_updated = result["modified_at"]
         task.updated_date = iso8601_utc(datetime.now())
         task.save(app)
+
+        # Log successful due date sync if applicable
+        if task.due_date:
+            _LOGGER.info("Successfully synced due date %s for task %s", task.due_date, task.asana_title)
+
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
+
+        # If the error might be due to invalid due_date, try creating without it
+        if task.due_date and "due_on" in str(exception):
+            _LOGGER.warning(
+                "Due date %s may be invalid for task %s, retrying without due date", task.due_date, task.asana_title
+            )
+            # Remove due_on from body and retry
+            if "due_on" in body["data"]:
+                del body["data"]["due_on"]
+                try:
+                    result = tasks_api_instance.create_task(body, opts={})
+                    task.asana_gid = result["gid"]
+                    task.asana_updated = result["modified_at"]
+                    task.updated_date = iso8601_utc(datetime.now())
+                    task.save(app)
+                    _LOGGER.info("Task created successfully without due date")
+                except ApiException as retry_exception:
+                    _LOGGER.error("Failed to create task even without due date: %s", retry_exception)
 
 
 def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str) -> None:
     """
     Update an Asana task with the provided task details.
+
+    Note: Due dates are intentionally excluded from updates to preserve
+    user modifications in Asana. Due dates are only synced during initial creation.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
 

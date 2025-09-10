@@ -4,9 +4,9 @@ Quality assurance commands for ado-asana-sync.
 Cross-platform Python scripts to replace tox functionality.
 """
 
+import concurrent.futures
 import subprocess
 import sys
-import concurrent.futures
 from typing import List, Tuple
 
 
@@ -87,7 +87,7 @@ def check_all():
             print(f"  - {check}")
         sys.exit(1)
     else:
-        print(f"\n✅ All quality checks passed!")
+        print("\n✅ All quality checks passed!")
         sys.exit(0)
 
 
