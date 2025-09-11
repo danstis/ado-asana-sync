@@ -97,7 +97,8 @@ class TestTaskItem(unittest.TestCase):
 
 
 class TestGetTaskUserEmail(unittest.TestCase):
-    # Tests that the function returns the email address of the user assigned to the work item when the System.AssignedTo field has a uniqueName
+    # Tests that the function returns the email address of the user assigned to the work item
+    # when the System.AssignedTo field has a uniqueName
     def test_assigned_user_with_uniqueName(self):
         task = WorkItem()
         task.fields = {
@@ -124,7 +125,8 @@ class TestGetTaskUserEmail(unittest.TestCase):
         result = get_task_user(task)
         self.assertIsNone(result)
 
-    # Tests that the function returns the email address even if the uniqueName field in the System.AssignedTo field is not a valid email address
+    # Tests that the function returns the email address even if the uniqueName field
+    # in the System.AssignedTo field is not a valid email address
     def test_invalid_email_address(self):
         task = WorkItem()
         task.fields = {
@@ -207,7 +209,8 @@ class TestMatchingUser(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    # Tests that matching_user returns the user when the user_list contains only one user and the email matches that user's email.
+    # Tests that matching_user returns the user when the user_list contains only one user
+    # and the email matches that user's email.
     def test_matching_user_user_list_contains_one_user_email_matches(self):
         user_list = [
             {"email": "user1@example.com", "name": "User 1"},
@@ -218,7 +221,8 @@ class TestMatchingUser(unittest.TestCase):
 
         self.assertEqual(result, {"email": "user1@example.com", "name": "User 1"})
 
-    # Tests that matching_user returns None when the user_list contains only one user and the email does not match that user's email.
+    # Tests that matching_user returns None when the user_list contains only one user
+    # and the email does not match that user's email.
     def test_matching_user_user_list_contains_one_user_email_does_not_match(self):
         user_list = [
             {"email": "user1@example.com", "name": "User 1"},
@@ -310,20 +314,40 @@ class TestGetAsanaTaskByName(unittest.TestCase):
 class TestReadProjects(unittest.TestCase):
     """Test read_projects function."""
 
-    @patch("ado_asana_sync.sync.sync.json.load")
-    @patch("builtins.open")
-    @patch("os.path.join")
-    @patch("os.path.dirname")
-    def test_read_projects_from_json_fallback(self, mock_dirname, mock_join, mock_open, mock_json_load):
-        """Test reading projects from JSON file when database is unavailable."""
-        app = MagicMock()
-        app.db = None
+    def setUp(self):
+        """Set up test fixtures with real temporary files."""
+        import tempfile
+        import os
+        import json
+        
+        self.temp_dir = tempfile.mkdtemp()
+        self.data_dir = os.path.join(self.temp_dir, "data")
+        os.makedirs(self.data_dir, exist_ok=True)
+        self.projects_file = os.path.join(self.data_dir, "projects.json")
 
-        mock_dirname.return_value = "/base/path"
-        mock_join.return_value = "/base/path/data/projects.json"
-        mock_json_load.return_value = [
+    def tearDown(self):
+        """Clean up temporary files."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @patch("ado_asana_sync.sync.sync.os.path.dirname")
+    def test_read_projects_from_json_fallback(self, mock_dirname):
+        """Test reading projects from JSON file when database is unavailable."""
+        import json
+        
+        # Create real projects.json file
+        test_projects = [
             {"adoProjectName": "TestProject", "adoTeamName": "TestTeam", "asanaProjectName": "TestAsanaProject"}
         ]
+        with open(self.projects_file, "w", encoding="utf-8") as f:
+            json.dump(test_projects, f)
+
+        # Mock only the package directory path to point to our temp directory
+        mock_dirname.return_value = self.temp_dir
+        
+        # Create app without database
+        app = MagicMock()
+        app.db = None
 
         result = read_projects(app)
 
@@ -346,17 +370,25 @@ class TestReadProjects(unittest.TestCase):
         self.assertEqual(result[0]["adoProjectName"], "DBProject")
 
     @patch("ado_asana_sync.sync.sync._LOGGER")
-    @patch("ado_asana_sync.sync.sync.json.load")
-    @patch("builtins.open")
-    def test_read_projects_database_fallback_on_exception(self, mock_open, mock_json_load, mock_logger):
+    @patch("ado_asana_sync.sync.sync.os.path.dirname")
+    def test_read_projects_database_fallback_on_exception(self, mock_dirname, mock_logger):
         """Test fallback to JSON when database read fails."""
+        import json
+        
+        # Create real projects.json file for fallback
+        test_projects = [
+            {"adoProjectName": "FallbackProject", "adoTeamName": "FallbackTeam", "asanaProjectName": "FallbackAsanaProject"}
+        ]
+        with open(self.projects_file, "w", encoding="utf-8") as f:
+            json.dump(test_projects, f)
+
+        # Mock only the package directory path
+        mock_dirname.return_value = self.temp_dir
+        
+        # Create app with failing database
         app = MagicMock()
         app.db = MagicMock()
         app.db.get_projects.side_effect = Exception("DB error")
-
-        mock_json_load.return_value = [
-            {"adoProjectName": "FallbackProject", "adoTeamName": "FallbackTeam", "asanaProjectName": "FallbackAsanaProject"}
-        ]
 
         result = read_projects(app)
 

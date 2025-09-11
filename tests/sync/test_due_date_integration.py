@@ -1,11 +1,11 @@
 import unittest
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.sync import process_backlog_item
 from ado_asana_sync.sync.task_item import TaskItem
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
+from tests.utils.test_helpers import AsanaApiMockHelper, TestDataBuilder, create_minimal_external_api_patches
 
 
 class TestDueDateIntegration(unittest.TestCase):
@@ -33,77 +33,68 @@ class TestDueDateIntegration(unittest.TestCase):
         Scenario 1 from quickstart.md:
         - ADO work item with Due Date = "2025-12-31"
         - Expected: Asana task created with due_on = "2025-12-31"
+        
+        This test focuses on integration between internal components while
+        only mocking external APIs (Asana). Internal functions like
+        extract_due_date_from_ado, create_asana_task_body, etc. are tested together.
         """
-        # Arrange: Mock ADO work item with due date
-        ado_work_item = WorkItem()
-        ado_work_item.id = 12345
-        ado_work_item.rev = 1
-        ado_work_item.fields = {
-            "System.Title": "Test Due Date Sync",
-            "System.WorkItemType": "Task",
-            "System.State": "New",
-            "Microsoft.VSTS.Scheduling.DueDate": "2025-12-31T23:59:59.000Z",
-            "System.AssignedTo": {
-                "displayName": "Test User",
-                "uniqueName": "test@example.com"
-            },
-        }
-        ado_work_item.url = "https://dev.azure.com/test-org/test-project/_workitems/edit/12345"
-        ado_work_item._links = {
-            "additional_properties": {
-                "html": {
-                    "href": "https://dev.azure.com/test-org/test-project/_workitems/edit/12345"
-                }
+        # Arrange: Create test data using builder
+        ado_work_item = TestDataBuilder.create_ado_work_item(
+            item_id=12345,
+            title="Test Due Date Sync",
+            work_item_type="Task",
+            due_date="2025-12-31T23:59:59.000Z"
+        )
+        
+        asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
+        
+        # Set up Asana API mocks using helper
+        asana_helper = AsanaApiMockHelper()
+        mock_tasks_api = asana_helper.create_tasks_api_mock(
+            created_task={
+                "gid": "67890",
+                "name": "Test Due Date Sync", 
+                "due_on": "2025-12-31",
+                "completed": False,
+                "modified_at": "2025-09-10T10:00:00.000Z"
             }
-        }
-
-        # Mock that this is a new item (not in database)
-        self.app.matches.contains.return_value = False
-
-        # Mock asana user matching
-        asana_users = [
-            {
-                "gid": "user123",
-                "name": "Test User",
-                "email": "test@example.com"
-            }
-        ]
-
-        # Mock Asana API calls
-        mock_asana_task_api = MagicMock()
-        mock_asana_task_response = {"gid": "67890", "name": "Test Due Date Sync", "due_on": "2025-12-31", "completed": False, "modified_at": "2025-09-10T10:00:00.000Z"}
-
+        )
+        
+        # Mock external APIs and functions that make API calls
+        # But let internal utility functions (extract_due_date_from_ado, create_asana_task_body) run
         with (
-            patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_asana_task_api),
+            patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
+            patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
+            # Mock functions that would make external calls but let internal logic run
             patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None),
-            patch("ado_asana_sync.sync.sync.create_tag_if_not_existing", return_value="tag123"),
             patch("ado_asana_sync.sync.sync.get_asana_workspace", return_value="workspace123"),
-            patch("ado_asana_sync.sync.sync.get_asana_project", return_value="project123"),
-            patch("ado_asana_sync.sync.task_item.TaskItem.search", return_value=None),
+            patch("ado_asana_sync.sync.sync.get_asana_project", return_value="project456"),
+            patch("ado_asana_sync.sync.sync.create_tag_if_not_existing", return_value="tag123"),
             patch("ado_asana_sync.sync.sync.get_asana_task_by_name", return_value=None),
             patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
+            patch("ado_asana_sync.sync.task_item.TaskItem.search", return_value=None),
         ):
-            mock_asana_task_api.create_task.return_value = mock_asana_task_response
-
-            # Act: Process the work item
-            result = process_backlog_item(
+            # Act: Process the work item - internal functions work together
+            process_backlog_item(
                 self.app,
                 ado_work_item,
-                asana_users,  # asana_users
+                asana_users,
                 [],  # asana_project_tasks
-                "project123",  # asana_project
+                "project456",  # This will be resolved by get_asana_project internally
             )
 
             # Assert: Verify TaskItem was created with due_date
+            # The due date extraction, TaskItem creation, and database insertion all work together
             self.app.matches.insert.assert_called_once()
             saved_task_data = self.app.matches.insert.call_args[0][0]
-
             self.assertEqual(saved_task_data["due_date"], "2025-12-31")
 
             # Assert: Verify Asana API was called with due_on field
-            mock_asana_task_api.create_task.assert_called_once()
-            create_task_call = mock_asana_task_api.create_task.call_args[0][0]
-
+            # The internal create_asana_task_body function should add due_on for initial sync
+            mock_tasks_api.create_task.assert_called_once()
+            create_task_call = mock_tasks_api.create_task.call_args[0][0]
             self.assertEqual(create_task_call["data"]["due_on"], "2025-12-31")
 
     def test_new_ado_work_item_without_due_date_creates_task_without_due_on(self):
@@ -111,85 +102,63 @@ class TestDueDateIntegration(unittest.TestCase):
         Integration Test: New ADO work item without due date creates Asana task with no due_on field.
 
         Scenario 2 from quickstart.md:
-        - ADO work item with no Due Date field
+        - ADO work item with no Due Date field  
         - Expected: Asana task created with no due_on field
         """
-        # Arrange: Mock ADO work item without due date
-        ado_work_item = WorkItem()
-        ado_work_item.id = 12346
-        ado_work_item.rev = 1
-        ado_work_item.fields = {
-            "System.Title": "Test No Due Date",
-            "System.WorkItemType": "Task",
-            "System.State": "New",
-            "System.AssignedTo": {
-                "displayName": "Test User",
-                "uniqueName": "test@example.com"
-            },
-            # Note: No Microsoft.VSTS.Scheduling.DueDate field
-        }
-        ado_work_item.url = "https://dev.azure.com/test-org/test-project/_workitems/edit/12346"
-        ado_work_item._links = {
-            "additional_properties": {
-                "html": {
-                    "href": "https://dev.azure.com/test-org/test-project/_workitems/edit/12346"
-                }
+        # Arrange: Create test data without due date
+        ado_work_item = TestDataBuilder.create_ado_work_item(
+            item_id=12346,
+            title="Test No Due Date",
+            work_item_type="Task",
+            due_date=None  # Explicitly no due date
+        )
+        
+        asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
+        
+        # Set up Asana API mocks using helper
+        asana_helper = AsanaApiMockHelper()
+        mock_tasks_api = asana_helper.create_tasks_api_mock(
+            created_task={
+                "gid": "67891",
+                "name": "Test No Due Date",
+                "completed": False,
+                "modified_at": "2025-09-10T10:00:00.000Z"
+                # Note: No due_on field should be set
             }
-        }
-
-        # Mock that this is a new item
-        self.app.matches.contains.return_value = False
-
-        # Mock asana user matching
-        asana_users = [
-            {
-                "gid": "user123",
-                "name": "Test User",
-                "email": "test@example.com"
-            }
-        ]
-
-        # Mock Asana API calls
-        mock_asana_task_api = MagicMock()
-        mock_asana_task_response = {
-            "gid": "67891",
-            "name": "Test No Due Date",
-            "completed": False,
-            "modified_at": "2025-09-10T10:00:00.000Z",
-            # Note: No due_on field should be set
-        }
-
+        )
+        
+        # Mock external APIs and functions that make API calls
         with (
-            patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_asana_task_api),
+            patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
+            patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
+            # Mock functions that would make external calls
             patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None),
-            patch("ado_asana_sync.sync.sync.create_tag_if_not_existing", return_value="tag123"),
             patch("ado_asana_sync.sync.sync.get_asana_workspace", return_value="workspace123"),
-            patch("ado_asana_sync.sync.sync.get_asana_project", return_value="project123"),
-            patch("ado_asana_sync.sync.task_item.TaskItem.search", return_value=None),
+            patch("ado_asana_sync.sync.sync.get_asana_project", return_value="project456"),
+            patch("ado_asana_sync.sync.sync.create_tag_if_not_existing", return_value="tag123"),
             patch("ado_asana_sync.sync.sync.get_asana_task_by_name", return_value=None),
             patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
+            patch("ado_asana_sync.sync.task_item.TaskItem.search", return_value=None),
         ):
-            mock_asana_task_api.create_task.return_value = mock_asana_task_response
-
-            # Act: Process the work item
-            result = process_backlog_item(
+            # Act: Process the work item - internal due date logic works together
+            process_backlog_item(
                 self.app,
                 ado_work_item,
-                asana_users,  # asana_users
-                [],  # asana_project_tasks
-                "project123",  # asana_project
+                asana_users,
+                [],
+                "project456",
             )
 
             # Assert: Verify TaskItem was created with due_date = None
             self.app.matches.insert.assert_called_once()
             saved_task_data = self.app.matches.insert.call_args[0][0]
-
             self.assertIsNone(saved_task_data.get("due_date"))
 
             # Assert: Verify Asana API was called without due_on field
-            mock_asana_task_api.create_task.assert_called_once()
-            create_task_call = mock_asana_task_api.create_task.call_args[0][0]
-
+            mock_tasks_api.create_task.assert_called_once()
+            create_task_call = mock_tasks_api.create_task.call_args[0][0]
             self.assertNotIn("due_on", create_task_call["data"])
 
     def test_existing_task_preserves_asana_user_changes(self):
@@ -289,7 +258,7 @@ class TestDueDateIntegration(unittest.TestCase):
             patch("ado_asana_sync.sync.sync.tag_asana_item"),
         ):
             # Act: Process the work item (subsequent sync)
-            result = process_backlog_item(
+            process_backlog_item(
                 self.app,
                 ado_work_item,
                 asana_users,  # asana_users
@@ -381,7 +350,7 @@ class TestDueDateIntegration(unittest.TestCase):
             mock_asana_task_api.create_task.return_value = mock_asana_task_response
 
             # Act: Process the work item (should not fail despite invalid date)
-            result = process_backlog_item(
+            process_backlog_item(
                 self.app,
                 ado_work_item,
                 asana_users,  # asana_users

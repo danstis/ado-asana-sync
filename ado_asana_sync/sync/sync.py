@@ -860,7 +860,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         # 400 = Bad Request, 422 = Unprocessable Entity (typical validation errors)
         if task.due_date and hasattr(exception, 'status') and exception.status in (400, 422):
             _LOGGER.warning(
-                "Due date %s may be invalid for task %s (HTTP %s), retrying without due date", 
+                "Due date %s may be invalid for task %s (HTTP %s), retrying without due date",
                 task.due_date, task.asana_title, exception.status
             )
             # Remove due_on from body and retry

@@ -34,7 +34,7 @@ class TestTaskItem(unittest.TestCase):
     # Tests that a TaskItem instance is created successfully with valid arguments.
     def test_task_item_str(self):
         # Call the __str__ method and check the result
-        assert str(TEST_TASK_ITEM_1) == "Bug 1: Test Task"
+        self.assertEqual(str(TEST_TASK_ITEM_1), "Bug 1: Test Task")
 
     # Returns the TaskItem object with the matching ADO ID.
     def test_returns_task_item_with_matching_ado_id(self):
@@ -541,6 +541,7 @@ class TestTaskItemDueDateContract(unittest.TestCase):
     def test_task_item_save_includes_due_date(self):
         """Contract: TaskItem.save() must include due_date in serialized data"""
         from unittest.mock import MagicMock
+
         from ado_asana_sync.sync.app import App
 
         task = TaskItem(ado_id=123, title="Test", item_type="Task", ado_rev=1, url="http://test.com", due_date="2025-12-31")

@@ -549,8 +549,6 @@ class TestDatabaseWrapper(unittest.TestCase):
         # Verify database file exists but WAL files are cleaned up
         self.assertTrue(os.path.exists(self.db_path))
         # WAL files should be cleaned up (though they might not exist if no concurrent writes)
-        wal_file = self.db_path + "-wal"
-        shm_file = self.db_path + "-shm"
         # These files may or may not exist depending on SQLite's internal state
         # The important thing is that close() doesn't crash
 

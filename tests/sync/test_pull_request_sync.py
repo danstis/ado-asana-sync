@@ -115,71 +115,103 @@ class TestPullRequestSync(unittest.TestCase):
             mock_process_reviewer.assert_not_called()
             mock_handle_removed.assert_called_once_with(self.mock_app, self.mock_pr, set(), "project-456")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
-    @patch("ado_asana_sync.sync.pull_request_sync.matching_user")
     @patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task")
-    def test_process_pr_reviewer_new_task(self, mock_create_task, mock_matching_user, mock_create_user):
-        """Test processing a reviewer when no existing task exists."""
-        # Setup mocks
-        mock_ado_user = Mock()
-        mock_ado_user.display_name = "John Doe"
-        mock_ado_user.email = "john.doe@example.com"
-        mock_create_user.return_value = mock_ado_user
+    def test_process_pr_reviewer_new_task(self, mock_create_task):
+        """Test processing a reviewer when no existing task exists.
+        
+        This test lets internal utilities (create_ado_user_from_reviewer, matching_user)
+        work together to test the actual integration, only mocking the final action.
+        """
+        # Set up realistic reviewer and user data
+        self.mock_reviewer.display_name = "John Doe"
+        self.mock_reviewer.unique_name = "john.doe@example.com"
+        
+        # Create matching Asana user
+        asana_users = [{"gid": "user-123", "email": "john.doe@example.com", "name": "John Doe"}]
 
-        mock_asana_user = {"gid": "user-123", "email": "john.doe@example.com", "name": "John Doe"}
-        mock_matching_user.return_value = mock_asana_user
-
-        # Mock no existing match
+        # Mock no existing match in database
         with patch.object(PullRequestItem, "search", return_value=None):
-            process_pr_reviewer(self.mock_app, self.mock_pr, self.mock_repository, self.mock_reviewer, [], [], "project-456")
+            process_pr_reviewer(
+                self.mock_app, 
+                self.mock_pr, 
+                self.mock_repository, 
+                self.mock_reviewer, 
+                asana_users,  # Real user list for matching_user to process
+                [], 
+                "project-456"
+            )
 
-            # Verify calls
-            mock_create_user.assert_called_once_with(self.mock_reviewer)
-            mock_matching_user.assert_called_once_with([], mock_ado_user)
+            # Verify task creation was called with the matched user
             mock_create_task.assert_called_once()
+            # Verify the matching worked by checking the call arguments
+            args = mock_create_task.call_args[0]
+            matched_asana_user = args[4]  # asana_user parameter
+            self.assertEqual(matched_asana_user["email"], "john.doe@example.com")
+            self.assertEqual(matched_asana_user["gid"], "user-123")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
-    @patch("ado_asana_sync.sync.pull_request_sync.matching_user")
     @patch("ado_asana_sync.sync.pull_request_sync.update_existing_pr_reviewer_task")
-    def test_process_pr_reviewer_existing_task(self, mock_update_task, mock_matching_user, mock_create_user):
-        """Test processing a reviewer when an existing task exists."""
-        # Setup mocks
-        mock_ado_user = Mock()
-        mock_ado_user.display_name = "John Doe"
-        mock_ado_user.email = "john.doe@example.com"
-        mock_create_user.return_value = mock_ado_user
-
-        mock_asana_user = {"gid": "user-123", "email": "john.doe@example.com", "name": "John Doe"}
-        mock_matching_user.return_value = mock_asana_user
-
+    def test_process_pr_reviewer_existing_task(self, mock_update_task):
+        """Test processing a reviewer when an existing task exists.
+        
+        This test integrates the internal utilities and focuses on the existing task path.
+        """
+        # Set up realistic reviewer and user data
+        self.mock_reviewer.display_name = "Jane Smith"
+        self.mock_reviewer.unique_name = "jane.smith@example.com"
+        
+        # Create matching Asana user
+        asana_users = [{"gid": "user-456", "email": "jane.smith@example.com", "name": "Jane Smith"}]
+        
+        # Mock existing PR item found in database
         mock_existing_match = Mock(spec=PullRequestItem)
 
         # Mock existing match
         with patch.object(PullRequestItem, "search", return_value=mock_existing_match):
-            process_pr_reviewer(self.mock_app, self.mock_pr, self.mock_repository, self.mock_reviewer, [], [], "project-456")
+            process_pr_reviewer(
+                self.mock_app, 
+                self.mock_pr, 
+                self.mock_repository, 
+                self.mock_reviewer, 
+                asana_users, 
+                [], 
+                "project-456"
+            )
 
-            # Verify calls
-            mock_create_user.assert_called_once_with(self.mock_reviewer)
-            mock_matching_user.assert_called_once_with([], mock_ado_user)
+            # Verify update was called with the found task and matched user
             mock_update_task.assert_called_once()
+            args = mock_update_task.call_args[0]
+            existing_pr_item = args[4]  # pr_item parameter
+            matched_asana_user = args[5]  # asana_user parameter
+            
+            self.assertEqual(existing_pr_item, mock_existing_match)
+            self.assertEqual(matched_asana_user["email"], "jane.smith@example.com")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
-    def test_process_pr_reviewer_no_user_match(self, mock_create_user):
-        """Test processing a reviewer when no Asana user match is found."""
-        # Setup mocks
-        mock_ado_user = Mock()
-        mock_ado_user.display_name = "John Doe"
-        mock_ado_user.email = "john.doe@example.com"
-        mock_create_user.return_value = mock_ado_user
+    def test_process_pr_reviewer_no_user_match(self):
+        """Test processing a reviewer when no Asana user match is found.
+        
+        This test lets the internal utilities work naturally - create_ado_user_from_reviewer
+        will work, but matching_user will return None because the user list is empty.
+        """
+        # Set up realistic reviewer data
+        self.mock_reviewer.display_name = "Unknown User"
+        self.mock_reviewer.unique_name = "unknown@example.com"
+        
+        # Empty user list - no match will be found
+        empty_asana_users = []
 
-        with patch("ado_asana_sync.sync.sync.matching_user", return_value=None):
-            with patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task") as mock_create_task:
-                process_pr_reviewer(
-                    self.mock_app, self.mock_pr, self.mock_repository, self.mock_reviewer, [], [], "project-456"
-                )
+        with patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task") as mock_create_task:
+            process_pr_reviewer(
+                self.mock_app, 
+                self.mock_pr, 
+                self.mock_repository, 
+                self.mock_reviewer, 
+                empty_asana_users,  # Empty list - matching_user will naturally return None
+                [], 
+                "project-456"
+            )
 
-                # Verify no task creation
-                mock_create_task.assert_not_called()
+            # Verify no task creation when user isn't found
+            mock_create_task.assert_not_called()
 
     @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name")
     @patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task")
