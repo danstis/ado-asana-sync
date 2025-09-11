@@ -8,8 +8,6 @@ class TestDueDateUtilities(unittest.TestCase):
     def test_extract_due_date_from_ado_with_valid_datetime(self):
         """
         Unit Test: extract_due_date_from_ado converts ADO datetime to YYYY-MM-DD format.
-
-        This test will fail initially because extract_due_date_from_ado function doesn't exist.
         """
         from ado_asana_sync.sync.sync import extract_due_date_from_ado
 

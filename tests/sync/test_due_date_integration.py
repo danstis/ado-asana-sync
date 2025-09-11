@@ -33,12 +33,6 @@ class TestDueDateIntegration(unittest.TestCase):
         Scenario 1 from quickstart.md:
         - ADO work item with Due Date = "2025-12-31"
         - Expected: Asana task created with due_on = "2025-12-31"
-
-        This test will fail initially because:
-        1. TaskItem doesn't accept due_date parameter
-        2. ADO_DUE_DATE constant doesn't exist
-        3. extract_due_date_from_ado function doesn't exist
-        4. Asana API integration doesn't include due_on field
         """
         # Arrange: Mock ADO work item with due date
         ado_work_item = WorkItem()
@@ -104,14 +98,12 @@ class TestDueDateIntegration(unittest.TestCase):
             self.app.matches.insert.assert_called_once()
             saved_task_data = self.app.matches.insert.call_args[0][0]
 
-            # This assertion will fail because TaskItem doesn't support due_date yet
             self.assertEqual(saved_task_data["due_date"], "2025-12-31")
 
             # Assert: Verify Asana API was called with due_on field
             mock_asana_task_api.create_task.assert_called_once()
             create_task_call = mock_asana_task_api.create_task.call_args[0][0]
 
-            # This assertion will fail because due_on field isn't implemented yet
             self.assertEqual(create_task_call["data"]["due_on"], "2025-12-31")
 
     def test_new_ado_work_item_without_due_date_creates_task_without_due_on(self):
@@ -121,8 +113,6 @@ class TestDueDateIntegration(unittest.TestCase):
         Scenario 2 from quickstart.md:
         - ADO work item with no Due Date field
         - Expected: Asana task created with no due_on field
-
-        This test will fail initially because due date extraction logic doesn't exist.
         """
         # Arrange: Mock ADO work item without due date
         ado_work_item = WorkItem()
@@ -194,14 +184,12 @@ class TestDueDateIntegration(unittest.TestCase):
             self.app.matches.insert.assert_called_once()
             saved_task_data = self.app.matches.insert.call_args[0][0]
 
-            # This assertion will fail because TaskItem doesn't support due_date yet
             self.assertIsNone(saved_task_data.get("due_date"))
 
             # Assert: Verify Asana API was called without due_on field
             mock_asana_task_api.create_task.assert_called_once()
             create_task_call = mock_asana_task_api.create_task.call_args[0][0]
 
-            # This assertion will fail because due date handling isn't implemented yet
             self.assertNotIn("due_on", create_task_call["data"])
 
     def test_existing_task_preserves_asana_user_changes(self):
@@ -214,10 +202,6 @@ class TestDueDateIntegration(unittest.TestCase):
         - User changes Asana due date to "2026-01-15"
         - ADO due date changes to "2025-11-30"
         - Expected: Asana due date remains "2026-01-15" (user change preserved)
-
-        This test will fail initially because:
-        1. TaskItem doesn't support due_date field
-        2. Subsequent sync logic doesn't exclude due_on field
         """
         # Arrange: Mock existing TaskItem with due_date
         existing_task = TaskItem(
@@ -317,7 +301,6 @@ class TestDueDateIntegration(unittest.TestCase):
             mock_asana_task_api.update_task.assert_called_once()
             update_task_call = mock_asana_task_api.update_task.call_args
 
-            # This assertion will fail because due_on exclusion logic isn't implemented yet
             # Should NOT include due_on field in subsequent syncs
             # Extract the data from the call arguments
             if update_task_call and len(update_task_call.args) >= 2:
@@ -338,8 +321,6 @@ class TestDueDateIntegration(unittest.TestCase):
         Scenario 4 from quickstart.md:
         - ADO work item with invalid Due Date = "invalid-date"
         - Expected: Asana task created with no due_on, warning logged
-
-        This test will fail initially because error handling logic doesn't exist.
         """
         # Arrange: Mock ADO work item with invalid due date
         ado_work_item = WorkItem()
@@ -413,17 +394,14 @@ class TestDueDateIntegration(unittest.TestCase):
 
             # Assert: TaskItem should have due_date = None due to invalid format
             saved_task_data = self.app.matches.insert.call_args[0][0]
-            # This will fail because TaskItem doesn't support due_date yet
             self.assertIsNone(saved_task_data.get("due_date"))
 
             # Assert: Asana task created without due_on field
             mock_asana_task_api.create_task.assert_called_once()
             create_task_call = mock_asana_task_api.create_task.call_args[0][0]
-            # This will fail because due date validation isn't implemented yet
             self.assertNotIn("due_on", create_task_call["data"])
 
             # Assert: Warning should be logged for invalid date
-            # This will fail because error handling isn't implemented yet
             mock_logger.warning.assert_called()
             warning_call = mock_logger.warning.call_args[0][0]
             self.assertIn("Invalid due date format", warning_call)

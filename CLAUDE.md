@@ -36,7 +36,7 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 - **Markdown Files**: Use `mdformat` to ensure consistent formatting
 - **Testing**: Place all tests in the `tests/` directory and use `pytest`
 - **Coverage**: Ensure test coverage remains above 60% for all changes
-- **Tool Configuration**: **ALWAYS** use the settings defined in `tox.ini` for all code quality and linting tools
+- **Tool Configuration**: **ALWAYS** use the settings defined in `pyproject.toml` for all code quality and linting tools
 
 ### Code Quality Tool Configuration
 
@@ -77,7 +77,7 @@ The markdown formatter ensures:
     - All Together: `uv run check` (runs in parallel)
   - **Testing**: `uv run test` to run tests with coverage
   - **Markdown**: `uv run mdformat --check *.md` to check formatting, `uv run mdformat *.md` to fix
-  - All tools use the exact settings defined in `tox.ini` for consistency with CI/CD
+  - All tools use the exact settings defined in `pyproject.toml` for consistency with CI/CD
 
 ## Current Features
 
