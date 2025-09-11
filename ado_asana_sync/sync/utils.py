@@ -1,6 +1,7 @@
 """Utility functions shared across sync modules."""
 
 import logging
+from datetime import datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,3 +43,62 @@ def extract_reviewer_vote(reviewer) -> str:
     except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Failed to extract vote from reviewer: %s", e)
         return "noVote"
+
+
+def convert_ado_date_to_asana_format(iso_datetime_string: str) -> str:
+    """
+    Convert ADO ISO datetime string to Asana YYYY-MM-DD format.
+
+    Args:
+        iso_datetime_string: ISO 8601 datetime string from ADO
+
+    Returns:
+        str: Date in YYYY-MM-DD format
+
+    Raises:
+        ValueError: If the datetime string is invalid
+        TypeError: If input is None or not a string
+    """
+    if not iso_datetime_string or not isinstance(iso_datetime_string, str):
+        raise TypeError("Input must be a non-empty string")
+
+    try:
+        # Handle Z timezone suffix by replacing with +00:00
+        normalized_string = iso_datetime_string.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized_string)
+        return dt.strftime("%Y-%m-%d")
+    except ValueError as e:
+        raise ValueError(f"Invalid datetime format: {iso_datetime_string}") from e
+
+
+def validate_due_date(due_date: str | None) -> bool:
+    """
+    Validate that due_date is in correct YYYY-MM-DD format.
+
+    Args:
+        due_date: Due date string to validate, or None
+
+    Returns:
+        bool: True if valid or None, False if invalid format
+    """
+    if due_date is None:
+        return True
+
+    if not isinstance(due_date, str):
+        return False
+
+    try:
+        # Check format is exactly YYYY-MM-DD (10 characters)
+        if len(due_date) != 10:
+            return False
+
+        # Check separators are in right place
+        if due_date[4] != "-" or due_date[7] != "-":
+            return False
+
+        # Parse as date to validate actual date values
+        datetime.strptime(due_date, "%Y-%m-%d")
+        return True
+
+    except (ValueError, TypeError):
+        return False

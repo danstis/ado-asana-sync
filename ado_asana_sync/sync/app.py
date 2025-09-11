@@ -15,9 +15,9 @@ from typing import Optional
 import asana  # type: ignore
 from msrest.authentication import BasicAuthentication
 
+from ado_asana_sync.database import Database, DatabaseTable
 from azure.devops.connection import Connection  # type: ignore
 from azure.monitor.opentelemetry import configure_azure_monitor
-from ado_asana_sync.database import Database, DatabaseTable
 
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
@@ -71,12 +71,9 @@ class App:
         self.ado_pat = ado_pat or os.environ.get("ADO_PAT", "")
         self.ado_url = ado_url or os.environ.get("ADO_URL", "")
         self.asana_token = asana_token or os.environ.get("ASANA_TOKEN", "")
-        self.asana_workspace_name = asana_workspace_name or os.environ.get(
-            "ASANA_WORKSPACE_NAME", ""
-        )
-        self.applicationinsights_connection_string = (
-            applicationinsights_connection_string
-            or os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", None)
+        self.asana_workspace_name = asana_workspace_name or os.environ.get("ASANA_WORKSPACE_NAME", "")
+        self.applicationinsights_connection_string = applicationinsights_connection_string or os.environ.get(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING", None
         )
         if not self.applicationinsights_connection_string:
             os.environ["OTEL_LOGS_EXPORTER"] = "None"
@@ -197,7 +194,7 @@ class App:
                 _LOGGER.warning("projects.json not found at %s", projects_path)
                 return
 
-            with open(projects_path, 'r', encoding='utf-8') as f:
+            with open(projects_path, "r", encoding="utf-8") as f:
                 projects_data = json.load(f)
 
             if self.db:

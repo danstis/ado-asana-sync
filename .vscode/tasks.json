@@ -4,10 +4,19 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run Coverage",
+      "label": "Run Quality Checks",
       "type": "shell",
-      "command": "tox",
-      "isBackground": true,
+      "command": "uv",
+      "args": ["run", "check"],
+      "isBackground": false,
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Tests",
+      "type": "shell",
+      "command": "uv", 
+      "args": ["run", "test"],
+      "isBackground": false,
       "problemMatcher": []
     }
   ]

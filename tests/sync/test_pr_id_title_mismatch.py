@@ -1,22 +1,20 @@
 """Tests to reproduce and fix PR ID and title mismatch issue.
 
 This test suite addresses issue where PR tasks are created with mismatched
-ID and title combinations, e.g., "Pull Request 123: test PR" but with 
+ID and title combinations, e.g., "Pull Request 123: test PR" but with
 link to PR 456 instead of PR 123.
 """
 
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-from threading import Thread
 import time
+import unittest
+from threading import Thread
+from unittest.mock import Mock, patch
 
-from ado_asana_sync.sync.pull_request_sync import (
-    process_pull_request,
-    create_new_pr_reviewer_task,
-    update_existing_pr_reviewer_task,
-)
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.pull_request_item import PullRequestItem
+from ado_asana_sync.sync.pull_request_sync import (
+    update_existing_pr_reviewer_task,
+)
 
 
 class TestPRIdTitleMismatch(unittest.TestCase):
@@ -51,7 +49,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/100",
             reviewer_gid="reviewer-gid-1",
-            reviewer_name="Test Reviewer"
+            reviewer_name="Test Reviewer",
         )
 
         # Verify the asana_title combines the correct ID and title
@@ -70,7 +68,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/100",
             reviewer_gid="reviewer-gid-1",
-            reviewer_name="Reviewer A"
+            reviewer_name="Reviewer A",
         )
 
         pr_item_b = PullRequestItem(
@@ -80,7 +78,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/123",
             reviewer_gid="reviewer-gid-2",
-            reviewer_name="Reviewer B"
+            reviewer_name="Reviewer B",
         )
 
         # Verify each item maintains its own correct data
@@ -101,7 +99,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             "status": "active",
             "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/123",  # URL matches ID
             "reviewer_gid": "reviewer-gid-1",
-            "reviewer_name": "Test Reviewer"
+            "reviewer_name": "Test Reviewer",
         }
 
         valid_pr_item = PullRequestItem(**valid_record)
@@ -115,7 +113,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             "status": "active",
             "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/100",  # URL points to different PR!
             "reviewer_gid": "reviewer-gid-1",
-            "reviewer_name": "Test Reviewer"
+            "reviewer_name": "Test Reviewer",
         }
 
         corrupted_pr_item = PullRequestItem(**corrupted_record)
@@ -127,9 +125,9 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         self.assertEqual(problematic_title, "Pull Request 123: test PR (Test Reviewer)")
         self.assertIn("pullrequest/100", corrupted_pr_item.url)  # URL doesn't match ID
 
-    @patch('ado_asana_sync.sync.pull_request_sync.get_asana_task')
-    @patch('ado_asana_sync.sync.pull_request_sync.update_asana_pr_task')
-    @patch('ado_asana_sync.sync.pull_request_sync.iso8601_utc')
+    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
+    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pull_request_sync.iso8601_utc")
     def test_title_update_doesnt_corrupt_other_items(self, mock_iso8601, mock_update_task, mock_get_task):
         """Test that updating one PR's title doesn't affect other PR items."""
         mock_iso8601.return_value = "2023-12-01T10:00:00Z"
@@ -144,7 +142,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/100",
             reviewer_gid="reviewer-gid-1",
             reviewer_name="Reviewer 1",
-            asana_gid="asana-task-1"
+            asana_gid="asana-task-1",
         )
 
         # Create second PR item
@@ -156,7 +154,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/123",
             reviewer_gid="reviewer-gid-2",
             reviewer_name="Reviewer 2",
-            asana_gid="asana-task-2"
+            asana_gid="asana-task-2",
         )
 
         # Mock ADO PR objects with updated titles
@@ -177,15 +175,13 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         # Update first PR item
         pr_item_1.is_current = Mock(return_value=False)
         update_existing_pr_reviewer_task(
-            self.mock_app, mock_pr_1, self.mock_repository, mock_reviewer,
-            pr_item_1, mock_asana_user, "project-456"
+            self.mock_app, mock_pr_1, self.mock_repository, mock_reviewer, pr_item_1, mock_asana_user, "project-456"
         )
 
         # Update second PR item
         pr_item_2.is_current = Mock(return_value=False)
         update_existing_pr_reviewer_task(
-            self.mock_app, mock_pr_2, self.mock_repository, mock_reviewer,
-            pr_item_2, mock_asana_user, "project-456"
+            self.mock_app, mock_pr_2, self.mock_repository, mock_reviewer, pr_item_2, mock_asana_user, "project-456"
         )
 
         # Verify each item has the correct title and ID combination
@@ -209,7 +205,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                 "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/100",
                 "reviewer_gid": "reviewer-gid-1",
                 "reviewer_name": "Test Reviewer",
-                "asana_gid": "asana-task-100"
+                "asana_gid": "asana-task-100",
             }
         ]
 
@@ -217,11 +213,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         self.mock_app.pr_matches.search.return_value = mock_search_results
 
         # Search for specific PR and reviewer combination
-        result = PullRequestItem.search(
-            self.mock_app,
-            ado_pr_id=100,
-            reviewer_gid="reviewer-gid-1"
-        )
+        result = PullRequestItem.search(self.mock_app, ado_pr_id=100, reviewer_gid="reviewer-gid-1")
 
         # Verify we get the correct PR item
         self.assertIsNotNone(result)
@@ -242,7 +234,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                 "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/999",
                 "reviewer_gid": "reviewer-gid-1",
                 "reviewer_name": "Test Reviewer",
-                "asana_gid": "asana-task-999"
+                "asana_gid": "asana-task-999",
             }
         ]
 
@@ -253,7 +245,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         result = PullRequestItem.search(
             self.mock_app,
             ado_pr_id=100,  # Looking for PR 100
-            reviewer_gid="reviewer-gid-1"
+            reviewer_gid="reviewer-gid-1",
         )
 
         # Should return None because the returned data is corrupted
@@ -270,7 +262,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/projectA/_git/repo/pullrequest/100",
             reviewer_gid="reviewer-gid-1",
-            reviewer_name="Reviewer A"
+            reviewer_name="Reviewer A",
         )
 
         pr_item_b = PullRequestItem(
@@ -280,7 +272,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/projectB/_git/repo/pullrequest/123",
             reviewer_gid="reviewer-gid-2",
-            reviewer_name="Reviewer B"
+            reviewer_name="Reviewer B",
         )
 
         # Verify that each item maintains its correct data independently
@@ -314,7 +306,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                     status="active",
                     url=f"https://dev.azure.com/test/project/_git/repo/pullrequest/{pr_id}",
                     reviewer_gid=f"reviewer-{worker_id}",
-                    reviewer_name=f"Reviewer {worker_id}"
+                    reviewer_name=f"Reviewer {worker_id}",
                 )
 
                 # Simulate some processing time
@@ -322,10 +314,10 @@ class TestPRIdTitleMismatch(unittest.TestCase):
 
                 # Store results for verification
                 results[worker_id] = {
-                    'pr_id': pr_item.ado_pr_id,
-                    'title': pr_item.title,
-                    'asana_title': pr_item.asana_title,
-                    'url': pr_item.url
+                    "pr_id": pr_item.ado_pr_id,
+                    "title": pr_item.title,
+                    "asana_title": pr_item.asana_title,
+                    "url": pr_item.url,
                 }
 
             except Exception as e:
@@ -337,7 +329,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             (100, "test PR", "worker1"),
             (123, "another test pr", "worker2"),
             (456, "third pr title", "worker3"),
-            (789, "fourth pr title", "worker4")
+            (789, "fourth pr title", "worker4"),
         ]
 
         for pr_id, title, worker_id in test_data:
@@ -359,21 +351,21 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         self.assertEqual(len(results), 4)
 
         # Check each result
-        self.assertEqual(results['worker1']['pr_id'], 100)
-        self.assertEqual(results['worker1']['title'], "test PR")
-        self.assertIn("Pull Request 100: test PR", results['worker1']['asana_title'])
+        self.assertEqual(results["worker1"]["pr_id"], 100)
+        self.assertEqual(results["worker1"]["title"], "test PR")
+        self.assertIn("Pull Request 100: test PR", results["worker1"]["asana_title"])
 
-        self.assertEqual(results['worker2']['pr_id'], 123)
-        self.assertEqual(results['worker2']['title'], "another test pr")
-        self.assertIn("Pull Request 123: another test pr", results['worker2']['asana_title'])
+        self.assertEqual(results["worker2"]["pr_id"], 123)
+        self.assertEqual(results["worker2"]["title"], "another test pr")
+        self.assertIn("Pull Request 123: another test pr", results["worker2"]["asana_title"])
 
-        self.assertEqual(results['worker3']['pr_id'], 456)
-        self.assertEqual(results['worker3']['title'], "third pr title")
-        self.assertIn("Pull Request 456: third pr title", results['worker3']['asana_title'])
+        self.assertEqual(results["worker3"]["pr_id"], 456)
+        self.assertEqual(results["worker3"]["title"], "third pr title")
+        self.assertIn("Pull Request 456: third pr title", results["worker3"]["asana_title"])
 
-        self.assertEqual(results['worker4']['pr_id'], 789)
-        self.assertEqual(results['worker4']['title'], "fourth pr title")
-        self.assertIn("Pull Request 789: fourth pr title", results['worker4']['asana_title'])
+        self.assertEqual(results["worker4"]["pr_id"], 789)
+        self.assertEqual(results["worker4"]["title"], "fourth pr title")
+        self.assertIn("Pull Request 789: fourth pr title", results["worker4"]["asana_title"])
 
         # Verify no cross-contamination occurred
         for worker_id, result in results.items():
@@ -381,8 +373,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                 if worker_id != other_worker_id:
                     # Ensure this worker's data doesn't match other worker's data incorrectly
                     self.assertNotEqual(
-                        result['pr_id'], other_result['pr_id'],
-                        f"Workers {worker_id} and {other_worker_id} have same PR ID"
+                        result["pr_id"], other_result["pr_id"], f"Workers {worker_id} and {other_worker_id} have same PR ID"
                     )
 
     def test_corrupted_data_cleanup_on_save(self):
@@ -397,7 +388,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                 "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/100",  # Wrong URL!
                 "reviewer_gid": "reviewer-gid-1",
                 "reviewer_name": "Test Reviewer",
-                "asana_gid": "asana-task-123"
+                "asana_gid": "asana-task-123",
             }
         ]
 
@@ -413,7 +404,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/123",  # Correct URL
             reviewer_gid="reviewer-gid-2",  # Different reviewer
-            reviewer_name="Another Reviewer"
+            reviewer_name="Another Reviewer",
         )
 
         # Save the valid item (should trigger cleanup)
@@ -435,7 +426,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                 "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/100",  # Wrong URL
                 "reviewer_gid": "reviewer-gid-1",
                 "reviewer_name": "Test Reviewer",
-                "asana_gid": "asana-task-123"
+                "asana_gid": "asana-task-123",
             },
             {
                 "ado_pr_id": 456,
@@ -445,8 +436,8 @@ class TestPRIdTitleMismatch(unittest.TestCase):
                 "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/456",  # Correct URL
                 "reviewer_gid": "reviewer-gid-2",
                 "reviewer_name": "Valid Reviewer",
-                "asana_gid": "asana-task-456"
-            }
+                "asana_gid": "asana-task-456",
+            },
         ]
 
         self.mock_app.pr_matches.all.return_value = corrupted_records
@@ -468,7 +459,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             status="active",
             url="https://dev.azure.com/test/project/_git/repo/pullrequest/100",
             reviewer_gid="reviewer-gid-1",
-            reviewer_name="Test Reviewer"
+            reviewer_name="Test Reviewer",
         )
 
         # Initial state

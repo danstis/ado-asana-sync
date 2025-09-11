@@ -12,8 +12,9 @@ Example usage:
     _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 """
 
-import os
 import logging
+import os
+
 from opentelemetry import trace
 
 LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()

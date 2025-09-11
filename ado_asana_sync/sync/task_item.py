@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from .app import App
 from .asana import get_asana_task
+from .utils import validate_due_date
 
 
 class TaskItem:
@@ -29,6 +30,7 @@ class TaskItem:
         created_date (str): The creation date of the task in ISO 8601 format.
         updated_date (str): The last updated date of the task in ISO 8601 format.
         state (str): The item state, for example New, Active, Closed.
+        due_date (str): The due date in YYYY-MM-DD format from ADO, synchronized to Asana on initial creation only.
     """
 
     def __init__(
@@ -44,7 +46,12 @@ class TaskItem:
         created_date: Optional[str] = None,
         updated_date: Optional[str] = None,
         state: Optional[str] = None,
+        due_date: Optional[str] = None,
     ) -> None:
+        # Validate due_date format
+        if due_date is not None and not validate_due_date(due_date):
+            raise ValueError(f"Invalid due_date format: {due_date}. Expected YYYY-MM-DD format or None.")
+
         self.ado_id = ado_id
         self.ado_rev = ado_rev
         self.title = title
@@ -56,6 +63,7 @@ class TaskItem:
         self.created_date = created_date
         self.updated_date = updated_date
         self.state = state
+        self.due_date = due_date
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, TaskItem):
@@ -71,6 +79,8 @@ class TaskItem:
             and self.assigned_to == other.assigned_to
             and self.created_date == other.created_date
             and self.updated_date == other.updated_date
+            and self.state == other.state
+            and self.due_date == other.due_date
         )
 
     def __str__(self) -> str:
@@ -115,6 +125,7 @@ class TaskItem:
             TaskItem: The TaskItem object with the matching ADO ID.
             None: If there is no matching item.
         """
+
         def query_func(record):
             return record.get("ado_id") == ado_id
 
@@ -122,14 +133,12 @@ class TaskItem:
             items = app.matches.search(query_func)
             if items:
                 # Remove doc_id before creating TaskItem
-                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
                 return cls(**item_data)
         return None
 
     @classmethod
-    def search(
-        cls, app: App, ado_id: Optional[int] = None, asana_gid: Optional[str] = None
-    ) -> TaskItem | None:
+    def search(cls, app: App, ado_id: Optional[int] = None, asana_gid: Optional[str] = None) -> TaskItem | None:
         """
         Search for a task item in the App object based on the given ADO ID or Asana GID.
 
@@ -153,7 +162,7 @@ class TaskItem:
             items = app.matches.search(query_func)
             if items:
                 # Remove doc_id before creating TaskItem
-                item_data = {k: v for k, v in items[0].items() if k != 'doc_id'}
+                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
                 return cls(**item_data)
         return None
 
@@ -179,6 +188,7 @@ class TaskItem:
             "assigned_to": self.assigned_to,
             "created_date": self.created_date,
             "updated_date": self.updated_date,
+            "due_date": self.due_date,
         }
 
         def query_func(record):
@@ -216,10 +226,7 @@ class TaskItem:
         if not ado_task or not asana_task:
             return False
 
-        if (
-            ado_task.rev != self.ado_rev
-            or (asana_task and asana_task.get("modified_at")) != self.asana_updated
-        ):
+        if ado_task.rev != self.ado_rev or (asana_task and asana_task.get("modified_at")) != self.asana_updated:
             return False
 
         return True

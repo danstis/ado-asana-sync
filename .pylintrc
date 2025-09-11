@@ -1,5 +1,0 @@
-[FORMAT]
-max-line-length=127
-
-[pylint.messages_control]
-disable=C0301

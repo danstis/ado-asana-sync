@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, patch
 
 from asana.rest import ApiException
 
-from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync import sync
+from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.sync import (
-    get_asana_project_tasks,
     get_asana_project_custom_fields,
+    get_asana_project_tasks,
 )
 
 
@@ -22,8 +22,7 @@ class TestPaginationFunctions(unittest.TestCase):
         mock_api = MagicMock()
         mock_api.get_tasks.return_value = iter([{"gid": "1"}, {"gid": "2"}])
 
-        with patch("ado_asana_sync.sync.sync.asana.TasksApi",
-                   return_value=mock_api):
+        with patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_api):
             tasks = get_asana_project_tasks(self.app, "project_123")
 
         # Verify the function returns the correct results
@@ -41,8 +40,7 @@ class TestPaginationFunctions(unittest.TestCase):
         mock_api = MagicMock()
         mock_api.get_tasks.side_effect = ApiException("API Error")
 
-        with patch("ado_asana_sync.sync.sync.asana.TasksApi",
-                   return_value=mock_api):
+        with patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_api):
             tasks = get_asana_project_tasks(self.app, "project_123")
 
         # Should return empty list on API exception
@@ -55,11 +53,9 @@ class TestPaginationFunctions(unittest.TestCase):
         sync.CUSTOM_FIELDS_AVAILABLE = True
 
         mock_api = MagicMock()
-        mock_api.get_custom_field_settings_for_project.return_value = iter(
-            [{"gid": "cf1"}])
+        mock_api.get_custom_field_settings_for_project.return_value = iter([{"gid": "cf1"}])
 
-        with patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi",
-                   return_value=mock_api):
+        with patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=mock_api):
             # First call should hit the API
             fields1 = get_asana_project_custom_fields(self.app, "project_123")
 
@@ -89,19 +85,16 @@ class TestPaginationFunctions(unittest.TestCase):
         mock_api = MagicMock()
         api_exception = ApiException("Payment required")
         api_exception.status = 402
-        mock_api.get_custom_field_settings_for_project.side_effect = (
-            api_exception)
+        mock_api.get_custom_field_settings_for_project.side_effect = api_exception
 
-        with patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi",
-                   return_value=mock_api):
+        with patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=mock_api):
             fields = get_asana_project_custom_fields(self.app, "project_123")
 
         # Should return empty list and disable custom fields for future calls
         self.assertEqual(fields, [])
         self.assertFalse(sync.CUSTOM_FIELDS_AVAILABLE)
 
-    def test_get_asana_project_custom_fields_handles_other_api_exceptions(
-            self):
+    def test_get_asana_project_custom_fields_handles_other_api_exceptions(self):
         """Test that other API exceptions return empty list."""
         sync.CUSTOM_FIELDS_CACHE.clear()
         sync.CUSTOM_FIELDS_AVAILABLE = True
@@ -109,11 +102,9 @@ class TestPaginationFunctions(unittest.TestCase):
         mock_api = MagicMock()
         api_exception = ApiException("Other error")
         api_exception.status = 500
-        mock_api.get_custom_field_settings_for_project.side_effect = (
-            api_exception)
+        mock_api.get_custom_field_settings_for_project.side_effect = api_exception
 
-        with patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi",
-                   return_value=mock_api):
+        with patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=mock_api):
             fields = get_asana_project_custom_fields(self.app, "project_123")
 
         self.assertEqual(fields, [])

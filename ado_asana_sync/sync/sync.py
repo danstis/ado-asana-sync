@@ -6,22 +6,23 @@ import concurrent.futures
 import json
 import os
 from dataclasses import dataclass
-from typing import Tuple, Any
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from time import sleep
+from typing import Any, Tuple
 
 import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
-from azure.devops.v7_0.work.models import TeamContext  # type: ignore
-from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
+from azure.devops.v7_0.work.models import TeamContext  # type: ignore
+from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from .app import App
 from .asana import get_asana_task
 from .task_item import TaskItem
+from .utils import convert_ado_date_to_asana_format
 
 # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
@@ -30,10 +31,7 @@ _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 _SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
 # _CLOSED_STATES defines a list of states that will be considered as completed. If the ADO state matches one of these values
 # it will cause the linked Asana task to be closed.
-_CLOSED_STATES = set(
-    state.strip()
-    for state in os.environ.get("CLOSED_STATES", "Closed,Removed,Done").split(",")
-)
+_CLOSED_STATES = {state.strip() for state in os.environ.get("CLOSED_STATES", "Closed,Removed,Done").split(",")}
 # _THREAD_COUNT contains the max number of project threads to execute concurrently.
 _THREAD_COUNT = max(1, int(os.environ.get("THREAD_COUNT", 8)))
 
@@ -41,6 +39,7 @@ _THREAD_COUNT = max(1, int(os.environ.get("THREAD_COUNT", 8)))
 ADO_STATE = "System.State"
 ADO_TITLE = "System.Title"
 ADO_WORK_ITEM_TYPE = "System.WorkItemType"
+ADO_DUE_DATE = "Microsoft.VSTS.Scheduling.DueDate"
 
 # Cache for custom fields
 CUSTOM_FIELDS_CACHE: dict[str, Any] = {}
@@ -58,7 +57,7 @@ def start_sync(app: App) -> None:
     """
     global LAST_CACHE_REFRESH
     LAST_CACHE_REFRESH = datetime.now(timezone.utc)
-    _LOGGER.info("Defined closed states: %s", sorted(list(_CLOSED_STATES)))
+    _LOGGER.info("Defined closed states: %s", sorted(_CLOSED_STATES))
     try:
         workspace = get_asana_workspace(app, app.asana_workspace_name)
         if workspace is None:
@@ -76,10 +75,7 @@ def start_sync(app: App) -> None:
             span.add_event("Start sync run")
             # Check if the cache is valid
             now = datetime.now(timezone.utc)
-            if (
-                CUSTOM_FIELDS_AVAILABLE
-                and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION
-            ):
+            if CUSTOM_FIELDS_AVAILABLE and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION:
                 CUSTOM_FIELDS_CACHE.clear()
                 LAST_CACHE_REFRESH = now
                 _LOGGER.info("Custom field cache cleared")
@@ -92,17 +88,13 @@ def start_sync(app: App) -> None:
                 len(projects),
                 optimal_thread_count,
             )
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=optimal_thread_count
-            ) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=optimal_thread_count) as executor:
                 try:
                     executor.map(sync_project, [app] * len(projects), projects)
                 except Exception as exception:  # pylint: disable=broad-exception-caught
                     _LOGGER.error("Error in sync_project thread: %s", exception)
 
-            _LOGGER.info(
-                "Sync process complete, sleeping for %s seconds", app.sleep_time
-            )
+            _LOGGER.info("Sync process complete, sleeping for %s seconds", app.sleep_time)
 
         sleep(app.sleep_time)
 
@@ -175,8 +167,10 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             if app.config is None:
                 raise ValueError("app.config is None")
             with app.db_lock:
+
                 def config_query_func(record):
                     return record.get("doc_id") == 1
+
                 app.config.upsert({"tag_gid": existing_tag["gid"]}, config_query_func)
             return existing_tag["gid"]
         api_instance = asana.TagsApi(app.asana_client)
@@ -187,8 +181,10 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
             # Store the new tag_gid in the config table
             with app.db_lock:
+
                 def new_config_query_func(record):
                     return record.get("doc_id") == 1
+
                 app.config.upsert({"tag_gid": api_response["gid"]}, new_config_query_func)
             return api_response["gid"]
         except ApiException as exception:
@@ -231,9 +227,7 @@ def get_asana_task_tags(app: App, task: TaskItem) -> list[dict]:
             api_response = api_instance.get_tags_for_task(task.asana_gid, opts={})
             return list(api_response)
         except ApiException as exception:
-            _LOGGER.error(
-                "Exception when calling TagsApi->get_tags_for_task: %s\n", exception
-            )
+            _LOGGER.error("Exception when calling TagsApi->get_tags_for_task: %s\n", exception)
             return []
 
 
@@ -247,16 +241,12 @@ def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
     if tag not in task_tags_gids:
         # Add the tag to the task.
         try:
-            _LOGGER.info(
-                "adding tag '%s' to task '%s'", app.asana_tag_name, task.asana_title
-            )
+            _LOGGER.info("adding tag '%s' to task '%s'", app.asana_tag_name, task.asana_title)
             body = {"data": {"tag": tag}}
             api_instance.add_tag_for_task(body, task.asana_gid)
             return None
         except ApiException as exception:
-            _LOGGER.error(
-                "Exception when calling TasksApi->add_tag_for_task: %s\n", exception
-            )
+            _LOGGER.error("Exception when calling TasksApi->add_tag_for_task: %s\n", exception)
     return None
 
 
@@ -275,9 +265,7 @@ def sync_project(app: App, project):
 
     # Get project IDs
     try:
-        ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(
-            app, project
-        )
+        ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(app, project)
     except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Error getting project IDs: %s", e)
         return
@@ -304,18 +292,18 @@ def sync_project(app: App, project):
         "Microsoft.RequirementCategory",
     )
 
-    _LOGGER.info("Found %d work items in ADO backlog for project %s",
-                 len(ado_items.work_items) if ado_items.work_items else 0,
-                 project["adoProjectName"])
+    _LOGGER.info(
+        "Found %d work items in ADO backlog for project %s",
+        len(ado_items.work_items) if ado_items.work_items else 0,
+        project["adoProjectName"],
+    )
 
     if ado_items.work_items:
         item_ids = [item.target.id for item in ado_items.work_items]
         _LOGGER.info("Found %d ADO work items in backlog", len(item_ids))
 
     # Process backlog items
-    process_backlog_items(
-        app, ado_items, asana_users, asana_project_tasks, asana_project
-    )
+    process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asana_project)
     _LOGGER.info("Completed backlog processing for project %s", project["adoProjectName"])
 
     # Clean up any invalid entries that may have gotten mixed between tables
@@ -325,7 +313,7 @@ def sync_project(app: App, project):
     if app.matches is None:
         raise ValueError("app.matches is None")
     all_tasks = app.matches.all()
-    processed_item_ids = set(item.target.id for item in ado_items.work_items)
+    processed_item_ids = {item.target.id for item in ado_items.work_items}
 
     _LOGGER.info("Found %d existing matched items in database", len(all_tasks))
     items_not_in_backlog = [t for t in all_tasks if t["ado_id"] not in processed_item_ids]
@@ -359,18 +347,14 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # n
             raise ValueError("app.ado_core_client is None")
         ado_project = app.ado_core_client.get_project(project["adoProjectName"])
     except NameError as exception:
-        _LOGGER.error(
-            "ADO project %s not found: %s", project["adoProjectName"], exception
-        )
+        _LOGGER.error("ADO project %s not found: %s", project["adoProjectName"], exception)
         raise exception
 
     try:
         # Get the ADO team by name within the ADO project.
         if app.ado_core_client is None:
             raise ValueError("app.ado_core_client is None")
-        ado_team = app.ado_core_client.get_team(
-            project["adoProjectName"], project["adoTeamName"]
-        )
+        ado_team = app.ado_core_client.get_team(project["adoProjectName"], project["adoTeamName"])
     except NameError as exception:
         _LOGGER.error(
             "ADO team %s not found in project %s: %s",
@@ -384,16 +368,12 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # n
         # Get the Asana workspace ID by name.
         asana_workspace_id = get_asana_workspace(app, app.asana_workspace_name)
     except NameError as exception:
-        _LOGGER.error(
-            "Asana workspace %s not found: %s", app.asana_workspace_name, exception
-        )
+        _LOGGER.error("Asana workspace %s not found: %s", app.asana_workspace_name, exception)
         raise exception
 
     # Get the Asana project by name within the Asana workspace.
     try:
-        asana_project = get_asana_project(
-            app, asana_workspace_id, project["asanaProjectName"]
-        )
+        asana_project = get_asana_project(app, asana_workspace_id, project["asanaProjectName"])
     except NameError as exception:
         _LOGGER.error(
             "Asana project %s not found in workspace %s: %s",
@@ -406,9 +386,7 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # n
     return ado_project, ado_team, asana_workspace_id, asana_project
 
 
-def process_backlog_items(
-    app, ado_items, asana_users, asana_project_tasks, asana_project
-):
+def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asana_project):
     """
     Processes the backlog items from ADO.
     """
@@ -433,36 +411,86 @@ def process_backlog_items(
             except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 _LOGGER.error("Error checking work item %d: %s", ado_task.id, e)
 
-            if (ado_assigned is None and existing_match is None) or \
-               (asana_matched_user is None and existing_match is None):
+            if (ado_assigned is None and existing_match is None) or (asana_matched_user is None and existing_match is None):
                 skipped_count += 1
                 _LOGGER.debug("Skipped work item %d: %s", ado_task.id, ado_task.fields[ADO_TITLE])
             else:
                 processed_count += 1
                 _LOGGER.debug("Processing work item %d: %s", ado_task.id, ado_task.fields[ADO_TITLE])
 
-            process_backlog_item(
-                app, ado_task, asana_users, asana_project_tasks, asana_project
-            )
+            process_backlog_item(app, ado_task, asana_users, asana_project_tasks, asana_project)
             _LOGGER.info("Completed processing work item ID: %d", wi.target.id)
 
         except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
             _LOGGER.error("Failed to process work item %d: %s", wi.target.id, e)
             continue
 
-    _LOGGER.info("Backlog processing complete: %d processed, %d skipped",
-                 processed_count, skipped_count)
+    _LOGGER.info("Backlog processing complete: %d processed, %d skipped", processed_count, skipped_count)
 
 
-def process_backlog_item(
-    app, ado_task, asana_users, asana_project_tasks, asana_project
-):
+def extract_due_date_from_ado(ado_work_item) -> str | None:
+    """
+    Extract due date from ADO work item and convert to YYYY-MM-DD format.
+
+    Args:
+        ado_work_item: Azure DevOps work item object
+
+    Returns:
+        str | None: Due date in YYYY-MM-DD format, or None if not present or invalid
+    """
+    try:
+        due_date_value = ado_work_item.fields.get(ADO_DUE_DATE)
+        if not due_date_value or (isinstance(due_date_value, str) and not due_date_value.strip()):
+            return None
+
+        # Delegate to existing date conversion function for consistency
+        if isinstance(due_date_value, str):
+            return convert_ado_date_to_asana_format(due_date_value)
+
+    except (ValueError, TypeError, AttributeError) as e:
+        _LOGGER.warning(
+            "Invalid due date format in ADO work item %s: %s. Error: %s",
+            getattr(ado_work_item, "id", "unknown"),
+            due_date_value,
+            e,
+        )
+
+    return None
+
+
+def create_asana_task_body(task: TaskItem, is_initial_sync: bool = True) -> dict[str, Any]:
+    """
+    Create the request body for Asana task API calls.
+
+    Args:
+        task: TaskItem object containing task data
+        is_initial_sync: Whether this is initial creation (True) or update (False)
+
+    Returns:
+        dict: Request body for Asana API
+    """
+    body = {
+        "data": {
+            "name": task.asana_title,
+            "html_notes": f"<body>{task.asana_notes_link}</body>",
+            "assignee": task.assigned_to,
+            "completed": task.state in _CLOSED_STATES if task.state else False,
+        }
+    }
+
+    # Only include due_on for initial sync to preserve user changes
+    if is_initial_sync and task.due_date:
+        body["data"]["due_on"] = task.due_date
+
+    return body
+
+
+def process_backlog_item(app, ado_task, asana_users, asana_project_tasks, asana_project):
     """
     Processes a single backlog item.
     """
     existing_match = TaskItem.search(app, ado_id=ado_task.id)
-    _LOGGER.debug("Work item %d search result: %s", ado_task.id,
-                  "Found match" if existing_match else "No match")
+    _LOGGER.debug("Work item %d search result: %s", ado_task.id, "Found match" if existing_match else "No match")
     ado_assigned = get_task_user(ado_task)
 
     if ado_assigned is None and existing_match is None:
@@ -484,24 +512,20 @@ def process_backlog_item(
 
     if existing_match is None:
         _LOGGER.debug("Work item %d: No existing match found, creating new mapping", ado_task.id)
-        create_new_task_mapping(
-            app, ado_task, asana_matched_user, asana_project_tasks, asana_project
-        )
+        create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tasks, asana_project)
     else:
         _LOGGER.debug("Work item %d: Existing match found, updating", ado_task.id)
-        update_existing_task(
-            app, ado_task, existing_match, asana_matched_user, asana_project
-        )
+        update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project)
 
 
-def create_new_task_mapping(
-    app, ado_task, asana_matched_user, asana_project_tasks, asana_project
-):
+def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tasks, asana_project):
     """
     Creates a new task mapping between ADO and Asana.
     """
     _LOGGER.info("%s:unmapped task", ado_task.fields[ADO_TITLE])
     current_utc_time = iso8601_utc(datetime.now(timezone.utc))
+    # Extract due date from ADO work item
+    ado_due_date = extract_due_date_from_ado(ado_task)
     existing_match = TaskItem(
         ado_id=ado_task.id,
         ado_rev=ado_task.rev,
@@ -511,11 +535,8 @@ def create_new_task_mapping(
         created_date=current_utc_time,
         updated_date=current_utc_time,
         url=safe_get(ado_task, "_links", "additional_properties", "html", "href"),
-        assigned_to=(
-            asana_matched_user.get("gid", None)
-            if asana_matched_user is not None
-            else None
-        ),
+        assigned_to=(asana_matched_user.get("gid", None) if asana_matched_user is not None else None),
+        due_date=ado_due_date,
     )
     # Check if there is a matching asana task with a matching title.
     asana_task = get_asana_task_by_name(asana_project_tasks, existing_match.asana_title)
@@ -543,9 +564,7 @@ def create_new_task_mapping(
         )
 
 
-def update_existing_task(
-    app, ado_task, existing_match, asana_matched_user, asana_project
-):
+def update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project):
     """
     Updates an existing Asana task based on ADO changes.
     """
@@ -563,13 +582,11 @@ def update_existing_task(
     existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
     existing_match.state = ado_task.fields[ADO_STATE]
     existing_match.updated_date = iso8601_utc(datetime.now())
-    existing_match.url = safe_get(
-        ado_task, "_links", "additional_properties", "html", "href"
-    )
-    existing_match.assigned_to = (
-        asana_matched_user.get("gid", None) if asana_matched_user is not None else None
-    )
+    existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
+    existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
     existing_match.asana_updated = asana_task["modified_at"]
+    # Update due date from ADO work item
+    existing_match.due_date = extract_due_date_from_ado(ado_task)
     update_asana_task(
         app,
         existing_match,
@@ -578,9 +595,7 @@ def update_existing_task(
     )
 
 
-def process_closed_items(
-    app, all_tasks, processed_item_ids, asana_users, asana_project
-):
+def process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project):
     """
     Processes items that are closed or removed from the backlog.
     """
@@ -614,9 +629,7 @@ def process_closed_items(
             try:
                 ado_task = app.ado_wit_client.get_work_item(existing_match.ado_id)
             except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
-                _LOGGER.warning(
-                    "Failed to fetch work item %s: %s", existing_match.ado_id, e
-                )
+                _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
                 continue
             if existing_match.is_current(app):
                 _LOGGER.info(
@@ -629,18 +642,14 @@ def process_closed_items(
                 "%s:Task has been updated, updating task",
                 existing_match.asana_title,
             )
-            update_task_if_needed(
-                app, ado_task, existing_match, asana_users, asana_project
-            )
+            update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project)
 
 
 def is_item_older_than_threshold(wi):
     """
     Determines if a work item is older than a specified threshold.
     """
-    return (
-        datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])
-    ).days > _SYNC_THRESHOLD
+    return (datetime.now(timezone.utc) - datetime.fromisoformat(wi["updated_date"])).days > _SYNC_THRESHOLD
 
 
 def remove_mapping(app, wi):
@@ -686,12 +695,8 @@ def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_proj
     existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
     existing_match.state = ado_task.fields[ADO_STATE]
     existing_match.updated_date = iso8601_utc(datetime.now())
-    existing_match.url = safe_get(
-        ado_task, "_links", "additional_properties", "html", "href"
-    )
-    existing_match.assigned_to = (
-        asana_matched_user.get("gid", None) if asana_matched_user is not None else None
-    )
+    existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
+    existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
     existing_match.asana_updated = asana_task["modified_at"]
     update_asana_task(
         app,
@@ -733,10 +738,7 @@ def matching_user(user_list: list[dict], ado_user: ADOAssignedUser) -> dict | No
     if ado_user is None:
         return None
     for user in user_list:
-        if (
-            user["email"].lower() == ado_user.email.lower()
-            or user["name"].lower() == ado_user.display_name.lower()
-        ):
+        if user["email"].lower() == ado_user.email.lower() or user["name"].lower() == ado_user.display_name.lower():
             return user
     return None
 
@@ -754,9 +756,7 @@ def get_asana_workspace(app: App, name: str) -> str:
                 return w["gid"]
         raise NameError(f"No workspace found with name '{name}'")
     except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling WorkspacesApi->get_workspaces: %s\n", exception
-        )
+        _LOGGER.error("Exception when calling WorkspacesApi->get_workspaces: %s\n", exception)
         raise ValueError(f"Call to Asana API failed: {exception}") from exception
 
 
@@ -774,9 +774,7 @@ def get_asana_project(app: App, workspace_gid, name) -> str | None:
                 return p["gid"]
         raise NameError(f"No project found with name '{name}'")
     except ApiException as exception:
-        _LOGGER.error(
-            "Exception when calling ProjectsApi->get_projects: %s\n", exception
-        )
+        _LOGGER.error("Exception when calling ProjectsApi->get_projects: %s\n", exception)
         return None
 
 
@@ -817,15 +815,13 @@ def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
 def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) -> None:
     """
     Create an Asana task in the specified project.
+
+    Due dates from ADO are synced during initial creation only.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
-    link_custom_field_id = (
-        link_custom_field.get("custom_field", {}).get("gid")
-        if link_custom_field
-        else None
-    )
+    link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
 
     body = {
         "data": {
@@ -838,6 +834,10 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         },
     }
 
+    # Add due_on field for initial creation if due_date is present
+    if task.due_date:
+        body["data"]["due_on"] = task.due_date
+
     if link_custom_field_id:
         body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
 
@@ -848,25 +848,49 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         task.asana_updated = result["modified_at"]
         task.updated_date = iso8601_utc(datetime.now())
         task.save(app)
+
+        # Log successful due date sync if applicable
+        if task.due_date:
+            _LOGGER.info("Successfully synced due date %s for task %s", task.due_date, task.asana_title)
+
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
 
+        # If the error might be due to invalid due_date, try creating without it
+        # 400 = Bad Request, 422 = Unprocessable Entity (typical validation errors)
+        if task.due_date and hasattr(exception, "status") and exception.status in (400, 422):
+            _LOGGER.warning(
+                "Due date %s may be invalid for task %s (HTTP %s), retrying without due date",
+                task.due_date,
+                task.asana_title,
+                exception.status,
+            )
+            # Remove due_on from body and retry
+            if "due_on" in body["data"]:
+                del body["data"]["due_on"]
+                try:
+                    result = tasks_api_instance.create_task(body, opts={})
+                    task.asana_gid = result["gid"]
+                    task.asana_updated = result["modified_at"]
+                    task.updated_date = iso8601_utc(datetime.now())
+                    task.save(app)
+                    _LOGGER.info("Task created successfully without due date")
+                except ApiException as retry_exception:
+                    _LOGGER.error("Failed to create task even without due date: %s", retry_exception)
 
-def update_asana_task(
-    app: App, task: TaskItem, tag: str, asana_project_gid: str
-) -> None:
+
+def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str) -> None:
     """
     Update an Asana task with the provided task details.
+
+    Note: Due dates are intentionally excluded from updates to preserve
+    user modifications in Asana. Due dates are only synced during initial creation.
     """
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
-    link_custom_field_id = (
-        link_custom_field.get("custom_field", {}).get("gid")
-        if link_custom_field
-        else None
-    )
+    link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
 
     body = {
         "data": {
@@ -907,17 +931,13 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
     try:
         _LOGGER.info("Fetching custom fields for project %s", project_gid)
         opts = {"limit": 100}
-        api_response = api_instance.get_custom_field_settings_for_project(
-            project_gid, opts
-        )
+        api_response = api_instance.get_custom_field_settings_for_project(project_gid, opts)
         custom_fields = list(api_response)
         CUSTOM_FIELDS_CACHE[project_gid] = custom_fields
         return custom_fields
     except ApiException as exception:
         if exception.status == 402:
-            _LOGGER.info(
-                "Custom Field Settings are not available for free users, disabling custom fields."
-            )
+            _LOGGER.info("Custom Field Settings are not available for free users, disabling custom fields.")
             CUSTOM_FIELDS_AVAILABLE = False
             return []
         _LOGGER.error(
@@ -930,9 +950,7 @@ def get_asana_project_custom_fields(app: App, project_gid: str) -> list[dict]:
         return []
 
 
-def find_custom_field_by_name(
-    app: App, project_gid: str, field_name: str
-) -> dict | None:
+def find_custom_field_by_name(app: App, project_gid: str, field_name: str) -> dict | None:
     """
     Finds a custom field in the project by the custom field's name.
     """

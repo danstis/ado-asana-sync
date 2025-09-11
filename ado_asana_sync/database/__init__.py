@@ -5,6 +5,6 @@ This module provides SQLite database functionality with TinyDB-compatible
 interface for thread-safe operations.
 """
 
-from .database import Database, DatabaseTable, CURRENT_SCHEMA_VERSION
+from .database import CURRENT_SCHEMA_VERSION, Database, DatabaseTable
 
 __all__ = ["Database", "DatabaseTable", "CURRENT_SCHEMA_VERSION"]
