@@ -22,6 +22,7 @@ from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 from .app import App
 from .asana import get_asana_task
 from .task_item import TaskItem
+from .utils import convert_ado_date_to_asana_format
 
 # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
@@ -442,11 +443,9 @@ def extract_due_date_from_ado(ado_work_item) -> str | None:
         if not due_date_value or (isinstance(due_date_value, str) and not due_date_value.strip()):
             return None
 
-        # Parse the ISO 8601 datetime string and extract date portion
+        # Delegate to existing date conversion function for consistency
         if isinstance(due_date_value, str):
-            # Handle various ISO formats like "2025-12-31T23:59:59.000Z"
-            dt = datetime.fromisoformat(due_date_value.replace("Z", "+00:00"))
-            return dt.strftime("%Y-%m-%d")
+            return convert_ado_date_to_asana_format(due_date_value)
 
     except (ValueError, TypeError, AttributeError) as e:
         _LOGGER.warning(
@@ -858,9 +857,11 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
 
         # If the error might be due to invalid due_date, try creating without it
-        if task.due_date and "due_on" in str(exception):
+        # 400 = Bad Request, 422 = Unprocessable Entity (typical validation errors)
+        if task.due_date and hasattr(exception, 'status') and exception.status in (400, 422):
             _LOGGER.warning(
-                "Due date %s may be invalid for task %s, retrying without due date", task.due_date, task.asana_title
+                "Due date %s may be invalid for task %s (HTTP %s), retrying without due date", 
+                task.due_date, task.asana_title, exception.status
             )
             # Remove due_on from body and retry
             if "due_on" in body["data"]:
