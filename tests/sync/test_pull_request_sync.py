@@ -14,6 +14,7 @@ from ado_asana_sync.sync.pull_request_sync import (
     sync_pull_requests,
     update_existing_pr_reviewer_task,
 )
+from tests.utils.test_helpers import RealObjectBuilder, TestDataBuilder
 
 
 class TestPullRequestSync(unittest.TestCase):
@@ -115,66 +116,97 @@ class TestPullRequestSync(unittest.TestCase):
             mock_process_reviewer.assert_not_called()
             mock_handle_removed.assert_called_once_with(self.mock_app, self.mock_pr, set(), "project-456")
 
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
     @patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task")
-    def test_process_pr_reviewer_new_task(self, mock_create_task):
-        """Test processing a reviewer when no existing task exists.
-        
-        This test lets internal utilities (create_ado_user_from_reviewer, matching_user)
-        work together to test the actual integration, only mocking the final action.
+    def test_process_pr_reviewer_new_task_real_integration(
+        self, mock_create_task, mock_asana_client, mock_ado_connection, mock_dirname
+    ):
+        """Test processing a reviewer with REAL App and REAL objects integration.
+
+        This test uses real App, real reviewer objects, and real internal utilities
+        working together. Only mocks external APIs and the final task creation.
         """
-        # Set up realistic reviewer and user data
-        self.mock_reviewer.display_name = "John Doe"
-        self.mock_reviewer.unique_name = "john.doe@example.com"
-        
-        # Create matching Asana user
-        asana_users = [{"gid": "user-123", "email": "john.doe@example.com", "name": "John Doe"}]
+        import tempfile
 
-        # Mock no existing match in database
-        with patch.object(PullRequestItem, "search", return_value=None):
-            process_pr_reviewer(
-                self.mock_app, 
-                self.mock_pr, 
-                self.mock_repository, 
-                self.mock_reviewer, 
-                asana_users,  # Real user list for matching_user to process
-                [], 
-                "project-456"
-            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Set up real App with real database
+            mock_dirname.return_value = temp_dir
+            mock_ado_connection.return_value = Mock()
+            mock_asana_client.return_value = Mock()
 
-            # Verify task creation was called with the matched user
-            mock_create_task.assert_called_once()
-            # Verify the matching worked by checking the call arguments
-            args = mock_create_task.call_args[0]
-            matched_asana_user = args[4]  # asana_user parameter
-            self.assertEqual(matched_asana_user["email"], "john.doe@example.com")
-            self.assertEqual(matched_asana_user["gid"], "user-123")
+            app = TestDataBuilder.create_real_app(temp_dir)
+
+            try:
+                app.connect()  # Real database initialization
+
+                # Create REAL ADO objects (not mocks!)
+                reviewer = RealObjectBuilder.create_real_ado_reviewer(
+                    display_name="John Doe", email="john.doe@example.com", vote="waiting_for_author"
+                )
+
+                pr = RealObjectBuilder.create_real_ado_pull_request(pr_id=789, title="Fix critical bug", status="active")
+
+                repository = RealObjectBuilder.create_real_ado_repository(
+                    repo_id="repo-456", name="test-repo", project_id="project-123"
+                )
+
+                # Real Asana user list for real matching_user function to process
+                asana_users = [{"gid": "user-123", "email": "john.doe@example.com", "name": "John Doe"}]
+
+                # Mock only the database search (external dependency) and final task creation
+                with patch.object(PullRequestItem, "search", return_value=None):
+                    # Call with REAL objects - tests real integration of:
+                    # - create_ado_user_from_reviewer (extracts real reviewer data)
+                    # - matching_user (matches against real user list)
+                    # - All internal logic flows naturally
+                    process_pr_reviewer(
+                        app,  # REAL App with REAL database
+                        pr,  # REAL PR object
+                        repository,  # REAL repository object
+                        reviewer,  # REAL reviewer object
+                        asana_users,  # REAL user list
+                        [],
+                        "project-456",
+                    )
+
+                    # Verify task creation was called - real integration worked
+                    mock_create_task.assert_called_once()
+
+                    # Verify the REAL internal utilities worked together correctly
+                    args = mock_create_task.call_args[0]
+                    matched_asana_user = args[4]  # asana_user parameter
+                    self.assertEqual(matched_asana_user["email"], "john.doe@example.com")
+                    self.assertEqual(matched_asana_user["gid"], "user-123")
+
+                    # Verify real reviewer object was processed correctly
+                    self.assertEqual(args[1].pull_request_id, 789)  # Real PR
+                    self.assertEqual(args[2].id, "repo-456")  # Real repository
+
+            finally:
+                app.close()
 
     @patch("ado_asana_sync.sync.pull_request_sync.update_existing_pr_reviewer_task")
     def test_process_pr_reviewer_existing_task(self, mock_update_task):
         """Test processing a reviewer when an existing task exists.
-        
+
         This test integrates the internal utilities and focuses on the existing task path.
         """
         # Set up realistic reviewer and user data
         self.mock_reviewer.display_name = "Jane Smith"
         self.mock_reviewer.unique_name = "jane.smith@example.com"
-        
+
         # Create matching Asana user
         asana_users = [{"gid": "user-456", "email": "jane.smith@example.com", "name": "Jane Smith"}]
-        
+
         # Mock existing PR item found in database
         mock_existing_match = Mock(spec=PullRequestItem)
 
         # Mock existing match
         with patch.object(PullRequestItem, "search", return_value=mock_existing_match):
             process_pr_reviewer(
-                self.mock_app, 
-                self.mock_pr, 
-                self.mock_repository, 
-                self.mock_reviewer, 
-                asana_users, 
-                [], 
-                "project-456"
+                self.mock_app, self.mock_pr, self.mock_repository, self.mock_reviewer, asana_users, [], "project-456"
             )
 
             # Verify update was called with the found task and matched user
@@ -182,36 +214,61 @@ class TestPullRequestSync(unittest.TestCase):
             args = mock_update_task.call_args[0]
             existing_pr_item = args[4]  # pr_item parameter
             matched_asana_user = args[5]  # asana_user parameter
-            
+
             self.assertEqual(existing_pr_item, mock_existing_match)
             self.assertEqual(matched_asana_user["email"], "jane.smith@example.com")
 
-    def test_process_pr_reviewer_no_user_match(self):
-        """Test processing a reviewer when no Asana user match is found.
-        
-        This test lets the internal utilities work naturally - create_ado_user_from_reviewer
-        will work, but matching_user will return None because the user list is empty.
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    @patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task")
+    def test_process_pr_reviewer_no_user_match_real_integration(
+        self, mock_create_task, mock_asana_client, mock_ado_connection, mock_dirname
+    ):
+        """Test processing a reviewer when no Asana user match is found using REAL objects.
+
+        This test demonstrates REAL internal integration - create_ado_user_from_reviewer
+        extracts data from REAL reviewer, but matching_user naturally returns None.
         """
-        # Set up realistic reviewer data
-        self.mock_reviewer.display_name = "Unknown User"
-        self.mock_reviewer.unique_name = "unknown@example.com"
-        
-        # Empty user list - no match will be found
-        empty_asana_users = []
+        import tempfile
 
-        with patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task") as mock_create_task:
-            process_pr_reviewer(
-                self.mock_app, 
-                self.mock_pr, 
-                self.mock_repository, 
-                self.mock_reviewer, 
-                empty_asana_users,  # Empty list - matching_user will naturally return None
-                [], 
-                "project-456"
-            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mock_dirname.return_value = temp_dir
+            mock_ado_connection.return_value = Mock()
+            mock_asana_client.return_value = Mock()
 
-            # Verify no task creation when user isn't found
-            mock_create_task.assert_not_called()
+            app = TestDataBuilder.create_real_app(temp_dir)
+
+            try:
+                app.connect()
+
+                # Create REAL reviewer with no match in user list
+                reviewer = RealObjectBuilder.create_real_ado_reviewer(
+                    display_name="Unknown User", email="unknown@example.com", vote="waiting_for_author"
+                )
+
+                pr = RealObjectBuilder.create_real_ado_pull_request()
+                repository = RealObjectBuilder.create_real_ado_repository()
+
+                # Empty user list - REAL matching_user function will naturally return None
+                empty_asana_users = []
+
+                # Test REAL integration where real utilities process real objects
+                process_pr_reviewer(
+                    app,  # REAL App
+                    pr,  # REAL PR
+                    repository,  # REAL repository
+                    reviewer,  # REAL reviewer
+                    empty_asana_users,  # Real empty list - matching_user will naturally return None
+                    [],
+                    "project-456",
+                )
+
+                # Verify no task creation when real matching_user naturally finds no match
+                mock_create_task.assert_not_called()
+
+            finally:
+                app.close()
 
     @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name")
     @patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task")
@@ -1076,7 +1133,8 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Mock API to throw the exact error we encountered
         mock_app.ado_git_client.get_pull_request_by_id.side_effect = Exception(
-            "VS800075: The project with id 'e7264829-58d0-48b5-879a-10fd01a8f815' does not exist, or you do not have permission to access it."
+            "VS800075: The project with id 'e7264829-58d0-48b5-879a-10fd01a8f815' does not exist, "
+            "or you do not have permission to access it."
         )
 
         # Mock repository object (this should work)

@@ -52,15 +52,17 @@ class TestAppDatabase(unittest.TestCase):
             "ASANA_WORKSPACE_NAME": "test_workspace",
         },
     )
-    @patch("ado_asana_sync.sync.app.configure_azure_monitor")
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_connect_creates_data_directory(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
-        """Test that connect() creates the data directory if it doesn't exist."""
-        # Setup mocks
+    def test_connect_creates_data_directory(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """Test that connect() creates the data directory if it doesn't exist.
+
+        This test focuses on database initialization while only mocking external APIs.
+        Internal file system operations and directory creation are tested realistically.
+        """
+        # Setup external API mocks only
         mock_dirname.return_value = self.test_dir
-        mock_configure.return_value = None
         mock_ado_connection.return_value = MagicMock()
         mock_asana_client.return_value = MagicMock()
 
@@ -79,10 +81,10 @@ class TestAppDatabase(unittest.TestCase):
 
         app.connect()
 
-        # Verify data directory was created
+        # Verify data directory was created (real file system operation)
         self.assertTrue(os.path.exists(data_dir))
 
-        # Verify database was initialized
+        # Verify database was initialized (integration with real database components)
         self.assertIsNotNone(app.db)
         self.assertIsNotNone(app.matches)
         self.assertIsNotNone(app.pr_matches)
@@ -100,15 +102,17 @@ class TestAppDatabase(unittest.TestCase):
             "ASANA_WORKSPACE_NAME": "test_workspace",
         },
     )
-    @patch("ado_asana_sync.sync.app.configure_azure_monitor")
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_connect_migrates_existing_tinydb(self, mock_asana_client, mock_ado_connection, mock_dirname, mock_configure):
-        """Test that connect() migrates existing TinyDB data."""
-        # Setup mocks
+    def test_connect_migrates_existing_tinydb(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """Test that connect() migrates existing TinyDB data.
+
+        This test focuses on the database migration functionality, allowing the
+        internal migration logic to work while only mocking external APIs.
+        """
+        # Setup external API mocks only
         mock_dirname.return_value = self.test_dir
-        mock_configure.return_value = None
         mock_ado_connection.return_value = MagicMock()
         mock_asana_client.return_value = MagicMock()
 

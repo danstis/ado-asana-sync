@@ -24,6 +24,7 @@ from ado_asana_sync.sync.sync import (
 )
 from ado_asana_sync.sync.task_item import TaskItem
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
+from tests.utils.test_helpers import TestDataBuilder
 
 
 class TestTaskItem(unittest.TestCase):
@@ -312,89 +313,137 @@ class TestGetAsanaTaskByName(unittest.TestCase):
 
 
 class TestReadProjects(unittest.TestCase):
-    """Test read_projects function."""
+    """Test read_projects function using REAL App instances for true integration testing."""
 
     def setUp(self):
-        """Set up test fixtures with real temporary files."""
+        """Set up test fixtures with real temporary directory."""
         import tempfile
-        import os
-        import json
-        
+
         self.temp_dir = tempfile.mkdtemp()
-        self.data_dir = os.path.join(self.temp_dir, "data")
-        os.makedirs(self.data_dir, exist_ok=True)
-        self.projects_file = os.path.join(self.data_dir, "projects.json")
 
     def tearDown(self):
-        """Clean up temporary files."""
+        """Clean up temporary files and close real app instances."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch("ado_asana_sync.sync.sync.os.path.dirname")
-    def test_read_projects_from_json_fallback(self, mock_dirname):
-        """Test reading projects from JSON file when database is unavailable."""
-        import json
-        
-        # Create real projects.json file
-        test_projects = [
-            {"adoProjectName": "TestProject", "adoTeamName": "TestTeam", "asanaProjectName": "TestAsanaProject"}
-        ]
-        with open(self.projects_file, "w", encoding="utf-8") as f:
-            json.dump(test_projects, f)
-
-        # Mock only the package directory path to point to our temp directory
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_read_projects_real_database_integration(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """Test reading projects from REAL database with REAL App instance."""
+        # Point App to our temp directory
         mock_dirname.return_value = self.temp_dir
-        
-        # Create app without database
-        app = MagicMock()
-        app.db = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
 
-        result = read_projects(app)
+        # Create REAL App with REAL database
+        app = TestDataBuilder.create_real_app(
+            self.temp_dir,
+            projects_data=[
+                {"adoProjectName": "RealDBProject", "adoTeamName": "RealDBTeam", "asanaProjectName": "RealDBAsanaProject"}
+            ],
+        )
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["adoProjectName"], "TestProject")
-        self.assertEqual(result[0]["adoTeamName"], "TestTeam")
-        self.assertEqual(result[0]["asanaProjectName"], "TestAsanaProject")
+        try:
+            # Connect with real database initialization
+            app.connect()
 
-    def test_read_projects_from_database(self):
-        """Test reading projects from database when available."""
-        app = MagicMock()
-        app.db = MagicMock()
-        app.db.get_projects.return_value = [
-            {"adoProjectName": "DBProject", "adoTeamName": "DBTeam", "asanaProjectName": "DBAsanaProject"}
-        ]
+            # The projects should be loaded into the real database during connect()
+            result = read_projects(app)
 
-        result = read_projects(app)
+            # Verify we got real data from real database
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["adoProjectName"], "RealDBProject")
+            self.assertEqual(result[0]["adoTeamName"], "RealDBTeam")
+            self.assertEqual(result[0]["asanaProjectName"], "RealDBAsanaProject")
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["adoProjectName"], "DBProject")
+            # Verify the database was actually used (not JSON fallback)
+            self.assertIsNotNone(app.db)
+            self.assertTrue(hasattr(app.db, "get_projects"))
+
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_read_projects_json_fallback_real_app(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """Test JSON fallback using REAL App instance with no database."""
+        mock_dirname.return_value = self.temp_dir
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
+
+        # Create REAL App
+        app = TestDataBuilder.create_real_app(
+            self.temp_dir,
+            projects_data=[
+                {"adoProjectName": "JSONProject", "adoTeamName": "JSONTeam", "asanaProjectName": "JSONAsanaProject"}
+            ],
+        )
+
+        try:
+            # Don't connect to database - force JSON fallback
+            app.db = None  # Simulate no database available
+
+            result = read_projects(app)
+
+            # Should fall back to JSON file and actually read it
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["adoProjectName"], "JSONProject")
+            self.assertEqual(result[0]["adoTeamName"], "JSONTeam")
+            self.assertEqual(result[0]["asanaProjectName"], "JSONAsanaProject")
+
+        finally:
+            if app.db:
+                app.close()
 
     @patch("ado_asana_sync.sync.sync._LOGGER")
-    @patch("ado_asana_sync.sync.sync.os.path.dirname")
-    def test_read_projects_database_fallback_on_exception(self, mock_dirname, mock_logger):
-        """Test fallback to JSON when database read fails."""
-        import json
-        
-        # Create real projects.json file for fallback
-        test_projects = [
-            {"adoProjectName": "FallbackProject", "adoTeamName": "FallbackTeam", "asanaProjectName": "FallbackAsanaProject"}
-        ]
-        with open(self.projects_file, "w", encoding="utf-8") as f:
-            json.dump(test_projects, f)
-
-        # Mock only the package directory path
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_read_projects_real_database_failure_fallback(
+        self, mock_asana_client, mock_ado_connection, mock_dirname, mock_logger
+    ):
+        """Test REAL database failure fallback to JSON using REAL App."""
         mock_dirname.return_value = self.temp_dir
-        
-        # Create app with failing database
-        app = MagicMock()
-        app.db = MagicMock()
-        app.db.get_projects.side_effect = Exception("DB error")
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
 
-        result = read_projects(app)
+        # Create REAL App
+        app = TestDataBuilder.create_real_app(
+            self.temp_dir,
+            projects_data=[
+                {
+                    "adoProjectName": "FallbackProject",
+                    "adoTeamName": "FallbackTeam",
+                    "asanaProjectName": "FallbackAsanaProject",
+                }
+            ],
+        )
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["adoProjectName"], "FallbackProject")
-        mock_logger.warning.assert_called_once()
+        try:
+            app.connect()  # Initialize real database
+
+            # Simulate database failure by replacing get_projects with failing method
+            def failing_get_projects():
+                raise Exception("Real database error")
+
+            app.db.get_projects = failing_get_projects
+
+            result = read_projects(app)
+
+            # Should fall back to JSON after real database failure
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["adoProjectName"], "FallbackProject")
+
+            # Verify warning was logged for the real database failure
+            mock_logger.warning.assert_called()
+            warning_call = mock_logger.warning.call_args[0][0]
+            self.assertIn("Failed to read projects from database", warning_call)
+
+        finally:
+            app.close()
 
 
 class TestGetAsanaWorkspace(unittest.TestCase):

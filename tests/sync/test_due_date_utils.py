@@ -264,12 +264,7 @@ class TestDueDateUtilities(unittest.TestCase):
 
         # Arrange: TaskItem with due_date
         task = TaskItem(
-            ado_id=123,
-            title="Test Task",
-            item_type="Task",
-            ado_rev=1,
-            url="http://test.com",
-            due_date="2025-12-31"
+            ado_id=123, title="Test Task", item_type="Task", ado_rev=1, url="http://test.com", due_date="2025-12-31"
         )
 
         # Act: Create task body for subsequent sync
@@ -288,14 +283,7 @@ class TestDueDateUtilities(unittest.TestCase):
         from ado_asana_sync.sync.task_item import TaskItem
 
         # Arrange: TaskItem without due_date
-        task = TaskItem(
-            ado_id=123,
-            title="Test Task",
-            item_type="Task",
-            ado_rev=1,
-            url="http://test.com",
-            due_date=None
-        )
+        task = TaskItem(ado_id=123, title="Test Task", item_type="Task", ado_rev=1, url="http://test.com", due_date=None)
 
         # Act: Create task body for initial sync
         body = create_asana_task_body(task, is_initial_sync=True)

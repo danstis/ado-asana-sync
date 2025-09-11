@@ -119,7 +119,10 @@ class TestPullRequestItem(unittest.TestCase):
             reviewer_gid="asana-user-789",
         )
 
-        expected = '<a href="https://dev.azure.com/test/project/_git/repo/pullrequest/123">Pull Request 123</a>: Fix &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; vulnerability'
+        expected = (
+            '<a href="https://dev.azure.com/test/project/_git/repo/pullrequest/123">Pull Request 123</a>: '
+            "Fix &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; vulnerability"
+        )
         self.assertEqual(pr_item.asana_notes_link, expected)
 
     def test_search_by_pr_id_and_reviewer(self):
