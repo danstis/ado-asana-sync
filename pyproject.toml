@@ -42,6 +42,14 @@ ignore = [
     "S608",  # hardcoded-sql-expression - handled with nosec comments
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Build/quality scripts legitimately use subprocess
+"scripts/quality.py" = ["S603", "S607"]
+# Test files use hardcoded test tokens which are safe
+"tests/**/*.py" = ["S106"]
+# Database tests need to catch generic exceptions for constraint violations
+"tests/database/test_database.py" = ["B017"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
