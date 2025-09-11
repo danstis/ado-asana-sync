@@ -62,6 +62,7 @@ Follow these steps to set up your development environment:
 ## Commits
 
 - Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for all commit messages.
+
 # Repository Guidelines
 
 ## Project Structure & Module Organization
@@ -98,9 +99,101 @@ Follow these steps to set up your development environment:
 
 ## Testing Guidelines
 
-- Framework: `pytest` with coverage/branch coverage
-- Name tests `test_*.py` under `tests/`
-- Write small, deterministic tests around sync logic and API boundaries
+**CRITICAL**: Follow these testing principles to create effective, non-brittle tests that provide real confidence:
+
+### Test Architecture Principles
+
+- **Framework**: `pytest` with coverage/branch coverage
+- **Location**: Name tests `test_*.py` under `tests/`
+- **Integration Focus**: 70% integration tests, 20% unit tests, 10% system tests
+- **Mock-Only-At-Boundaries**: Mock external APIs only, use real internal objects
+
+### The Golden Rules of Testing
+
+#### ✅ DO (Mock External Dependencies)
+
+- External APIs: Asana API, ADO API calls
+- Network requests and HTTP operations
+- File system roots (redirect to temp directories)
+- System clocks for deterministic timestamps
+
+#### ❌ DO NOT (Mock Internal Code)
+
+- Internal utility functions (`extract_due_date_from_ado`, `matching_user`, etc.)
+- Business logic classes (`TaskItem`, `App`, `PullRequestItem`)
+- Internal data transformations and validations
+- Database operations (use real test databases)
+
+### Test Construction Standards
+
+1. **Use Real Objects**: Create REAL App instances, real business objects, real databases in temp directories
+1. **Test Real Flows**: Let internal functions work together naturally to test actual integration
+1. **Verify Real Behavior**: Assert on actual data outcomes, not mock interactions
+1. **Real Error Handling**: Test actual exception paths and error conditions
+
+### Test Builder Pattern
+
+Use test builders to create real objects:
+
+```python
+# ✅ GOOD - Integration test with real objects
+def test_due_date_sync_real_integration(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        app = TestDataBuilder.create_real_app(temp_dir)
+        work_item = TestDataBuilder.create_ado_work_item(due_date="2025-12-31")
+        
+        # Only mock external APIs
+        with patch("sync.asana.TasksApi") as mock_api:
+            process_backlog_item(app, work_item, ...)
+            # Test real database operations and business logic
+
+# ❌ BAD - Over-mocked test  
+def test_due_date_sync_over_mocked(self):
+    app = MagicMock()  # Mocking internal business object
+    work_item = MagicMock()  # Mocking internal data
+    
+    with patch("sync.extract_due_date") as mock_extract:  # Mocking internal logic
+        # Tests mock interactions, not real behavior
+```
+
+### Integration Test Requirements
+
+Integration tests MUST:
+
+- Use real App instances with real databases
+- Process real business objects with real data
+- Exercise 80%+ of actual code paths
+- Test real internal function integration
+- Only mock at external API boundaries
+- Verify real data outcomes, not mock calls
+
+### Test Quality Verification
+
+Before submitting tests, verify:
+
+1. **Real Object Usage**: Are you using `TestDataBuilder.create_real_app()` instead of `MagicMock(spec=App)`?
+1. **Integration Depth**: Does your test exercise multiple internal functions working together?
+1. **Boundary Mocking**: Are you only mocking external APIs and network calls?
+1. **Behavior Testing**: Are you asserting on real data outcomes, not mock interactions?
+1. **Error Path Coverage**: Does your test exercise real error handling and edge cases?
+
+### Test Naming and Documentation
+
+- Integration tests: `test_feature_name_real_integration`
+- Unit tests: `test_function_name_specific_case`
+- System tests: `test_workflow_name_end_to_end`
+- Document integration level and what real code paths are tested
+
+### When Internal Mocking is Acceptable
+
+Only mock internal code when:
+
+1. Testing specific error conditions that are hard to trigger naturally
+1. Isolating slow operations in performance-critical tests
+1. Testing timeout/retry logic that would make tests slow
+1. **Always justify internal mocking in test comments**
+
+The goal is tests that catch real bugs, are maintainable, and provide confidence that production code actually works.
 
 ## Commits, PRs, and CI
 

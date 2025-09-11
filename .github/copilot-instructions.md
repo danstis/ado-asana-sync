@@ -17,18 +17,29 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 Key files:
 
 - `ado_asana_sync/sync/app.py`: Main entry point.
+
 - `ado_asana_sync/sync/sync.py`: Core sync logic.
+
 - `ado_asana_sync/sync/asana.py`: Handles Asana API.
+
 - `ado_asana_sync/sync/task_item.py`: Task data structure.
+
 - `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
+
 - `ado_asana_sync/sync/pull_request_sync.py`: Pull request sync logic.
+
 - `data/projects.json.example`: Example project configuration.
 
 - Write all code in Python.
+
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
+
 - Enforce markdown formatting with `mdformat` for all `.md` files.
+
 - Add dependencies only with `uv add <dependency>`.
+
 - Run tools using `uv run`.
+
 - Always update the readme and other documentation based on the changes made.
 
 ## Code Quality Requirements
@@ -39,6 +50,70 @@ Key files:
 - **Testing**: Place all tests in the `tests/` directory and use `pytest`
 - **Coverage**: Ensure test coverage remains above 60% for all changes
 - **Tool Configuration**: **ALWAYS** use the settings defined in `pyproject.toml` for all code quality and linting tools
+
+## Testing Standards - CRITICAL
+
+**AVOID OVER-MOCKING**: Follow these strict testing principles to prevent brittle tests that provide false confidence:
+
+### Mock-Only-At-Boundaries Rule
+
+✅ **ALWAYS Mock**: External APIs (Asana/ADO), network calls, file system roots
+❌ **NEVER Mock**: Internal functions, business classes, database operations, internal transformations
+
+### Test Construction Checklist
+
+Before writing any test, verify:
+
+1. **Use Real Objects**: `TestDataBuilder.create_real_app(temp_dir)` not `MagicMock(spec=App)`
+1. **Real Integration**: Let internal functions work together naturally
+1. **Real Databases**: Use SQLite in temp directories, not database mocks
+1. **Test Real Behavior**: Assert on actual data outcomes, not mock interactions
+1. **External-Only Mocking**: Mock only Asana API, ADO API, network calls
+
+### Quick Test Quality Check
+
+```python
+# ✅ GOOD Integration Test
+def test_feature_real_integration(self):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        app = TestDataBuilder.create_real_app(temp_dir)  # REAL App
+        app.connect()  # REAL database
+        
+        work_item = TestDataBuilder.create_ado_work_item(...)  # REAL object
+        
+        # Only mock external APIs
+        with patch("sync.asana.TasksApi"):
+            result = process_backlog_item(app, work_item, ...)  # REAL integration
+            
+        # Test REAL database results
+        saved_items = app.matches.all()  # REAL database query
+        self.assertEqual(saved_items[0]["field"], expected)  # REAL data
+
+# ❌ BAD Over-Mocked Test
+def test_feature_over_mocked(self):
+    app = MagicMock()  # ❌ Mocking internal business object
+    work_item = MagicMock()  # ❌ Mocking internal data
+    
+    with patch("sync.internal_function"):  # ❌ Mocking internal logic
+        # Tests mock interactions, not real behavior
+        mock_function.assert_called_with(...)  # ❌ Testing mocks
+```
+
+### Test Type Distribution
+
+- **70% Integration Tests**: Real objects, real databases, external API mocks only
+- **20% Unit Tests**: Individual functions, appropriate mocking for speed/isolation
+- **10% System Tests**: End-to-end with external services
+
+### Integration Test Requirements
+
+Every integration test MUST:
+
+- Use `TestDataBuilder.create_real_app()` for real App instances
+- Test with real databases in temporary directories
+- Exercise 80%+ of actual internal code paths
+- Mock only external API boundaries
+- Validate real data outcomes and business logic
 
 ### Code Quality Tool Configuration
 

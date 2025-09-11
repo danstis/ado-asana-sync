@@ -38,6 +38,129 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 - **Coverage**: Ensure test coverage remains above 60% for all changes
 - **Tool Configuration**: **ALWAYS** use the settings defined in `pyproject.toml` for all code quality and linting tools
 
+## Test Quality Standards
+
+**CRITICAL**: Follow these testing principles to avoid brittle, over-mocked tests that provide false confidence:
+
+### The Mock-Only-At-Boundaries Principle
+
+✅ **DO Mock (External Dependencies)**:
+
+- External APIs (Asana API, ADO API)
+- Network calls and HTTP requests
+- File system roots (redirect to temp directories)
+- External services and databases (when not using test instances)
+- System clocks and timestamps (for deterministic tests)
+
+❌ **DO NOT Mock (Internal Code)**:
+
+- Internal utility functions (`extract_due_date_from_ado`, `matching_user`, etc.)
+- Internal business logic classes (`TaskItem`, `App`)
+- Internal data transformations and validations
+- Internal error handling and logging
+- Database operations (use real test databases instead)
+
+### Test Types and Integration Levels
+
+1. **Unit Tests** (20% of test suite):
+
+   - Test individual functions in isolation
+   - Mock dependencies that would make test slow/flaky
+   - Focus on edge cases and error conditions
+
+1. **Integration Tests** (70% of test suite):
+
+   - Test multiple internal components working together
+   - Use REAL App instances with REAL databases (in temp directories)
+   - Use REAL business objects and data structures
+   - Mock ONLY external API boundaries
+   - Test actual business logic flows end-to-end
+
+1. **System Tests** (10% of test suite):
+
+   - Test complete workflows with external services
+   - Use test/staging environments for external APIs
+   - Validate end-to-end functionality
+
+### Test Object Construction
+
+Use test builders that create REAL objects:
+
+```python
+# ✅ GOOD - Create real objects
+app = TestDataBuilder.create_real_app(temp_dir)
+reviewer = RealObjectBuilder.create_real_ado_reviewer(...)
+work_item = TestDataBuilder.create_ado_work_item(...)
+
+# ❌ BAD - Over-use of mocks
+app = MagicMock(spec=App)  
+reviewer = MagicMock()
+work_item = MagicMock()
+```
+
+### Test Database Strategy
+
+- **Use real SQLite databases** in temporary directories
+- **Test actual database operations** (CREATE, READ, UPDATE, DELETE)
+- **Verify real data persistence and retrieval**
+- **Test database migration and fallback logic**
+
+```python
+# ✅ GOOD - Real database integration
+with tempfile.TemporaryDirectory() as temp_dir:
+    app = TestDataBuilder.create_real_app(temp_dir)
+    app.connect()  # Real database initialization
+    
+    # Test real database operations
+    result = read_projects(app)  # Uses real App with real DB
+
+# ❌ BAD - Mocked database
+app = MagicMock()
+app.db = MagicMock()
+app.db.get_projects.return_value = [...]
+```
+
+### Integration Test Requirements
+
+Integration tests MUST achieve 80%+ real code path coverage by:
+
+1. **Using real App instances** with real database connections
+1. **Processing real business objects** with real data
+1. **Testing real internal function integration** working together
+1. **Validating real data transformations** and business logic
+1. **Exercising real error handling** and edge cases
+1. **Only mocking at external API boundaries**
+
+### Test Assertion Quality
+
+Focus on **behavior verification** not **interaction verification**:
+
+```python
+# ✅ GOOD - Test actual outcomes
+saved_items = app.matches.all()  # Real database query
+self.assertEqual(saved_items[0]["due_date"], "2025-12-31")  # Real data
+
+# ❌ BAD - Test mock interactions  
+mock_insert.assert_called_once_with(...)  # Just tests mocking
+```
+
+### Test Naming Convention
+
+- Unit tests: `test_function_name_specific_case`
+- Integration tests: `test_feature_name_real_integration` or `test_workflow_name_integration`
+- Mark integration levels clearly in docstrings
+
+### When Mocking Internal Code is Acceptable
+
+Only mock internal components when:
+
+1. **Testing error conditions** that are hard to trigger naturally
+1. **Testing specific branches** in complex conditional logic
+1. **Isolating performance-critical code** from slow dependencies
+1. **Testing timeout/retry logic** that would make tests slow
+
+Always justify internal mocking in test comments and prefer real object approaches when possible.
+
 ### Code Quality Tool Configuration
 
 All linting and code quality tools are configured in `pyproject.toml` and orchestrated via Python scripts:
@@ -69,9 +192,9 @@ The markdown formatter ensures:
 - All CI/CD is managed with GitHub Actions, defined in `.github/workflows/`.
 - Workflows must build, analyze (CodeQL), and release the code.
 - **IMPORTANT**: When you modify any code or markdown files, you MUST run quality checks before completing your work:
-  - **Code Quality Tools**: 
+  - **Code Quality Tools**:
     - Linting: `uv run lint`
-    - Formatting check: `uv run format-check` 
+    - Formatting check: `uv run format-check`
     - **Auto-fix formatting**: `uv run ruff format` on modified files to ensure correct formatting
     - Type Checking: `uv run type-check`
     - All Together: `uv run check` (runs in parallel)
@@ -82,6 +205,7 @@ The markdown formatter ensures:
 ## Current Features
 
 ### Due Date Synchronization (Feature 001)
+
 - Syncs due dates from ADO work items to Asana tasks during **initial creation only**
 - Preserves user modifications in Asana to prevent data loss
 - Uses ADO field: `Microsoft.VSTS.Scheduling.DueDate` → Asana field: `due_on`
