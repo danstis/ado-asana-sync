@@ -82,7 +82,7 @@ jobs:
           uv run lint | tee ruff.out || true  
           uv run type-check | tee mypy.out || true
       - name: Run Hadolint
-        uses: hadolint/hadolint-action@v3.2.0 # https://github.com/marketplace/actions/hadolint-action
+        uses: hadolint/hadolint-action@v3.3.0 # https://github.com/marketplace/actions/hadolint-action
         with:
           dockerfile: Dockerfile
           output-file: hadolint.out
