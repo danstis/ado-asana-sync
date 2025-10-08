@@ -396,7 +396,7 @@ def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asan
     for wi in ado_items.work_items:
         try:
             # Get the work item from the ID
-            _LOGGER.info("Processing work item ID: %d", wi.target.id)
+            _LOGGER.debug("Processing work item ID: %d", wi.target.id)
             ado_task = app.ado_wit_client.get_work_item(wi.target.id)
 
             # Track if item was processed or skipped
@@ -419,7 +419,7 @@ def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asan
                 _LOGGER.debug("Processing work item %d: %s", ado_task.id, ado_task.fields[ADO_TITLE])
 
             process_backlog_item(app, ado_task, asana_users, asana_project_tasks, asana_project)
-            _LOGGER.info("Completed processing work item ID: %d", wi.target.id)
+            _LOGGER.debug("Completed processing work item ID: %d", wi.target.id)
 
         except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
             _LOGGER.error("Failed to process work item %d: %s", wi.target.id, e)

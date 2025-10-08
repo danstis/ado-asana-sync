@@ -93,6 +93,8 @@ class App:
         self.pr_matches: Optional[DatabaseTable] = None
         self.config: Optional[DatabaseTable] = None
         self.sleep_time = SLEEP_TIME
+        # Trace sampling configuration for Application Insights
+        self.trace_sampling_percentage = float(os.environ.get("OTEL_TRACES_SAMPLER_ARG", "0.05"))  # Default 5%
 
         if not self.ado_pat:
             _LOGGER.fatal("ADO_PAT must be provided")
@@ -129,10 +131,11 @@ class App:
         asana_config = asana.Configuration()
         asana_config.access_token = self.asana_token
         self.asana_client = asana.ApiClient(asana_config)
-        # Configure application insights.
+        # Configure application insights with trace sampling to reduce telemetry volume
         configure_azure_monitor(
             connection_string=self.applicationinsights_connection_string,
             disable_offline_storage=True,
+            sampling_ratio=self.trace_sampling_percentage,  # Reduce dependency trace volume
             instrumentation_options={
                 "azure_sdk": {"enabled": True},
                 "django": {"enabled": False},
@@ -148,6 +151,7 @@ class App:
                 "urllib3": {"enabled": True},
             },
         )
+        _LOGGER.info("Azure Monitor configured with %.1f%% trace sampling", self.trace_sampling_percentage * 100)
         # Setup SQLite database.
         _LOGGER.debug("Opening local database")
         data_dir = os.path.join(os.path.dirname(__package__), "data")
