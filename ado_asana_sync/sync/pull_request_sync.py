@@ -206,7 +206,7 @@ def process_pull_request(  # noqa: C901
 
     Note: Complexity justified by necessary error handling and business logic.
     """
-    _LOGGER.info("Processing PR %s: %s", pr.pull_request_id, pr.title)
+    _LOGGER.debug("Processing PR %s: %s", pr.pull_request_id, pr.title)
 
     if app.ado_git_client is None:
         raise ValueError("app.ado_git_client is None")
@@ -422,7 +422,7 @@ def create_new_pr_reviewer_task(
     """
     Create a new Asana task for a PR reviewer.
     """
-    _LOGGER.info(
+    _LOGGER.debug(
         "Creating new reviewer task for PR %s, reviewer %s",
         pr.pull_request_id,
         asana_matched_user["name"],
@@ -452,7 +452,7 @@ def create_new_pr_reviewer_task(
 
     if asana_task is None:
         # Create new Asana task
-        _LOGGER.info("Creating new Asana task for PR %s reviewer", pr.pull_request_id)
+        _LOGGER.debug("Creating new Asana task for PR %s reviewer", pr.pull_request_id)
 
         # Log if the task will be created as completed due to approval
         if pr_item.review_status in _REVIEWER_APPROVED_STATES:
@@ -466,7 +466,7 @@ def create_new_pr_reviewer_task(
             create_asana_pr_task(app, asana_project, pr_item, app.asana_tag_gid)
     else:
         # Link existing task
-        _LOGGER.info("Linking existing Asana task for PR %s reviewer", pr.pull_request_id)
+        _LOGGER.debug("Linking existing Asana task for PR %s reviewer", pr.pull_request_id)
         pr_item.asana_gid = asana_task["gid"]
         pr_item.asana_updated = asana_task.get("modified_at")
         pr_item.updated_date = iso8601_utc(datetime.now())
@@ -497,10 +497,10 @@ def update_existing_pr_reviewer_task(
         _LOGGER.info("Updated reviewer name for PR task: %s", existing_match.asana_title)
 
     if existing_match.is_current(app, pr, reviewer) and not reviewer_name_updated:
-        _LOGGER.info("PR reviewer task is already up to date: %s", existing_match.asana_title)
+        _LOGGER.debug("PR reviewer task is already up to date: %s", existing_match.asana_title)
         return
 
-    _LOGGER.info("Updating PR reviewer task: %s", existing_match.asana_title)
+    _LOGGER.debug("Updating PR reviewer task: %s", existing_match.asana_title)
 
     asana_task = _get_cached_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
     if asana_task is None:
@@ -700,7 +700,7 @@ def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
 
         if tag not in task_tags_gids:
             # Add the tag to the task.
-            _LOGGER.info("adding tag to PR task '%s'", pr_item.asana_title)
+            _LOGGER.debug("adding tag to PR task '%s'", pr_item.asana_title)
             tasks_api_instance = asana.TasksApi(app.asana_client)
             body = {"data": {"tag": tag}}
             tasks_api_instance.add_tag_for_task(body, pr_item.asana_gid)
