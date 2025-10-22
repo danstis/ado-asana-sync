@@ -26,7 +26,7 @@ jobs:
       Major: ${{ steps.gitversion.outputs.Major }}
       Minor: ${{ steps.gitversion.outputs.Minor }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
       - name: Install GitVersion
@@ -59,7 +59,7 @@ jobs:
       discussions: write
     needs: [version]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6 # https://github.com/marketplace/actions/setup-python
@@ -95,7 +95,7 @@ jobs:
     needs: [version]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

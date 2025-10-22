@@ -24,7 +24,7 @@ jobs:
       FullSemVer: ${{ steps.gitversion.outputs.FullSemVer }}
       PreReleaseTag: ${{ steps.gitversion.outputs.PreReleaseTag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
       - name: Install GitVersion
@@ -43,7 +43,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v6 # https://github.com/marketplace/actions/setup-python
         id: setup-python
         with:
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [version, test]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
       - uses: actions/setup-python@v6 # https://github.com/marketplace/actions/setup-python
