@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from asana.rest import ApiException
+from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
     ADOAssignedUser,
@@ -23,7 +24,6 @@ from ado_asana_sync.sync.sync import (
     remove_mapping,
 )
 from ado_asana_sync.sync.task_item import TaskItem
-from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from tests.utils.test_helpers import TestDataBuilder
 
 

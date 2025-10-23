@@ -12,12 +12,12 @@ from typing import Any, Tuple
 
 import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
+from azure.devops.v7_0.work.models import TeamContext  # type: ignore
+from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
-from azure.devops.v7_0.work.models import TeamContext  # type: ignore
-from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from .app import App
 from .asana import get_asana_task
