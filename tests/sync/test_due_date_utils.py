@@ -1,17 +1,35 @@
 import unittest
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 
 class TestDueDateUtilities(unittest.TestCase):
     """Unit tests for due date conversion and utility functions."""
 
-    def test_extract_due_date_from_ado_with_valid_datetime(self):
+    def test_extract_due_date_from_ado_with_datetime_object(self):
         """
-        Unit Test: extract_due_date_from_ado converts ADO datetime to YYYY-MM-DD format.
+        Unit Test: extract_due_date_from_ado handles datetime objects from ADO API.
         """
         from ado_asana_sync.sync.sync import extract_due_date_from_ado
 
-        # Arrange: Mock ADO work item with due date
+        # Arrange: Mock ADO work item with datetime object (as returned by real ADO API)
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2025, 12, 31, 23, 59, 59)}
+        ado_work_item.id = 12345
+
+        # Act: Extract due date
+        result = extract_due_date_from_ado(ado_work_item)
+
+        # Assert: Should return date portion only in YYYY-MM-DD format
+        self.assertEqual(result, "2025-12-31")
+
+    def test_extract_due_date_from_ado_with_valid_datetime(self):
+        """
+        Unit Test: extract_due_date_from_ado converts ADO datetime string to YYYY-MM-DD format.
+        """
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        # Arrange: Mock ADO work item with due date string
         ado_work_item = MagicMock()
         ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2025-12-31T23:59:59.000Z"}
 

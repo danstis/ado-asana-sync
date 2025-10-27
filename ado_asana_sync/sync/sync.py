@@ -12,12 +12,12 @@ from typing import Any, Tuple
 
 import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
+from azure.devops.v7_0.work.models import TeamContext  # type: ignore
+from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
-from azure.devops.v7_0.work.models import TeamContext  # type: ignore
-from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
 from .app import App
 from .asana import get_asana_task
@@ -443,7 +443,11 @@ def extract_due_date_from_ado(ado_work_item) -> str | None:
         if not due_date_value or (isinstance(due_date_value, str) and not due_date_value.strip()):
             return None
 
-        # Delegate to existing date conversion function for consistency
+        # Handle datetime objects from ADO API
+        if isinstance(due_date_value, datetime):
+            return due_date_value.strftime("%Y-%m-%d")
+
+        # Handle ISO 8601 strings
         if isinstance(due_date_value, str):
             return convert_ado_date_to_asana_format(due_date_value)
 

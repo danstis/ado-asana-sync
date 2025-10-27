@@ -13,11 +13,11 @@ import threading
 from typing import Optional
 
 import asana  # type: ignore
+from azure.devops.connection import Connection  # type: ignore
+from azure.monitor.opentelemetry import configure_azure_monitor
 from msrest.authentication import BasicAuthentication
 
 from ado_asana_sync.database import Database, DatabaseTable
-from azure.devops.connection import Connection  # type: ignore
-from azure.monitor.opentelemetry import configure_azure_monitor
 
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
