@@ -844,12 +844,41 @@ def process_closed_pull_requests(  # noqa: C901
                 _LOGGER.debug("Repository not provided; skipping ADO lookup for PR %s", pr_item.ado_pr_id)
                 continue
 
-            # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, repository_id)
-            pr = app.ado_git_client.get_pull_request_by_id(pr_item.ado_pr_id, repository.id)
+            # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, project=None)
+            # PR IDs are globally unique, so we can retrieve by ID alone
+            pr = app.ado_git_client.get_pull_request_by_id(pr_item.ado_pr_id)
 
             _LOGGER.debug("Second pass: Successfully retrieved PR %d with status '%s'", pr_item.ado_pr_id, pr.status)
 
-            _LOGGER.debug("Second pass PR %d status is '%s'", pr_item.ado_pr_id, pr.status if pr else "not found")
+            # Fetch reviewers to get current vote status
+            try:
+                reviewers = app.ado_git_client.get_pull_request_reviewers(repository.id, pr_item.ado_pr_id)
+                # Find the reviewer matching this pr_item's reviewer_gid
+                for reviewer in reviewers:
+                    # Match reviewer to the pr_item's assigned reviewer
+                    ado_reviewer = create_ado_user_from_reviewer(reviewer)
+                    if ado_reviewer:
+                        # Use matching_user to check if this is the same person
+                        asana_matched = matching_user(_asana_users, ado_reviewer)
+                        if asana_matched and asana_matched.get("gid") == pr_item.reviewer_gid:
+                            # Update review_status with current vote
+                            old_review_status = pr_item.review_status
+                            pr_item.review_status = extract_reviewer_vote(reviewer)
+                            if old_review_status != pr_item.review_status:
+                                _LOGGER.info(
+                                    "Second pass: Updated review status for PR %d reviewer %s from '%s' to '%s'",
+                                    pr_item.ado_pr_id,
+                                    pr_item.reviewer_name or pr_item.reviewer_gid,
+                                    old_review_status or "none",
+                                    pr_item.review_status,
+                                )
+                            break
+            except Exception as reviewer_error:  # pylint: disable=broad-exception-caught
+                _LOGGER.debug(
+                    "Second pass: Could not fetch reviewers for PR %d: %s (will proceed with existing review status)",
+                    pr_item.ado_pr_id,
+                    reviewer_error,
+                )
 
             if pr and pr.status not in _PR_CLOSED_STATES:
                 # PR is still active, skip
@@ -862,28 +891,40 @@ def process_closed_pull_requests(  # noqa: C901
 
             if pr_item.asana_gid:
                 asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
+                # Update PR item status for database record
+                pr_item.status = pr.status if pr else "completed"
+                pr_item.updated_date = iso8601_utc(datetime.now())
+
                 if asana_task and not asana_task.get("completed", False):
-                    # Close the Asana task
-                    pr_item.status = pr.status if pr else "completed"
-                    pr_item.updated_date = iso8601_utc(datetime.now())
+                    # Task is not completed yet, update it in Asana
                     if app.asana_tag_gid is not None:
                         update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
+                else:
+                    # Task already completed, just update database record
+                    pr_item.save(app)
+                    _LOGGER.debug(
+                        "Second pass: PR %d task already completed, updated database record with final review_status='%s'",
+                        pr_item.ado_pr_id,
+                        pr_item.review_status or "none",
+                    )
 
         except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
-            # Check if it's a permission/project not found error
+            # Check if it's a permission or not found error
             error_msg = str(e)
             _LOGGER.debug("Exception getting PR %d from ADO: %s", pr_item.ado_pr_id, e)
             if "does not exist" in error_msg or "permission" in error_msg or "invalid literal for int()" in error_msg:
-                _LOGGER.info(
-                    "PR %d cannot be retrieved from ADO (likely abandoned/deleted). Closing associated Asana task.",
+                _LOGGER.warning(
+                    "PR %d cannot be retrieved from ADO (does not exist or no permission). "
+                    "Closing associated Asana task. Error: %s",
                     pr_item.ado_pr_id,
+                    error_msg,
                 )
-                # If we can't retrieve the PR, assume it's closed and close the Asana task
+                # If we can't retrieve the PR (deleted or no access), close the task
                 if pr_item.asana_gid:
                     asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
                     if asana_task and not asana_task.get("completed", False):
-                        # Close the Asana task - assume PR is abandoned/deleted
-                        pr_item.status = "abandoned"  # Set status for closure comment
+                        # Close the Asana task - PR no longer accessible
+                        pr_item.status = "abandoned"  # Use abandoned status for closure
                         pr_item.updated_date = iso8601_utc(datetime.now())
                         if app.asana_tag_gid is not None:
                             update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)

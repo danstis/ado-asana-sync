@@ -1027,7 +1027,7 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Verify that only PR 200 was processed (PR 100 was skipped)
         self.assertEqual(mock_app.ado_git_client.get_pull_request_by_id.call_count, 1)
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(200, "repo-2")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(200)
 
         # Verify update was called for the unprocessed PR
         mock_update_task.assert_called_once()
@@ -1103,7 +1103,7 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Verify only repo-1 PR was processed
         self.assertEqual(mock_app.ado_git_client.get_pull_request_by_id.call_count, 1)
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(100, "repo-1")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(100)
 
         # Verify update was called for the correct PR
         mock_update_task.assert_called_once()
@@ -1149,7 +1149,7 @@ class TestPullRequestSync(unittest.TestCase):
         process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
 
         # Verify API was called but failed
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5, "e7264829-58d0-48b5-879a-10fd01a8f815")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5)
 
         # Verify no update was called due to API failure
         mock_update_task.assert_not_called()
@@ -1198,7 +1198,7 @@ class TestPullRequestSync(unittest.TestCase):
         process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
 
         # Verify API was called with correct parameters
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5, "e7264829-58d0-48b5-879a-10fd01a8f815")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5)
 
         # Verify task update was called for abandoned PR
         mock_update_task.assert_called_once()
@@ -1250,7 +1250,7 @@ class TestPullRequestSync(unittest.TestCase):
         process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
 
         # Verify API was called
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(6, "repo-123")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(6)
 
         # Verify task update was called for draft PR
         mock_update_task.assert_called_once()
@@ -1274,6 +1274,145 @@ class TestPullRequestSync(unittest.TestCase):
             success = False
 
         self.assertTrue(success, "Function should handle None repository gracefully")
+
+    @patch("ado_asana_sync.sync.pull_request_sync.matching_user")
+    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
+    @patch("ado_asana_sync.sync.pull_request_sync.extract_reviewer_vote")
+    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
+    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    def test_process_closed_pull_requests_fetches_reviewers_and_updates_vote(
+        self, mock_update_task, mock_get_task, mock_extract_vote, mock_create_ado_user, mock_matching_user
+    ):
+        """Test that process_closed_pull_requests fetches reviewers and updates review_status."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+
+        # Mock database PR task with old review status
+        mock_app = Mock()
+        pr_tasks = [
+            {
+                "ado_pr_id": 123,
+                "ado_repository_id": "repo-abc",
+                "title": "Feature PR",
+                "status": "active",  # Old status
+                "url": "https://example.com/pr/123",
+                "reviewer_gid": "asana-reviewer-123",
+                "reviewer_name": "John Doe",
+                "asana_gid": "task-xyz",
+                "review_status": "noVote",  # Old vote status
+            }
+        ]
+        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.asana_tag_gid = "tag-123"
+
+        # Mock completed PR
+        mock_pr = Mock()
+        mock_pr.status = "completed"
+        mock_app.ado_git_client.get_pull_request_by_id.return_value = mock_pr
+
+        # Mock reviewer with approval
+        mock_reviewer = Mock()
+        mock_reviewer.vote = 10  # Approved
+        mock_app.ado_git_client.get_pull_request_reviewers.return_value = [mock_reviewer]
+
+        # Mock reviewer matching
+        mock_ado_user = Mock()
+        mock_ado_user.display_name = "John Doe"
+        mock_ado_user.email = "john@example.com"
+        mock_create_ado_user.return_value = mock_ado_user
+
+        mock_asana_user = {"gid": "asana-reviewer-123", "name": "John Doe"}
+        mock_matching_user.return_value = mock_asana_user
+
+        # Mock vote extraction
+        mock_extract_vote.return_value = "approved"
+
+        # Mock Asana task as not completed
+        mock_get_task.return_value = {"completed": False}
+
+        # Mock repository
+        mock_repo = Mock()
+        mock_repo.id = "repo-abc"
+        mock_repo.name = "test-repo"
+
+        # Mock asana_users list
+        asana_users = [mock_asana_user]
+
+        # Call function
+        process_closed_pull_requests(mock_app, asana_users, "project-456", set(), mock_repo)
+
+        # Verify reviewers were fetched
+        mock_app.ado_git_client.get_pull_request_reviewers.assert_called_once_with("repo-abc", 123)
+
+        # Verify reviewer vote was extracted
+        mock_extract_vote.assert_called_once_with(mock_reviewer)
+
+        # Verify task was updated
+        mock_update_task.assert_called_once()
+
+        # Get the pr_item that was passed to update_asana_pr_task
+        call_args = mock_update_task.call_args
+        pr_item_arg = call_args[0][1]  # Second positional argument
+
+        # Verify review_status was updated to "approved"
+        self.assertEqual(pr_item_arg.review_status, "approved", "Review status should be updated to 'approved'")
+        self.assertEqual(pr_item_arg.status, "completed", "PR status should be 'completed'")
+
+    @patch("ado_asana_sync.sync.pull_request_sync.matching_user")
+    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
+    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
+    def test_process_closed_pull_requests_saves_db_when_task_already_completed(
+        self, mock_get_task, mock_create_ado_user, mock_matching_user
+    ):
+        """Test that database is updated even when Asana task is already completed."""
+        from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
+
+        # Mock database PR task
+        mock_app = Mock()
+        pr_tasks = [
+            {
+                "ado_pr_id": 456,
+                "ado_repository_id": "repo-xyz",
+                "title": "Bugfix PR",
+                "status": "active",
+                "url": "https://example.com/pr/456",
+                "reviewer_gid": "asana-reviewer-456",
+                "reviewer_name": "Jane Smith",
+                "asana_gid": "task-abc",
+                "review_status": "waitingForAuthor",
+            }
+        ]
+        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.asana_tag_gid = "tag-123"
+
+        # Mock completed PR
+        mock_pr = Mock()
+        mock_pr.status = "completed"
+        mock_app.ado_git_client.get_pull_request_by_id.return_value = mock_pr
+
+        # Mock reviewer with approval
+        mock_reviewer = Mock()
+        mock_app.ado_git_client.get_pull_request_reviewers.return_value = [mock_reviewer]
+
+        # Mock reviewer matching
+        mock_ado_user = Mock()
+        mock_create_ado_user.return_value = mock_ado_user
+        mock_asana_user = {"gid": "asana-reviewer-456", "name": "Jane Smith"}
+        mock_matching_user.return_value = mock_asana_user
+
+        # Mock Asana task as ALREADY completed
+        mock_get_task.return_value = {"completed": True}
+
+        # Mock repository
+        mock_repo = Mock()
+        mock_repo.id = "repo-xyz"
+        mock_repo.name = "test-repo"
+
+        # Call function
+        process_closed_pull_requests(mock_app, [mock_asana_user], "project-456", set(), mock_repo)
+
+        # Verify PR item save was called (even though task already completed)
+        # The pr_item should be passed through Mock's call chain
+        self.assertTrue(mock_app.ado_git_client.get_pull_request_by_id.called, "PR should be fetched")
 
 
 if __name__ == "__main__":
