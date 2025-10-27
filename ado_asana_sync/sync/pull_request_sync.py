@@ -844,8 +844,9 @@ def process_closed_pull_requests(  # noqa: C901
                 _LOGGER.debug("Repository not provided; skipping ADO lookup for PR %s", pr_item.ado_pr_id)
                 continue
 
-            # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, repository_id)
-            pr = app.ado_git_client.get_pull_request_by_id(pr_item.ado_pr_id, repository.id)
+            # Azure DevOps Python client signature: get_pull_request_by_id(pull_request_id, project=None)
+            # PR IDs are globally unique, so we can retrieve by ID alone
+            pr = app.ado_git_client.get_pull_request_by_id(pr_item.ado_pr_id)
 
             _LOGGER.debug("Second pass: Successfully retrieved PR %d with status '%s'", pr_item.ado_pr_id, pr.status)
 
@@ -908,20 +909,22 @@ def process_closed_pull_requests(  # noqa: C901
                     )
 
         except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
-            # Check if it's a permission/project not found error
+            # Check if it's a permission or not found error
             error_msg = str(e)
             _LOGGER.debug("Exception getting PR %d from ADO: %s", pr_item.ado_pr_id, e)
             if "does not exist" in error_msg or "permission" in error_msg or "invalid literal for int()" in error_msg:
-                _LOGGER.info(
-                    "PR %d cannot be retrieved from ADO (likely abandoned/deleted). Closing associated Asana task.",
+                _LOGGER.warning(
+                    "PR %d cannot be retrieved from ADO (does not exist or no permission). "
+                    "Closing associated Asana task. Error: %s",
                     pr_item.ado_pr_id,
+                    error_msg,
                 )
-                # If we can't retrieve the PR, assume it's closed and close the Asana task
+                # If we can't retrieve the PR (deleted or no access), close the task
                 if pr_item.asana_gid:
                     asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
                     if asana_task and not asana_task.get("completed", False):
-                        # Close the Asana task - assume PR is abandoned/deleted
-                        pr_item.status = "abandoned"  # Set status for closure comment
+                        # Close the Asana task - PR no longer accessible
+                        pr_item.status = "abandoned"  # Use abandoned status for closure
                         pr_item.updated_date = iso8601_utc(datetime.now())
                         if app.asana_tag_gid is not None:
                             update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)

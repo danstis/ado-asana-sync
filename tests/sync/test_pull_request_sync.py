@@ -1027,7 +1027,7 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Verify that only PR 200 was processed (PR 100 was skipped)
         self.assertEqual(mock_app.ado_git_client.get_pull_request_by_id.call_count, 1)
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(200, "repo-2")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(200)
 
         # Verify update was called for the unprocessed PR
         mock_update_task.assert_called_once()
@@ -1103,7 +1103,7 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Verify only repo-1 PR was processed
         self.assertEqual(mock_app.ado_git_client.get_pull_request_by_id.call_count, 1)
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(100, "repo-1")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_with(100)
 
         # Verify update was called for the correct PR
         mock_update_task.assert_called_once()
@@ -1149,7 +1149,7 @@ class TestPullRequestSync(unittest.TestCase):
         process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
 
         # Verify API was called but failed
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5, "e7264829-58d0-48b5-879a-10fd01a8f815")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5)
 
         # Verify no update was called due to API failure
         mock_update_task.assert_not_called()
@@ -1198,7 +1198,7 @@ class TestPullRequestSync(unittest.TestCase):
         process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
 
         # Verify API was called with correct parameters
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5, "e7264829-58d0-48b5-879a-10fd01a8f815")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(5)
 
         # Verify task update was called for abandoned PR
         mock_update_task.assert_called_once()
@@ -1250,7 +1250,7 @@ class TestPullRequestSync(unittest.TestCase):
         process_closed_pull_requests(mock_app, [], "project-456", set(), mock_repo)
 
         # Verify API was called
-        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(6, "repo-123")
+        mock_app.ado_git_client.get_pull_request_by_id.assert_called_once_with(6)
 
         # Verify task update was called for draft PR
         mock_update_task.assert_called_once()
