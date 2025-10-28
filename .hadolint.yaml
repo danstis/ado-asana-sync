@@ -1,4 +1,6 @@
 # Inline ignores can be added with `# hadolint ignore=DL3001,SC1081` directly above the line
 
-# ignored:
-#   - DL3018
+ignored:
+  # DL3008: Pin versions in apt-get install
+  # We use build-essential and development tools where exact versions aren't critical
+  - DL3008
