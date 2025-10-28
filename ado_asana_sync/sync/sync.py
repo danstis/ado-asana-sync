@@ -313,7 +313,7 @@ def sync_project(app: App, project):
     if app.matches is None:
         raise ValueError("app.matches is None")
     all_tasks = app.matches.all()
-    processed_item_ids = {item.target.id for item in ado_items.work_items}
+    processed_item_ids = {item.target.id for item in (ado_items.work_items or [])}
 
     _LOGGER.info("Found %d existing matched items in database", len(all_tasks))
     items_not_in_backlog = [t for t in all_tasks if t["ado_id"] not in processed_item_ids]
@@ -346,7 +346,7 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # n
         if app.ado_core_client is None:
             raise ValueError("app.ado_core_client is None")
         ado_project = app.ado_core_client.get_project(project["adoProjectName"])
-    except NameError as exception:
+    except Exception as exception:  # pylint: disable=broad-exception-caught
         _LOGGER.error("ADO project %s not found: %s", project["adoProjectName"], exception)
         raise exception
 
@@ -355,7 +355,7 @@ def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # n
         if app.ado_core_client is None:
             raise ValueError("app.ado_core_client is None")
         ado_team = app.ado_core_client.get_team(project["adoProjectName"], project["adoTeamName"])
-    except NameError as exception:
+    except Exception as exception:  # pylint: disable=broad-exception-caught
         _LOGGER.error(
             "ADO team %s not found in project %s: %s",
             project["adoTeamName"],
@@ -390,6 +390,10 @@ def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asan
     """
     Processes the backlog items from ADO.
     """
+    if not ado_items or not ado_items.work_items:
+        _LOGGER.info("No work items to process")
+        return
+
     processed_count = 0
     skipped_count = 0
 
