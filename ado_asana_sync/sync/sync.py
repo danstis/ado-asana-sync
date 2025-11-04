@@ -449,6 +449,10 @@ def extract_due_date_from_ado(ado_work_item) -> str | None:
 
         # Handle datetime objects from ADO API
         if isinstance(due_date_value, datetime):
+            # Normalize timezone-aware datetimes to UTC to ensure consistency
+            # This prevents date mismatches when ADO returns non-UTC timezones
+            if due_date_value.tzinfo is not None:
+                due_date_value = due_date_value.astimezone(timezone.utc)
             return due_date_value.strftime("%Y-%m-%d")
 
         # Handle ISO 8601 strings

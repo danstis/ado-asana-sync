@@ -53,7 +53,7 @@ def convert_ado_date_to_asana_format(iso_datetime_string: str) -> str:
         iso_datetime_string: ISO 8601 datetime string from ADO
 
     Returns:
-        str: Date in YYYY-MM-DD format
+        str: Date in YYYY-MM-DD format (normalized to UTC)
 
     Raises:
         ValueError: If the datetime string is invalid
@@ -63,9 +63,17 @@ def convert_ado_date_to_asana_format(iso_datetime_string: str) -> str:
         raise TypeError("Input must be a non-empty string")
 
     try:
+        from datetime import timezone
+
         # Handle Z timezone suffix by replacing with +00:00
         normalized_string = iso_datetime_string.replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized_string)
+
+        # Normalize timezone-aware datetimes to UTC to ensure consistency
+        # This prevents date mismatches when different timezones are used
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc)
+
         return dt.strftime("%Y-%m-%d")
     except ValueError as e:
         raise ValueError(f"Invalid datetime format: {iso_datetime_string}") from e
