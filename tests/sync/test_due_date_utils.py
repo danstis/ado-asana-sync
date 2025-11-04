@@ -1,17 +1,106 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 
 class TestDueDateUtilities(unittest.TestCase):
     """Unit tests for due date conversion and utility functions."""
 
-    def test_extract_due_date_from_ado_with_valid_datetime(self):
+    def test_extract_due_date_from_ado_with_datetime_object(self):
         """
-        Unit Test: extract_due_date_from_ado converts ADO datetime to YYYY-MM-DD format.
+        Unit Test: extract_due_date_from_ado handles naive datetime objects from ADO API.
         """
         from ado_asana_sync.sync.sync import extract_due_date_from_ado
 
-        # Arrange: Mock ADO work item with due date
+        # Arrange: Mock ADO work item with naive datetime object
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2025, 12, 31, 23, 59, 59)}
+        ado_work_item.id = 12345
+
+        # Act: Extract due date
+        result = extract_due_date_from_ado(ado_work_item)
+
+        # Assert: Should return date portion only in YYYY-MM-DD format
+        self.assertEqual(result, "2025-12-31")
+
+    def test_extract_due_date_from_ado_with_timezone_aware_datetime_utc(self):
+        """
+        Unit Test: extract_due_date_from_ado handles timezone-aware datetime in UTC.
+        """
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        # Arrange: Mock ADO work item with UTC timezone-aware datetime
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)}
+        ado_work_item.id = 12345
+
+        # Act: Extract due date
+        result = extract_due_date_from_ado(ado_work_item)
+
+        # Assert: Should return UTC date in YYYY-MM-DD format
+        self.assertEqual(result, "2025-12-31")
+
+    def test_extract_due_date_from_ado_with_timezone_aware_datetime_non_utc(self):
+        """
+        Unit Test: extract_due_date_from_ado normalizes non-UTC timezone-aware datetimes to UTC.
+
+        This test verifies the critical timezone handling bug fix where non-UTC timezones
+        could result in different dates than the ISO string handling path.
+        """
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        # Arrange: Mock ADO work item with datetime in UTC+5 timezone
+        # 2025-12-31 02:00:00+05:00 is equivalent to 2025-12-30 21:00:00 UTC
+        # After UTC normalization, should return "2025-12-30" not "2025-12-31"
+        tz_plus_5 = timezone(timedelta(hours=5))
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2025, 12, 31, 2, 0, 0, tzinfo=tz_plus_5)}
+        ado_work_item.id = 12345
+
+        # Act: Extract due date
+        result = extract_due_date_from_ado(ado_work_item)
+
+        # Assert: Should normalize to UTC and return UTC date "2025-12-30"
+        self.assertEqual(result, "2025-12-30")
+
+    def test_extract_due_date_timezone_consistency(self):
+        """
+        Unit Test: Verify same moment in time produces same date regardless of representation.
+
+        This test ensures datetime objects and ISO strings produce consistent results
+        when representing the same moment in time.
+        """
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        # Same moment in time represented in different ways
+        # 2025-12-30 21:00:00 UTC == 2025-12-31 02:00:00+05:00
+        test_cases = [
+            # Datetime object in UTC
+            datetime(2025, 12, 30, 21, 0, 0, tzinfo=timezone.utc),
+            # Datetime object in UTC+5
+            datetime(2025, 12, 31, 2, 0, 0, tzinfo=timezone(timedelta(hours=5))),
+            # ISO string (tested separately but should match)
+            # "2025-12-30T21:00:00Z" would also produce "2025-12-30"
+        ]
+
+        for dt in test_cases:
+            with self.subTest(datetime=dt):
+                ado_work_item = MagicMock()
+                ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": dt}
+                ado_work_item.id = 12345
+
+                result = extract_due_date_from_ado(ado_work_item)
+
+                # All representations should produce the same UTC date
+                self.assertEqual(result, "2025-12-30")
+
+    def test_extract_due_date_from_ado_with_valid_datetime(self):
+        """
+        Unit Test: extract_due_date_from_ado converts ADO datetime string to YYYY-MM-DD format.
+        """
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        # Arrange: Mock ADO work item with due date string
         ado_work_item = MagicMock()
         ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2025-12-31T23:59:59.000Z"}
 
@@ -146,6 +235,31 @@ class TestDueDateUtilities(unittest.TestCase):
                 result = convert_ado_date_to_asana_format(iso_string)
 
                 # Assert
+                self.assertEqual(result, expected)
+
+    def test_convert_ado_date_to_asana_format_with_timezone_normalization(self):
+        """
+        Unit Test: convert_ado_date_to_asana_format normalizes non-UTC timezones to UTC.
+
+        This test verifies the timezone normalization fix for ISO string inputs.
+        """
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        test_cases = [
+            # UTC+5: 2025-12-31 02:00:00+05:00 = 2025-12-30 21:00:00 UTC → "2025-12-30"
+            ("2025-12-31T02:00:00+05:00", "2025-12-30"),
+            # UTC-8: 2025-12-30 16:00:00-08:00 = 2025-12-31 00:00:00 UTC → "2025-12-31"
+            ("2025-12-30T16:00:00-08:00", "2025-12-31"),
+            # UTC+0 (explicit): Should match Z suffix behavior
+            ("2025-12-31T23:59:59+00:00", "2025-12-31"),
+        ]
+
+        for iso_string, expected in test_cases:
+            with self.subTest(iso_string=iso_string):
+                # Act
+                result = convert_ado_date_to_asana_format(iso_string)
+
+                # Assert: Should normalize to UTC date
                 self.assertEqual(result, expected)
 
     def test_convert_ado_date_to_asana_format_with_invalid_input(self):

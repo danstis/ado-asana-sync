@@ -447,7 +447,15 @@ def extract_due_date_from_ado(ado_work_item) -> str | None:
         if not due_date_value or (isinstance(due_date_value, str) and not due_date_value.strip()):
             return None
 
-        # Delegate to existing date conversion function for consistency
+        # Handle datetime objects from ADO API
+        if isinstance(due_date_value, datetime):
+            # Normalize timezone-aware datetimes to UTC to ensure consistency
+            # This prevents date mismatches when ADO returns non-UTC timezones
+            if due_date_value.tzinfo is not None:
+                due_date_value = due_date_value.astimezone(timezone.utc)
+            return due_date_value.strftime("%Y-%m-%d")
+
+        # Handle ISO 8601 strings
         if isinstance(due_date_value, str):
             return convert_ado_date_to_asana_format(due_date_value)
 
