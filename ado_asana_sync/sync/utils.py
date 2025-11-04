@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from urllib.parse import quote
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,3 +111,32 @@ def validate_due_date(due_date: str | None) -> bool:
 
     except (ValueError, TypeError):
         return False
+
+
+def encode_url_for_asana(url: str) -> str:
+    """
+    Encode a URL for use in Asana custom link fields.
+
+    This function ensures URLs are properly percent-encoded while preserving
+    the URL structure. This is necessary because Asana link fields require
+    properly formatted URLs, and spaces or other special characters will
+    make the link non-clickable.
+
+    Args:
+        url: The URL to encode
+
+    Returns:
+        str: The URL-encoded string with spaces and special characters
+             properly encoded (e.g., spaces become %20)
+
+    Example:
+        >>> encode_url_for_asana("https://dev.azure.com/org/project with spaces")
+        'https://dev.azure.com/org/project%20with%20spaces'
+    """
+    if not url:
+        return url
+
+    # Use quote with safe characters that are allowed in URLs per RFC 3986
+    # This preserves the URL structure (scheme, slashes, etc.) while encoding
+    # spaces and other special characters that break Asana links
+    return quote(url, safe=":/?#[]@!$&'()*+,;=")

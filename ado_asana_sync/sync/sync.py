@@ -22,7 +22,7 @@ from ado_asana_sync.utils.utils import safe_get
 from .app import App
 from .asana import get_asana_task
 from .task_item import TaskItem
-from .utils import convert_ado_date_to_asana_format
+from .utils import convert_ado_date_to_asana_format, encode_url_for_asana
 
 # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
@@ -851,7 +851,7 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str) ->
         body["data"]["due_on"] = task.due_date
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
+        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}  # type: ignore
 
     try:
         result = tasks_api_instance.create_task(body, opts={})
@@ -914,7 +914,7 @@ def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: task.url}  # type: ignore
+        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}  # type: ignore
 
     try:
         # Update the asana task item.
