@@ -508,8 +508,9 @@ class TestDueDateUtilities(unittest.TestCase):
         Unit Test: encode_url_for_asana handles already encoded URLs.
 
         Note: This test documents the current behavior. URLs that are already
-        percent-encoded will be double-encoded, which may be acceptable if
-        ADO always provides unencoded URLs.
+        percent-encoded will be double-encoded. This is acceptable because
+        Azure DevOps APIs always return unencoded URLs with literal spaces
+        and special characters, never pre-encoded URLs.
         """
         from ado_asana_sync.sync.utils import encode_url_for_asana
 
@@ -518,8 +519,9 @@ class TestDueDateUtilities(unittest.TestCase):
         result = encode_url_for_asana(input_url)
 
         # The current implementation will double-encode the %
-        # This is acceptable if ADO never sends pre-encoded URLs
-        self.assertIn("already", result)
+        # %20 becomes %2520 (the % is encoded as %25)
+        expected_url = "https://example.com/already%2520encoded"
+        self.assertEqual(result, expected_url)
 
 
 if __name__ == "__main__":

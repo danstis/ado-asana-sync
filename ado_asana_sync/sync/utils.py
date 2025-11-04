@@ -113,7 +113,7 @@ def validate_due_date(due_date: str | None) -> bool:
         return False
 
 
-def encode_url_for_asana(url: str) -> str:
+def encode_url_for_asana(url: str | None) -> str | None:
     """
     Encode a URL for use in Asana custom link fields.
 
@@ -122,12 +122,17 @@ def encode_url_for_asana(url: str) -> str:
     properly formatted URLs, and spaces or other special characters will
     make the link non-clickable.
 
+    Important: This function assumes input URLs are NOT already percent-encoded.
+    Azure DevOps APIs return unencoded URLs (e.g., spaces as literal spaces),
+    so this simple encoding approach is appropriate. If the input is already
+    encoded, it will be double-encoded (e.g., %20 becomes %2520).
+
     Args:
-        url: The URL to encode
+        url: The URL to encode, or None
 
     Returns:
-        str: The URL-encoded string with spaces and special characters
-             properly encoded (e.g., spaces become %20)
+        str | None: The URL-encoded string with spaces and special characters
+                    properly encoded (e.g., spaces become %20), or None if input is None
 
     Example:
         >>> encode_url_for_asana("https://dev.azure.com/org/project with spaces")
