@@ -405,6 +405,124 @@ class TestDueDateUtilities(unittest.TestCase):
         # Assert: Should not include due_on field when due_date is None
         self.assertNotIn("due_on", body["data"])
 
+    def test_encode_url_for_asana_with_spaces(self):
+        """
+        Unit Test: encode_url_for_asana properly encodes URLs with spaces.
+
+        This test verifies that spaces in URLs are encoded as %20 to make links clickable in Asana.
+        """
+        from ado_asana_sync.sync.utils import encode_url_for_asana
+
+        test_cases = [
+            (
+                "https://dev.azure.com/org/project with spaces/_workitems/edit/123",
+                "https://dev.azure.com/org/project%20with%20spaces/_workitems/edit/123",
+            ),
+            (
+                "https://example.com/path/to/file with spaces.txt",
+                "https://example.com/path/to/file%20with%20spaces.txt",
+            ),
+            (
+                "https://dev.azure.com/My Organization/My Project/_workitems/edit/456",
+                "https://dev.azure.com/My%20Organization/My%20Project/_workitems/edit/456",
+            ),
+        ]
+
+        for input_url, expected_url in test_cases:
+            with self.subTest(input_url=input_url):
+                # Act
+                result = encode_url_for_asana(input_url)
+
+                # Assert
+                self.assertEqual(result, expected_url)
+
+    def test_encode_url_for_asana_preserves_url_structure(self):
+        """
+        Unit Test: encode_url_for_asana preserves URL structure characters.
+
+        This test verifies that URL structure characters (:/?, etc.) are not encoded.
+        """
+        from ado_asana_sync.sync.utils import encode_url_for_asana
+
+        # URLs without special characters should remain unchanged
+        test_cases = [
+            "https://dev.azure.com/org/project/_workitems/edit/123",
+            "https://example.com/path/to/resource?param=value&other=123",
+            "https://example.com/path/to/resource#section",
+            "https://example.com:8080/path?query=value",
+        ]
+
+        for url in test_cases:
+            with self.subTest(url=url):
+                # Act
+                result = encode_url_for_asana(url)
+
+                # Assert: URL structure should be preserved
+                self.assertEqual(result, url)
+
+    def test_encode_url_for_asana_with_special_characters(self):
+        """
+        Unit Test: encode_url_for_asana encodes other special characters properly.
+
+        This test verifies that characters beyond spaces are also encoded.
+        """
+        from ado_asana_sync.sync.utils import encode_url_for_asana
+
+        test_cases = [
+            (
+                "https://example.com/path with spaces and<brackets>",
+                "https://example.com/path%20with%20spaces%20and%3Cbrackets%3E",
+            ),
+            (
+                "https://example.com/path|with|pipes",
+                "https://example.com/path%7Cwith%7Cpipes",
+            ),
+        ]
+
+        for input_url, expected_url in test_cases:
+            with self.subTest(input_url=input_url):
+                # Act
+                result = encode_url_for_asana(input_url)
+
+                # Assert
+                self.assertEqual(result, expected_url)
+
+    def test_encode_url_for_asana_with_empty_url(self):
+        """
+        Unit Test: encode_url_for_asana handles empty/None URLs gracefully.
+        """
+        from ado_asana_sync.sync.utils import encode_url_for_asana
+
+        test_cases = [None, ""]
+
+        for empty_url in test_cases:
+            with self.subTest(empty_url=repr(empty_url)):
+                # Act
+                result = encode_url_for_asana(empty_url)
+
+                # Assert: Should return the input unchanged
+                self.assertEqual(result, empty_url)
+
+    def test_encode_url_for_asana_with_already_encoded_url(self):
+        """
+        Unit Test: encode_url_for_asana handles already encoded URLs.
+
+        Note: This test documents the current behavior. URLs that are already
+        percent-encoded will be double-encoded. This is acceptable because
+        Azure DevOps APIs always return unencoded URLs with literal spaces
+        and special characters, never pre-encoded URLs.
+        """
+        from ado_asana_sync.sync.utils import encode_url_for_asana
+
+        # Already encoded URL - will be double-encoded
+        input_url = "https://example.com/already%20encoded"
+        result = encode_url_for_asana(input_url)
+
+        # The current implementation will double-encode the %
+        # %20 becomes %2520 (the % is encoded as %25)
+        expected_url = "https://example.com/already%2520encoded"
+        self.assertEqual(result, expected_url)
+
 
 if __name__ == "__main__":
     unittest.main()

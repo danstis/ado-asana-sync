@@ -28,7 +28,7 @@ from .sync import (
     get_asana_users,
     matching_user,
 )
-from .utils import extract_reviewer_vote
+from .utils import encode_url_for_asana, extract_reviewer_vote
 
 # This module uses the logger and tracer instances _LOGGER and _TRACER for logging and tracing, respectively.
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
@@ -598,7 +598,7 @@ def create_asana_pr_task(app: App, asana_project: str, pr_item: PullRequestItem,
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: pr_item.url}
+        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(pr_item.url)}
 
     try:
         result = tasks_api_instance.create_task(body, opts={})
@@ -657,7 +657,7 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
     }
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: pr_item.url}
+        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(pr_item.url)}
 
     try:
         # Update the asana task item.
