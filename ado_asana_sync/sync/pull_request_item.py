@@ -320,9 +320,11 @@ class PullRequestItem:
             def delete_query_func(r):
                 return r.get("ado_pr_id") == record.get("ado_pr_id") and r.get("reviewer_gid") == record.get("reviewer_gid")
 
-            app.pr_matches.remove(delete_query_func)  # type: ignore[arg-type,union-attr]
+            app.pr_matches.remove(query_func=delete_query_func)  # type: ignore[arg-type,union-attr]
             return True
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.error("Failed to remove corrupted record for PR ID %s: %s", record.get("ado_pr_id"), e)
             return False
 
     @classmethod
@@ -377,9 +379,11 @@ class PullRequestItem:
             def delete_query_func(r):
                 return r.get("ado_pr_id") == record.get("ado_pr_id") and r.get("reviewer_gid") == record.get("reviewer_gid")
 
-            app.pr_matches.remove(delete_query_func)  # type: ignore[arg-type,union-attr]
+            app.pr_matches.remove(query_func=delete_query_func)  # type: ignore[arg-type,union-attr]
             return True
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger, _ = setup_logging_and_tracing(__name__)
+            logger.error("Failed to remove corrupted record for PR ID %s: %s", record.get("ado_pr_id"), e)
             return False
 
     def is_current(self, app: App, ado_pr, reviewer=None) -> bool:
