@@ -77,7 +77,6 @@ class AsanaApiMockHelper:
         mock_api.get_tasks.return_value = tasks
         mock_api.create_task.return_value = created_task
         mock_api.update_task.return_value = updated_task
-        mock_api.update_task.return_value = updated_task
         return mock_api
 
     def create_custom_field_settings_api_mock(self, custom_fields: List[Dict[str, Any]] = None):
@@ -128,6 +127,27 @@ class TestDataBuilder:
         }
 
         return work_item
+
+    @staticmethod
+    def create_asana_task_data(
+        gid: str = "task-123",
+        name: str = "Test Task",
+        completed: bool = False,
+        modified_at: str = "2025-01-01T10:00:00.000Z",
+        due_on: str = None,
+    ):
+        """Create mock Asana task data with consistent structure."""
+        task_data = {
+            "gid": gid,
+            "name": name,
+            "completed": completed,
+            "modified_at": modified_at,
+        }
+        
+        if due_on:
+            task_data["due_on"] = due_on
+            
+        return task_data
 
     @staticmethod
     def create_real_app(temp_dir: str, projects_data: List[Dict] = None):

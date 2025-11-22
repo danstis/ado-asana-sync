@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 from ado_asana_sync.sync.sync import sync_project
@@ -24,6 +25,17 @@ class TestSyncIntegration(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    def _setup_asana_api_patches(self, asana_helper, tasks_api):
+        """Set up common Asana API patches for integration tests."""
+        return (
+            patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=tasks_api),
+            patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.UsersApi", return_value=asana_helper.create_users_api_mock()),
+            patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=asana_helper.create_custom_field_settings_api_mock()),
+        )
+
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
@@ -40,14 +52,11 @@ class TestSyncIntegration(unittest.TestCase):
 
         # Set up Asana API mocks
         asana_helper = AsanaApiMockHelper()
-        mock_tasks_api = asana_helper.create_tasks_api_mock(
-            created_task={
-                "gid": "new_task_gid",
-                "name": "Task 1001: New Feature",
-                "completed": False,
-                "modified_at": "2025-01-01T10:00:00.000Z",
-            }
+        created_task = TestDataBuilder.create_asana_task_data(
+            gid="new_task_gid",
+            name="Task 1001: New Feature",
         )
+        mock_tasks_api = asana_helper.create_tasks_api_mock(created_task=created_task)
         
         try:
             app.connect()
@@ -84,14 +93,9 @@ class TestSyncIntegration(unittest.TestCase):
                 "asanaProjectName": "AsanaProject",
             }
 
-            with (
-                patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
-                patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.UsersApi", return_value=asana_helper.create_users_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=asana_helper.create_custom_field_settings_api_mock()),
-            ):
+            with ExitStack() as stack:
+                for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
+                    stack.enter_context(patch_ctx)
                 sync_project(app, project_config)
 
                 # Verify task was created in Asana
@@ -121,21 +125,18 @@ class TestSyncIntegration(unittest.TestCase):
 
         app = TestDataBuilder.create_real_app(self.temp_dir)
         
-        try:
-            app.connect()
-            app.matches.insert({
-                "ado_id": 1002,
-                "ado_rev": 1,
-                "title": "Old Title",
-                "item_type": "Task",
-                "url": "http://ado/1002",
-                "asana_gid": "existing_gid",
-                "asana_updated": "2025-01-01T10:00:00.000Z",
-                "created_date": "2025-01-01T10:00:00.000Z",
-                "updated_date": "2025-01-01T10:00:00.000Z",
-            })
-        except Exception:
-            pass
+        app.connect()
+        app.matches.insert({
+            "ado_id": 1002,
+            "ado_rev": 1,
+            "title": "Old Title",
+            "item_type": "Task",
+            "url": "http://ado/1002",
+            "asana_gid": "existing_gid",
+            "asana_updated": "2025-01-01T10:00:00.000Z",
+            "created_date": "2025-01-01T10:00:00.000Z",
+            "updated_date": "2025-01-01T10:00:00.000Z",
+        })
 
         # Mock ADO with UPDATED item
         mock_wit_client = MagicMock()
@@ -165,22 +166,16 @@ class TestSyncIntegration(unittest.TestCase):
 
         asana_helper = AsanaApiMockHelper()
         # Mock existing Asana task
-        mock_asana_task = {
-            "gid": "existing_gid",
-            "name": "Task 1002: Old Title",
-            "modified_at": "2025-01-01T10:00:00.000Z", 
-        }
+        mock_asana_task = TestDataBuilder.create_asana_task_data(
+            gid="existing_gid",
+            name="Task 1002: Old Title",
+        )
         mock_tasks_api = asana_helper.create_tasks_api_mock(tasks=[mock_asana_task], updated_task=mock_asana_task)
 
         try:
-            with (
-                patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
-                patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.UsersApi", return_value=asana_helper.create_users_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=asana_helper.create_custom_field_settings_api_mock()),
-            ):
+            with ExitStack() as stack:
+                for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
+                    stack.enter_context(patch_ctx)
                 sync_project(app, project_config)
 
                 # Verify update was called
