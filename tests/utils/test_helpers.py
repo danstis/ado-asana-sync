@@ -15,8 +15,8 @@ class AsanaApiMockHelper:
 
     def __init__(self):
         """Initialize the helper with default mock responses."""
-        self.default_workspace = {"name": "TestWorkspace", "gid": "workspace-123"}
-        self.default_project = {"name": "TestProject", "gid": "project-456"}
+        self.default_workspace = {"name": "test_workspace", "gid": "workspace-123"}
+        self.default_project = {"name": "AsanaProject", "gid": "project-456"}
         self.default_user = {"name": "Test User", "email": "test@example.com", "gid": "user-789"}
         self.default_tag = {"name": "TestTag", "gid": "tag-abc"}
 
@@ -79,6 +79,15 @@ class AsanaApiMockHelper:
         mock_api.update_task.return_value = updated_task
         return mock_api
 
+    def create_custom_field_settings_api_mock(self, custom_fields: List[Dict[str, Any]] = None):
+        """Create a mock CustomFieldSettingsApi with default or custom responses."""
+        if custom_fields is None:
+            custom_fields = []
+
+        mock_api = MagicMock()
+        mock_api.get_custom_field_settings_for_project.return_value = custom_fields
+        return mock_api
+
 
 class TestDataBuilder:
     """Builder class for creating consistent test data structures."""
@@ -118,6 +127,27 @@ class TestDataBuilder:
         }
 
         return work_item
+
+    @staticmethod
+    def create_asana_task_data(
+        gid: str = "task-123",
+        name: str = "Test Task",
+        completed: bool = False,
+        modified_at: str = "2025-01-01T10:00:00.000Z",
+        due_on: str = None,
+    ):
+        """Create mock Asana task data with consistent structure."""
+        task_data = {
+            "gid": gid,
+            "name": name,
+            "completed": completed,
+            "modified_at": modified_at,
+        }
+        
+        if due_on:
+            task_data["due_on"] = due_on
+            
+        return task_data
 
     @staticmethod
     def create_real_app(temp_dir: str, projects_data: List[Dict] = None):
