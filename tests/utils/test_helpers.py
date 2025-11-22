@@ -15,8 +15,8 @@ class AsanaApiMockHelper:
 
     def __init__(self):
         """Initialize the helper with default mock responses."""
-        self.default_workspace = {"name": "TestWorkspace", "gid": "workspace-123"}
-        self.default_project = {"name": "TestProject", "gid": "project-456"}
+        self.default_workspace = {"name": "test_workspace", "gid": "workspace-123"}
+        self.default_project = {"name": "AsanaProject", "gid": "project-456"}
         self.default_user = {"name": "Test User", "email": "test@example.com", "gid": "user-789"}
         self.default_tag = {"name": "TestTag", "gid": "tag-abc"}
 
@@ -77,6 +77,16 @@ class AsanaApiMockHelper:
         mock_api.get_tasks.return_value = tasks
         mock_api.create_task.return_value = created_task
         mock_api.update_task.return_value = updated_task
+        mock_api.update_task.return_value = updated_task
+        return mock_api
+
+    def create_custom_field_settings_api_mock(self, custom_fields: List[Dict[str, Any]] = None):
+        """Create a mock CustomFieldSettingsApi with default or custom responses."""
+        if custom_fields is None:
+            custom_fields = []
+
+        mock_api = MagicMock()
+        mock_api.get_custom_field_settings_for_project.return_value = custom_fields
         return mock_api
 
 
