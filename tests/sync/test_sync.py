@@ -7,6 +7,7 @@ from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
     ADOAssignedUser,
+    DEFAULT_SYNC_THRESHOLD,
     cleanup_invalid_work_items,
     create_tag_if_not_existing,
     get_asana_project,
@@ -19,6 +20,7 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     is_item_older_than_threshold,
     matching_user,
+    _parse_sync_threshold,
     process_backlog_item,
     read_projects,
     remove_mapping,
@@ -653,6 +655,32 @@ class TestGetAsanaTaskTags(unittest.TestCase):
         result = get_asana_task_tags(app, task)
 
         self.assertEqual(result, [])
+
+
+class TestParseSyncThreshold(unittest.TestCase):
+    """Test _parse_sync_threshold function."""
+
+    def test_parse_sync_threshold_accepts_string(self):
+        """Test valid string values are converted to integers."""
+        result = _parse_sync_threshold("15")
+
+        self.assertEqual(result, 15)
+
+    @patch("ado_asana_sync.sync.sync._LOGGER")
+    def test_parse_sync_threshold_defaults_on_invalid(self, mock_logger):
+        """Test invalid values fall back to default."""
+        result = _parse_sync_threshold("abc")
+
+        self.assertEqual(result, DEFAULT_SYNC_THRESHOLD)
+        mock_logger.warning.assert_called()
+
+    @patch("ado_asana_sync.sync.sync._LOGGER")
+    def test_parse_sync_threshold_defaults_on_negative(self, mock_logger):
+        """Test negative values fall back to default."""
+        result = _parse_sync_threshold("-5")
+
+        self.assertEqual(result, DEFAULT_SYNC_THRESHOLD)
+        mock_logger.warning.assert_called()
 
 
 class TestIsItemOlderThanThreshold(unittest.TestCase):
