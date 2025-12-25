@@ -666,6 +666,28 @@ class TestParseSyncThreshold(unittest.TestCase):
 
         self.assertEqual(result, 15)
 
+    def test_parse_sync_threshold_defaults_on_none(self):
+        """Test None values fall back to default."""
+        result = _parse_sync_threshold(None)
+
+        self.assertEqual(result, DEFAULT_SYNC_THRESHOLD)
+
+    @patch("ado_asana_sync.sync.sync._LOGGER")
+    def test_parse_sync_threshold_defaults_on_empty(self, mock_logger):
+        """Test empty or whitespace values fall back to default without warnings."""
+        result = _parse_sync_threshold("")
+        whitespace_result = _parse_sync_threshold("   ")
+
+        self.assertEqual(result, DEFAULT_SYNC_THRESHOLD)
+        self.assertEqual(whitespace_result, DEFAULT_SYNC_THRESHOLD)
+        mock_logger.warning.assert_not_called()
+
+    def test_parse_sync_threshold_accepts_whitespace_padded(self):
+        """Test whitespace padded numeric values are converted to integers."""
+        result = _parse_sync_threshold("  20  ")
+
+        self.assertEqual(result, 20)
+
     @patch("ado_asana_sync.sync.sync._LOGGER")
     def test_parse_sync_threshold_defaults_on_invalid(self, mock_logger):
         """Test invalid values fall back to default."""

@@ -52,8 +52,11 @@ def _parse_sync_threshold(value: str | None) -> int:
     """Parse the sync threshold environment variable into a non-negative integer."""
     if value is None:
         return DEFAULT_SYNC_THRESHOLD
+    stripped_value = value.strip()
+    if stripped_value == "":
+        return DEFAULT_SYNC_THRESHOLD
     try:
-        threshold = int(value)
+        threshold = int(stripped_value)
     except (TypeError, ValueError):
         _LOGGER.warning(
             "Invalid SYNC_THRESHOLD '%s'. Using default of %s days.",
