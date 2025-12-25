@@ -28,7 +28,7 @@ from .utils import convert_ado_date_to_asana_format, encode_url_for_asana
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 # _SYNC_THRESHOLD defines the number of days to continue syncing closed tasks, after this many days they will be removed from
 # the sync DB.
-_SYNC_THRESHOLD = os.environ.get("SYNC_THRESHOLD", 30)
+DEFAULT_SYNC_THRESHOLD = 30
 # _CLOSED_STATES defines a list of states that will be considered as completed. If the ADO state matches one of these values
 # it will cause the linked Asana task to be closed.
 _CLOSED_STATES = {state.strip() for state in os.environ.get("CLOSED_STATES", "Closed,Removed,Done").split(",")}
@@ -46,6 +46,35 @@ CUSTOM_FIELDS_CACHE: dict[str, Any] = {}
 CUSTOM_FIELDS_AVAILABLE = True
 LAST_CACHE_REFRESH: datetime = datetime.now(timezone.utc)
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
+
+
+def _parse_sync_threshold(value: str | None) -> int:
+    """Parse the sync threshold environment variable into a non-negative integer."""
+    if value is None:
+        return DEFAULT_SYNC_THRESHOLD
+    stripped_value = value.strip()
+    if stripped_value == "":
+        return DEFAULT_SYNC_THRESHOLD
+    try:
+        threshold = int(stripped_value)
+    except (TypeError, ValueError):
+        _LOGGER.warning(
+            "Invalid SYNC_THRESHOLD '%s'. Using default of %s days.",
+            value,
+            DEFAULT_SYNC_THRESHOLD,
+        )
+        return DEFAULT_SYNC_THRESHOLD
+    if threshold < 0:
+        _LOGGER.warning(
+            "SYNC_THRESHOLD cannot be negative (%s). Using default of %s days.",
+            threshold,
+            DEFAULT_SYNC_THRESHOLD,
+        )
+        return DEFAULT_SYNC_THRESHOLD
+    return threshold
+
+
+_SYNC_THRESHOLD = _parse_sync_threshold(os.environ.get("SYNC_THRESHOLD"))
 
 
 def start_sync(app: App) -> None:

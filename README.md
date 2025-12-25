@@ -21,6 +21,7 @@ This project aims to synchronize work items and pull requests between Azure DevO
   - `ASANA_WORKSPACE_NAME` - Name of the Asana workspace to sync with.
   - `CLOSED_STATES` - Comma separated list of states that will be considered closed.
   - `THREAD_COUNT` - Number of projects to sync in parallel. Must be a positive integer.
+  - `SYNC_THRESHOLD` - Number of days to continue syncing closed tasks before removing their mappings (default: 30). Must be a non-negative integer.
   - `SLEEP_TIME` - Duration in seconds to sleep between sync runs. Must be a positive integer.
   - `SYNCED_TAG_NAME` - Name of the tag in Asana to append to all synced items. Must be a valid Asana tag name.
 - Run the container with the configured environment variables.
