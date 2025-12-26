@@ -38,7 +38,7 @@ dev = [
     { name = "mdformat", specifier = ">=0.7.0" },
     { name = "mdformat-gfm", specifier = ">=0.3,<1.1" },
     { name = "mypy", specifier = ">=1.5.1" },
-    { name = "pytest", specifier = ">=7.4,<9.0" },
+    { name = "pytest", specifier = ">=7.4,<10.0" },
     { name = "pytest-cov", specifier = ">=4.1,<8.0" },
     { name = "ruff", specifier = ">=0.1.0" },
 ]
