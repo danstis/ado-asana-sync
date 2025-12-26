@@ -50,6 +50,8 @@ iniconfig==2.1.0
     # via pytest
 isodate==0.7.2
     # via msrest
+librt==0.7.5 ; platform_python_implementation != 'PyPy'
+    # via mypy
 markdown-it-py==3.0.0
     # via
     #   mdformat
