@@ -181,7 +181,7 @@ pygments==2.19.2
     # via pytest
 pyjwt==2.10.1
     # via msal
-pytest==8.4.2
+pytest==9.0.2
     # via pytest-cov
 pytest-cov==6.2.1
 python-dateutil==2.9.0.post0
