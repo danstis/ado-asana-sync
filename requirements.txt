@@ -42,7 +42,7 @@ cryptography==45.0.7
     #   pyjwt
 fixedint==0.1.6
     # via azure-monitor-opentelemetry-exporter
-idna==3.10
+idna==3.11
     # via requests
 importlib-metadata==8.7.0
     # via opentelemetry-api
