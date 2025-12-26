@@ -175,7 +175,7 @@ pluggy==1.6.0
     #   pytest-cov
 psutil==7.0.0
     # via azure-monitor-opentelemetry-exporter
-pycparser==2.22 ; platform_python_implementation != 'PyPy'
+pycparser==2.23 ; platform_python_implementation != 'PyPy'
     # via cffi
 pygments==2.19.2
     # via pytest
