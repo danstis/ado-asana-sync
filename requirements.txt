@@ -152,7 +152,7 @@ opentelemetry-semantic-conventions==0.57b0
     #   opentelemetry-instrumentation-urllib3
     #   opentelemetry-instrumentation-wsgi
     #   opentelemetry-sdk
-opentelemetry-util-http==0.57b0
+opentelemetry-util-http==0.60b1
     # via
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-django
