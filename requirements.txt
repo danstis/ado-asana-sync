@@ -55,13 +55,9 @@ markdown-it-py==3.0.0
     #   mdformat
     #   mdformat-gfm
     #   mdit-py-plugins
-mdformat==0.7.22
-    # via
-    #   mdformat-gfm
-    #   mdformat-tables
-mdformat-gfm==0.4.1
-mdformat-tables==1.0.0
+mdformat==1.0.0
     # via mdformat-gfm
+mdformat-gfm==1.0.0
 mdit-py-plugins==0.5.0
     # via mdformat-gfm
 mdurl==0.1.2
@@ -217,7 +213,7 @@ urllib3==2.5.0
     #   asana
     #   requests
 wcwidth==0.2.13
-    # via mdformat-tables
+    # via mdformat-gfm
 wrapt==1.17.3
     # via
     #   opentelemetry-instrumentation
