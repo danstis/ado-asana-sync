@@ -76,7 +76,7 @@ msrest==0.7.1
     # via
     #   azure-devops
     #   azure-monitor-opentelemetry-exporter
-mypy==1.17.1
+mypy==1.19.1
 mypy-extensions==1.1.0
     # via mypy
 oauthlib==3.3.1
