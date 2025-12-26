@@ -202,6 +202,16 @@ The markdown formatter ensures:
   - **Markdown**: `uv run mdformat --check *.md` to check formatting, `uv run mdformat *.md` to fix
   - All tools use the exact settings defined in `pyproject.toml` for consistency with CI/CD
 
+### Dependency Management and Security Scanning
+
+This project uses **uv** for dependency management with `pyproject.toml` and `uv.lock` files. For security scanning compatibility with tools like Mend Bolt:
+
+- **Automated requirements.txt sync**: The `sync-requirements.yml` workflow automatically generates and commits `requirements.txt` from `uv.lock` whenever dependency files change
+- **When it runs**: Triggers on PRs and pushes to main when `pyproject.toml` or `uv.lock` are modified
+- **What it does**: Exports dependencies using `uv export --format requirements-txt --no-hashes` and commits changes
+- **Why**: Mend Bolt and similar security scanning tools don't yet support `uv.lock` files, but do support `requirements.txt`
+- **Manual generation**: You can also generate it manually with `uv export --format requirements-txt --no-hashes > requirements.txt`
+
 ## Current Features
 
 ### Due Date Synchronization (Feature 001)

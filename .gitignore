@@ -113,3 +113,5 @@ venv.bak/
 *.ignore*
 data/
 .spec-kit/
+.quint/quint.db
+.quint/state.json
