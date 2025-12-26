@@ -10,6 +10,8 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    exclude-paths:
+      - "requirements.txt"
     labels:
       - "dependencies ⬆️"
       - "python 🐍"
