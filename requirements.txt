@@ -114,7 +114,7 @@ opentelemetry-instrumentation-asgi==0.57b0
     # via opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-dbapi==0.57b0
     # via opentelemetry-instrumentation-psycopg2
-opentelemetry-instrumentation-django==0.57b0
+opentelemetry-instrumentation-django==0.60b1
     # via azure-monitor-opentelemetry
 opentelemetry-instrumentation-fastapi==0.57b0
     # via azure-monitor-opentelemetry
