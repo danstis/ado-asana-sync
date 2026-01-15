@@ -1,0 +1,39 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Write(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Edit(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Glob(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Grep(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Read(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj\\.auto-claude\\specs\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Write(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj\\.auto-claude\\specs\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Edit(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude\\worktrees\\tasks\\001-add-details-to-error-on-unique-constraint-for-proj\\.auto-claude\\specs\\001-add-details-to-error-on-unique-constraint-for-proj/**)",
+      "Read(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude/**)",
+      "Write(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude/**)",
+      "Edit(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude/**)",
+      "Glob(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude/**)",
+      "Grep(C:\\Users\\dan\\github.com\\danstis\\ado-asana-sync\\.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}

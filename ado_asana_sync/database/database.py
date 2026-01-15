@@ -412,21 +412,41 @@ class Database:
 
     def sync_projects_from_json(self, projects_data: List[Dict[str, str]]) -> None:
         """Sync projects from JSON data into the projects table."""
-        with self.get_connection() as conn:
-            # Clear existing projects
-            conn.execute("DELETE FROM projects")
+        try:
+            with self.get_connection() as conn:
+                # Clear existing projects
+                conn.execute("DELETE FROM projects")
 
-            # Insert new projects
-            for project in projects_data:
-                conn.execute(
-                    """
-                    INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
-                    VALUES (?, ?, ?)
-                """,
-                    (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
-                )
+                # Insert new projects
+                for project in projects_data:
+                    conn.execute(
+                        """
+                        INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                        VALUES (?, ?, ?)
+                    """,
+                        (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
+                    )
 
-            _LOGGER.info("Synced %d projects to database", len(projects_data))
+                _LOGGER.info("Synced %d projects to database", len(projects_data))
+        except sqlite3.IntegrityError as e:
+            # Check if this is a duplicate project name error
+            if "UNIQUE constraint failed: projects.ado_project_name" in str(e):
+                # Find duplicate project names in the input data
+                project_names = [project["adoProjectName"] for project in projects_data]
+                seen = set()
+                duplicates = []
+                for name in project_names:
+                    if name in seen and name not in duplicates:
+                        duplicates.append(name)
+                    seen.add(name)
+
+                if duplicates:
+                    duplicate_list = ", ".join(duplicates)
+                    error_msg = f"{str(e)} - Duplicate project name(s) found: {duplicate_list}"
+                    raise sqlite3.IntegrityError(error_msg) from e
+
+            # Re-raise original error if it's not a duplicate project name error
+            raise
 
     def get_projects(self) -> List[Dict[str, str]]:
         """Get all projects from the database."""

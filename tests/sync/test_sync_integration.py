@@ -17,6 +17,7 @@ class TestSyncIntegration(unittest.TestCase):
         """Set up test fixtures with real temporary directory."""
         self.temp_dir = tempfile.mkdtemp()
         import logging
+
         logging.basicConfig(level=logging.DEBUG)
 
     def tearDown(self):
@@ -33,7 +34,10 @@ class TestSyncIntegration(unittest.TestCase):
             patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
             patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
             patch("ado_asana_sync.sync.sync.asana.UsersApi", return_value=asana_helper.create_users_api_mock()),
-            patch("ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi", return_value=asana_helper.create_custom_field_settings_api_mock()),
+            patch(
+                "ado_asana_sync.sync.sync.asana.CustomFieldSettingsApi",
+                return_value=asana_helper.create_custom_field_settings_api_mock(),
+            ),
         )
 
     @patch("ado_asana_sync.sync.app.os.path.dirname")
@@ -57,23 +61,23 @@ class TestSyncIntegration(unittest.TestCase):
             name="Task 1001: New Feature",
         )
         mock_tasks_api = asana_helper.create_tasks_api_mock(created_task=created_task)
-        
+
         try:
             app.connect()
 
             # Mock ADO client responses AFTER connect
             mock_wit_client = MagicMock()
             app.ado_wit_client = mock_wit_client
-            
+
             # Mock ADO work item
             ado_work_item = TestDataBuilder.create_ado_work_item(
-                item_id=1001, 
-                title="New Feature", 
+                item_id=1001,
+                title="New Feature",
                 work_item_type="Task",
-                assigned_to={"displayName": "Test User", "uniqueName": "test@example.com"}
+                assigned_to={"displayName": "Test User", "uniqueName": "test@example.com"},
             )
             mock_wit_client.get_work_item.return_value = ado_work_item
-            
+
             # Mock backlog query response
             mock_work_client = MagicMock()
             app.ado_work_client = mock_work_client
@@ -124,27 +128,27 @@ class TestSyncIntegration(unittest.TestCase):
         mock_asana_client.return_value = MagicMock()
 
         app = TestDataBuilder.create_real_app(self.temp_dir)
-        
+
         app.connect()
-        app.matches.insert({
-            "ado_id": 1002,
-            "ado_rev": 1,
-            "title": "Old Title",
-            "item_type": "Task",
-            "url": "http://ado/1002",
-            "asana_gid": "existing_gid",
-            "asana_updated": "2025-01-01T10:00:00.000Z",
-            "created_date": "2025-01-01T10:00:00.000Z",
-            "updated_date": "2025-01-01T10:00:00.000Z",
-        })
+        app.matches.insert(
+            {
+                "ado_id": 1002,
+                "ado_rev": 1,
+                "title": "Old Title",
+                "item_type": "Task",
+                "url": "http://ado/1002",
+                "asana_gid": "existing_gid",
+                "asana_updated": "2025-01-01T10:00:00.000Z",
+                "created_date": "2025-01-01T10:00:00.000Z",
+                "updated_date": "2025-01-01T10:00:00.000Z",
+            }
+        )
 
         # Mock ADO with UPDATED item
         mock_wit_client = MagicMock()
         app.ado_wit_client = mock_wit_client
-        ado_work_item = TestDataBuilder.create_ado_work_item(
-            item_id=1002, title="New Title", work_item_type="Task"
-        )
-        ado_work_item.rev = 2 # Increased revision
+        ado_work_item = TestDataBuilder.create_ado_work_item(item_id=1002, title="New Title", work_item_type="Task")
+        ado_work_item.rev = 2  # Increased revision
         mock_wit_client.get_work_item.return_value = ado_work_item
 
         mock_work_client = MagicMock()

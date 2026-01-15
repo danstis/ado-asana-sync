@@ -115,3 +115,6 @@ data/
 .spec-kit/
 .quint/quint.db
 .quint/state.json
+
+# Auto Claude data directory
+.auto-claude/
