@@ -7,6 +7,7 @@ continues to work correctly and that the database wrapper maintains compatibilit
 
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 
@@ -283,6 +284,56 @@ class TestDatabaseMigration(unittest.TestCase):
         # This should raise an exception due to the unique constraint violation
         with self.assertRaises(Exception):
             db.sync_projects_from_json(projects_data)
+
+        db.close()
+
+    def test_projects_sync_single_duplicate_project_name_error(self):
+        """Test that a single duplicate ado_project_name produces an enhanced error message."""
+        # Create projects with duplicate ado_project_name (same project, same team)
+        projects_data = [
+            {"adoProjectName": "DuplicateProject", "adoTeamName": "TeamA", "asanaProjectName": "AsanaProject1"},
+            {"adoProjectName": "DuplicateProject", "adoTeamName": "TeamA", "asanaProjectName": "AsanaProject2"},
+        ]
+
+        db = Database(self.db_path)
+
+        # This should raise IntegrityError with enhanced message
+        with self.assertRaises(sqlite3.IntegrityError) as context:
+            db.sync_projects_from_json(projects_data)
+
+        # Verify the error message includes the duplicate project name
+        error_message = str(context.exception)
+        self.assertIn("UNIQUE constraint failed", error_message)
+        self.assertIn("Duplicate project name(s) found:", error_message)
+        self.assertIn("DuplicateProject", error_message)
+
+        db.close()
+
+    def test_projects_sync_multiple_duplicate_project_names_error(self):
+        """Test that multiple duplicate ado_project_names produce an enhanced error message."""
+        # Create projects with multiple duplicates (different projects duplicated)
+        projects_data = [
+            {"adoProjectName": "ProjectA", "adoTeamName": "Team1", "asanaProjectName": "AsanaProjectA1"},
+            {"adoProjectName": "ProjectB", "adoTeamName": "Team2", "asanaProjectName": "AsanaProjectB1"},
+            {"adoProjectName": "ProjectA", "adoTeamName": "Team1", "asanaProjectName": "AsanaProjectA2"},
+            {"adoProjectName": "ProjectC", "adoTeamName": "Team3", "asanaProjectName": "AsanaProjectC1"},
+            {"adoProjectName": "ProjectB", "adoTeamName": "Team2", "asanaProjectName": "AsanaProjectB2"},
+        ]
+
+        db = Database(self.db_path)
+
+        # This should raise IntegrityError with enhanced message
+        with self.assertRaises(sqlite3.IntegrityError) as context:
+            db.sync_projects_from_json(projects_data)
+
+        # Verify the error message includes all duplicate project names
+        error_message = str(context.exception)
+        self.assertIn("UNIQUE constraint failed", error_message)
+        self.assertIn("Duplicate project name(s) found:", error_message)
+        self.assertIn("ProjectA", error_message)
+        self.assertIn("ProjectB", error_message)
+        # ProjectC should not be in the error message as it's not duplicated
+        self.assertNotIn("ProjectC", error_message)
 
         db.close()
 
