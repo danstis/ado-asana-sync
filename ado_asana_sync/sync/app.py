@@ -1,9 +1,9 @@
 """
 This module contains the App class which represents an application that connects to Azure DevOps (ADO) and Asana, and sets up
-a TinyDB database.
+a native SQLite database.
 
 Classes:
-    App: Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
+    App: Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a native SQLite database.
 """
 
 import json
@@ -31,7 +31,7 @@ SLEEP_TIME = max(30, int(os.environ.get("SLEEP_TIME", 300)))
 
 class App:
     """
-    Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a TinyDB database.
+    Represents an application that connects to Azure DevOps (ADO) and Asana, and sets up a native SQLite database.
 
     Args:
         ado_pat (str, optional): ADO Personal Access Token. Defaults to value retrieved from environment variable "ADO_PAT".
