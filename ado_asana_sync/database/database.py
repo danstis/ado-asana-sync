@@ -410,6 +410,20 @@ class Database:
 
     def sync_projects_from_json(self, projects_data: List[Dict[str, str]]) -> None:
         """Sync projects from JSON data into the projects table."""
+        # Check for duplicates before DB operations to provide better error messages
+        seen = set()
+        duplicates = []
+        for project in projects_data:
+            key = (project["adoProjectName"], project["adoTeamName"])
+            if key in seen:
+                duplicates.append(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
+            seen.add(key)
+
+        if duplicates:
+            error_msg = f"Duplicate project configuration found in projects.json for: {', '.join(duplicates)}"
+            _LOGGER.error(error_msg)
+            raise ValueError(error_msg)
+
         with self.get_connection() as conn:
             # Clear existing projects
             conn.execute("DELETE FROM projects")
