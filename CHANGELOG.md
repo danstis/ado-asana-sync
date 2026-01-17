@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Unused dependencies**: Removed `tinydb` and `pytz` from project dependencies
+  - Database layer fully migrated to native SQLite (no TinyDB usage)
+  - Timezone handling now uses Python standard library `zoneinfo` module
+  - Test suite updated to use `zoneinfo` instead of `pytz`
+
 ### Added
 
 - **Pull Request Synchronization**: Implemented comprehensive Pull Request sync from Azure DevOps to Asana
@@ -22,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `PullRequestItem` class for managing PR-reviewer task relationships
 - New `pull_request_sync.py` module with complete PR synchronization logic
 - Extended `App` class with Azure DevOps Git client support
-- Added `pr_matches` TinyDB table for storing PR-reviewer mappings
+- Added `pr_matches` database table for storing PR-reviewer mappings
 - Comprehensive unit tests for Pull Request functionality
 
 ### Changed

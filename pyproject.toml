@@ -10,8 +10,6 @@ requires-python = ">=3.13"
 dependencies = [
     "asana>=5.0.3",
     "azure-devops>=7.1.0b3",
-    "tinydb>=4.8.0",
-    "pytz>=2023.3,<2026.0",
     "azure-monitor-opentelemetry>=1.0.0",
 ]
 
