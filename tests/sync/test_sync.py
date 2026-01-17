@@ -1047,7 +1047,7 @@ class TestSyncItemAndChildrenRecursion(unittest.TestCase):
         self.assertNotIn("parent", body["data"])
         self.assertNotIn("projects", body["data"])
 
-        mock_api_instance.set_parent_for_task.assert_called_with({"data": {"parent": "parent_gid"}}, "task_gid")
+        mock_api_instance.set_parent_for_task.assert_called_with({"data": {"parent": "parent_gid"}}, "task_gid", opts={})
 
 
 if __name__ == "__main__":

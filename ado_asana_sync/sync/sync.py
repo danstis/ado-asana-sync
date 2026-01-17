@@ -1039,7 +1039,7 @@ def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str
 
         if parent_gid:
             try:
-                tasks_api_instance.set_parent_for_task({"data": {"parent": parent_gid}}, task.asana_gid)
+                tasks_api_instance.set_parent_for_task({"data": {"parent": parent_gid}}, task.asana_gid, opts={})
             except ApiException as e:
                 _LOGGER.error("Failed to set parent for task %s: %s", task.asana_title, e)
 
