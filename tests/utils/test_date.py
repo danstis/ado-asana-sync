@@ -1,7 +1,6 @@
 import unittest
 from datetime import datetime, timezone
-
-import pytz
+from zoneinfo import ZoneInfo, available_timezones
 
 from ado_asana_sync.utils.date import iso8601_utc
 
@@ -15,9 +14,9 @@ class TestIso8601Utc(unittest.TestCase):
         self.assertEqual(result, "2022-01-01T12:00:00+00:00")
 
     def test_utc_conversion(self):
-        timezones = pytz.all_timezones
+        timezones = available_timezones()
         for tz in timezones:
-            local_dt = datetime(2022, 1, 1, 12, 0, 0, tzinfo=pytz.timezone(tz))
+            local_dt = datetime(2022, 1, 1, 12, 0, 0, tzinfo=ZoneInfo(tz))
             utc_dt_str = iso8601_utc(local_dt)
 
             # The time in UTC
