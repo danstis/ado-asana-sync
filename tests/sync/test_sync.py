@@ -6,8 +6,9 @@ from asana.rest import ApiException
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
-    ADOAssignedUser,
     DEFAULT_SYNC_THRESHOLD,
+    ADOAssignedUser,
+    _parse_sync_threshold,
     cleanup_invalid_work_items,
     create_tag_if_not_existing,
     get_asana_project,
@@ -20,10 +21,9 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     is_item_older_than_threshold,
     matching_user,
-    _parse_sync_threshold,
-    sync_item_and_children,
     read_projects,
     remove_mapping,
+    sync_item_and_children,
 )
 from ado_asana_sync.sync.task_item import TaskItem
 from tests.utils.test_helpers import TestDataBuilder

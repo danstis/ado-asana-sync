@@ -506,6 +506,62 @@ def create_asana_task_body(task: TaskItem, is_initial_sync: bool = True) -> dict
     return body
 
 
+def _should_skip_unassigned_item(
+    ado_task: WorkItem,
+    ado_assigned: ADOAssignedUser | None,
+    existing_match: TaskItem | None,
+    asana_users: list[dict],
+) -> bool:
+    if ado_assigned is None and existing_match is None:
+        _LOGGER.debug("%s:skipping item as it is not assigned", ado_task.fields[ADO_TITLE])
+        return True
+
+    if ado_assigned is not None:
+        asana_matched_user = matching_user(asana_users, ado_assigned)
+        if asana_matched_user is None and existing_match is None:
+            _LOGGER.info(
+                "%s:assigned user %s <%s> not found in Asana",
+                ado_task.fields[ADO_TITLE],
+                ado_assigned.display_name,
+                ado_assigned.email,
+            )
+            return True
+
+    return False
+
+
+def _process_child_relations(
+    app: App,
+    ado_task: WorkItem,
+    current_asana_gid: str,
+    processed_ids: set[int],
+    asana_users: list[dict],
+    asana_project_tasks: list[dict],
+    asana_project: str,
+    depth: int,
+) -> None:
+    if not hasattr(ado_task, "relations") or not ado_task.relations:
+        return
+
+    for relation in ado_task.relations:
+        if relation.rel != "System.LinkTypes.Hierarchy-Forward":
+            continue
+        try:
+            child_id = int(relation.url.split("/")[-1])
+            sync_item_and_children(
+                app,
+                child_id,
+                processed_ids,
+                asana_users,
+                asana_project_tasks,
+                asana_project,
+                parent_asana_gid=current_asana_gid,
+                depth=depth + 1,
+            )
+        except (ValueError, IndexError) as e:
+            _LOGGER.warning("Failed to parse child ID from url %s: %s", relation.url, e)
+
+
 def sync_item_and_children(
     app: App,
     ado_id: int,
@@ -523,14 +579,16 @@ def sync_item_and_children(
         _LOGGER.warning("Max depth %s reached for item %s, skipping children", _MAX_DEPTH, ado_id)
         return
 
-    # If we already processed this ID, we skip to avoid loops and double processing.
     if ado_id in processed_ids:
         return
 
     processed_ids.add(ado_id)
 
+    if app.ado_wit_client is None:
+        _LOGGER.error("ADO work item client is not initialized")
+        return
+
     try:
-        # Get the work item from the ID with relations
         _LOGGER.debug("Processing work item ID: %d", ado_id)
         ado_task = app.ado_wit_client.get_work_item(ado_id, expand=ADO_RELATIONS)
 
@@ -538,67 +596,27 @@ def sync_item_and_children(
         _LOGGER.debug("Work item %d search result: %s", ado_task.id, "Found match" if existing_match else "No match")
         ado_assigned = get_task_user(ado_task)
 
-        if ado_assigned is None and existing_match is None:
-            _LOGGER.debug(
-                "%s:skipping item as it is not assigned",
-                ado_task.fields[ADO_TITLE],
-            )
+        if _should_skip_unassigned_item(ado_task, ado_assigned, existing_match, asana_users):
             return
 
-        asana_matched_user = matching_user(asana_users, ado_assigned)
-        if asana_matched_user is None and existing_match is None:
-            _LOGGER.info(
-                "%s:assigned user %s <%s> not found in Asana",
-                ado_task.fields[ADO_TITLE],
-                ado_assigned.display_name,
-                ado_assigned.email,
-            )
-            return
+        asana_matched_user = matching_user(asana_users, ado_assigned) if ado_assigned else None
 
         if existing_match is None:
             _LOGGER.debug("Work item %d: No existing match found, creating new mapping", ado_task.id)
             create_new_task_mapping(
-                app,
-                ado_task,
-                asana_matched_user,
-                asana_project_tasks,
-                asana_project,
-                parent_gid=parent_asana_gid,
+                app, ado_task, asana_matched_user, asana_project_tasks, asana_project, parent_gid=parent_asana_gid
             )
-            # Re-fetch to get the new GID for children
             existing_match = TaskItem.search(app, ado_id=ado_task.id)
         else:
             _LOGGER.debug("Work item %d: Existing match found, updating", ado_task.id)
-            update_existing_task(
-                app,
-                ado_task,
-                existing_match,
-                asana_matched_user,
-                asana_project,
-                parent_gid=parent_asana_gid,
-            )
+            update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=parent_asana_gid)
 
         current_asana_gid = existing_match.asana_gid if existing_match else None
 
-        # Process children
-        if current_asana_gid and hasattr(ado_task, "relations") and ado_task.relations:
-            for relation in ado_task.relations:
-                if relation.rel == "System.LinkTypes.Hierarchy-Forward":  # Child
-                    try:
-                        # Extract ID from URL: .../_apis/wit/workItems/123
-                        child_id = int(relation.url.split("/")[-1])
-                        sync_item_and_children(
-                            app,
-                            child_id,
-                            processed_ids,
-                            asana_users,
-                            asana_project_tasks,
-                            asana_project,
-                            parent_asana_gid=current_asana_gid,
-                            depth=depth + 1,
-                        )
-                    except (ValueError, IndexError) as e:
-                        _LOGGER.warning("Failed to parse child ID from url %s: %s", relation.url, e)
+        if current_asana_gid:
+            _process_child_relations(
+                app, ado_task, current_asana_gid, processed_ids, asana_users, asana_project_tasks, asana_project, depth
+            )
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Failed to sync work item %d: %s", ado_id, e)
@@ -914,18 +932,14 @@ def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
         return []
 
 
-def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str, parent_gid: str | None = None) -> None:
-    """
-    Create an Asana task in the specified project.
-
-    Due dates from ADO are synced during initial creation only.
-    """
-    tasks_api_instance = asana.TasksApi(app.asana_client)
-    # Find the custom field ID for 'link'
-    link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
-    link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
-
-    body = {
+def _build_asana_task_body(
+    task: TaskItem,
+    tag: str,
+    asana_project: str,
+    parent_gid: str | None,
+    link_custom_field_id: str | None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
         "data": {
             "name": task.asana_title,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
@@ -935,70 +949,76 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str, pa
         },
     }
 
-    # Add due_on field for initial creation if due_date is present
     if task.due_date:
         body["data"]["due_on"] = task.due_date
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}  # type: ignore
+        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}
 
     if parent_gid:
         body["data"]["parent"] = parent_gid
     else:
         body["data"]["projects"] = [asana_project]
 
+    return body
+
+
+def _save_created_task(app: App, task: TaskItem, result: dict) -> None:
+    task.asana_gid = result["gid"]
+    task.asana_updated = result["modified_at"]
+    task.updated_date = iso8601_utc(datetime.now())
+    task.save(app)
+
+
+def _retry_create_without_due_date(
+    tasks_api_instance: asana.TasksApi, app: App, task: TaskItem, body: dict[str, Any], exception: ApiException
+) -> None:
+    if not task.due_date or not hasattr(exception, "status") or exception.status not in (400, 422):
+        return
+
+    _LOGGER.warning(
+        "Due date %s may be invalid for task %s (HTTP %s), retrying without due date",
+        task.due_date,
+        task.asana_title,
+        exception.status,
+    )
+
+    if "due_on" not in body["data"]:
+        return
+
+    del body["data"]["due_on"]
     try:
         result = tasks_api_instance.create_task(body, opts={})
-        # add the match to the db.
-        task.asana_gid = result["gid"]
-        task.asana_updated = result["modified_at"]
-        task.updated_date = iso8601_utc(datetime.now())
-        task.save(app)
+        _save_created_task(app, task, result)
+        _LOGGER.info("Task created successfully without due date")
+    except ApiException as retry_exception:
+        _LOGGER.error("Failed to create task even without due date: %s", retry_exception)
 
-        # Log successful due date sync if applicable
+
+def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str, parent_gid: str | None = None) -> None:
+    tasks_api_instance = asana.TasksApi(app.asana_client)
+    link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
+    link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
+
+    body = _build_asana_task_body(task, tag, asana_project, parent_gid, link_custom_field_id)
+
+    try:
+        result = tasks_api_instance.create_task(body, opts={})
+        _save_created_task(app, task, result)
         if task.due_date:
             _LOGGER.info("Successfully synced due date %s for task %s", task.due_date, task.asana_title)
-
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->create_task: %s\n", exception)
-
-        # If the error might be due to invalid due_date, try creating without it
-        # 400 = Bad Request, 422 = Unprocessable Entity (typical validation errors)
-        if task.due_date and hasattr(exception, "status") and exception.status in (400, 422):
-            _LOGGER.warning(
-                "Due date %s may be invalid for task %s (HTTP %s), retrying without due date",
-                task.due_date,
-                task.asana_title,
-                exception.status,
-            )
-            # Remove due_on from body and retry
-            if "due_on" in body["data"]:
-                del body["data"]["due_on"]
-                try:
-                    result = tasks_api_instance.create_task(body, opts={})
-                    task.asana_gid = result["gid"]
-                    task.asana_updated = result["modified_at"]
-                    task.updated_date = iso8601_utc(datetime.now())
-                    task.save(app)
-                    _LOGGER.info("Task created successfully without due date")
-                except ApiException as retry_exception:
-                    _LOGGER.error("Failed to create task even without due date: %s", retry_exception)
+        _retry_create_without_due_date(tasks_api_instance, app, task, body, exception)
 
 
 def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str, parent_gid: str | None = None) -> None:
-    """
-    Update an Asana task with the provided task details.
-
-    Note: Due dates are intentionally excluded from updates to preserve
-    user modifications in Asana. Due dates are only synced during initial creation.
-    """
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
-    # Find the custom field ID for 'link'
     link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
     link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
 
-    body = {
+    body: dict[str, Any] = {
         "data": {
             "name": task.asana_title,
             "html_notes": f"<body>{task.asana_notes_link}</body>",
@@ -1013,15 +1033,13 @@ def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str
         body["data"]["projects"] = [asana_project_gid]
 
     if link_custom_field_id:
-        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}  # type: ignore
+        body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}
 
     try:
-        # Update the asana task item.
         result = tasks_api_instance.update_task(body, task.asana_gid, opts={})
         task.asana_updated = result["modified_at"]
         task.updated_date = iso8601_utc(datetime.now())
         task.save(app)
-        # Add the tag to the updated item if it does not already have it assigned.
         tag_asana_item(app, task, tag)
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
