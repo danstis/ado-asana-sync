@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from ado_asana_sync.sync.sync import process_backlog_item
+from ado_asana_sync.sync.sync import sync_item_and_children
 from tests.utils.test_helpers import (
     AsanaApiMockHelper,
     TestDataBuilder,
@@ -43,14 +43,12 @@ class TestDueDateIntegration(unittest.TestCase):
           * All date parsing and validation logic
         - Only mocks external APIs (Asana) at the boundary
         """
-        # Set up REAL App with REAL database
         mock_dirname.return_value = self.temp_dir
         mock_ado_connection.return_value = MagicMock()
         mock_asana_client.return_value = MagicMock()
 
         app = TestDataBuilder.create_real_app(self.temp_dir)
 
-        # Set up Asana API mocks at the boundary only
         asana_helper = AsanaApiMockHelper()
         mock_tasks_api = asana_helper.create_tasks_api_mock(
             created_task={
@@ -63,58 +61,48 @@ class TestDueDateIntegration(unittest.TestCase):
         )
 
         try:
-            app.connect()  # REAL database initialization
+            app.connect()
 
-            # Create REAL ADO work item (not a mock!)
             ado_work_item = TestDataBuilder.create_ado_work_item(
                 item_id=12345, title="Test Due Date Sync", work_item_type="Task", due_date="2025-12-31T23:59:59.000Z"
             )
 
-            # Real user data for REAL matching_user function
             asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
 
-            # Mock ONLY external APIs and boundary functions - let 80%+ of internal code run naturally
+            app.ado_wit_client = MagicMock()
+            app.ado_wit_client.get_work_item.return_value = ado_work_item
+
             with (
                 patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
                 patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
                 patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
                 patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                # Mock functions that make external API calls but let internal logic work
                 patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None),
                 patch("ado_asana_sync.sync.sync.get_asana_task_by_name", return_value=None),
                 patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
                 patch("ado_asana_sync.sync.sync.tag_asana_item", return_value=None),
             ):
-                # Act: Process with REAL objects and REAL internal integration
-                # This exercises the REAL code path:
-                # - extract_due_date_from_ado parses REAL WorkItem
-                # - create_asana_task_body builds task with REAL due date logic
-                # - TaskItem creates and saves to REAL database
-                # - All validation, error handling, logging work naturally
-                process_backlog_item(
-                    app,  # REAL App with REAL database
-                    ado_work_item,  # REAL WorkItem with REAL fields
-                    asana_users,  # REAL user list processed by REAL matching_user
-                    [],  # REAL (empty) project tasks
-                    "project456",  # REAL project ID processed by REAL utilities
+                processed_ids = set()
+                sync_item_and_children(
+                    app,
+                    ado_work_item.id,
+                    processed_ids,
+                    asana_users,
+                    [],
+                    "project456",
                 )
 
-                # Assert: Verify REAL database operations worked
-                # The REAL TaskItem should be in the REAL database with REAL due_date
                 saved_items = app.matches.all()
                 self.assertEqual(len(saved_items), 1)
 
                 saved_task = saved_items[0]
                 self.assertEqual(saved_task["ado_id"], 12345)
                 self.assertEqual(saved_task["title"], "Test Due Date Sync")
-                self.assertEqual(saved_task["due_date"], "2025-12-31")  # REAL date extraction worked
+                self.assertEqual(saved_task["due_date"], "2025-12-31")
 
-                # Assert: Verify REAL Asana API integration
-                # The REAL create_asana_task_body should have built task with due_on
                 mock_tasks_api.create_task.assert_called_once()
                 create_task_call = mock_tasks_api.create_task.call_args[0][0]
                 self.assertEqual(create_task_call["data"]["due_on"], "2025-12-31")
-                # The REAL code adds work item ID to the name - this is correct behavior!
                 self.assertEqual(create_task_call["data"]["name"], "Task 12345: Test Due Date Sync")
 
         finally:
@@ -135,7 +123,6 @@ class TestDueDateIntegration(unittest.TestCase):
         - Validates REAL Asana task creation without due_on field
         """
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Set up REAL App with REAL database
             mock_dirname.return_value = temp_dir
             mock_ado_connection.return_value = MagicMock()
             mock_asana_client.return_value = MagicMock()
@@ -143,19 +130,17 @@ class TestDueDateIntegration(unittest.TestCase):
             app = TestDataBuilder.create_real_app(temp_dir)
 
             try:
-                app.connect()  # REAL database initialization
+                app.connect()
 
-                # Create REAL ADO work item without due date
                 ado_work_item = TestDataBuilder.create_ado_work_item(
                     item_id=12346,
                     title="Test No Due Date",
                     work_item_type="Task",
-                    due_date=None,  # Explicitly no due date
+                    due_date=None,
                 )
 
                 asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
 
-                # Set up Asana API mocks using helper
                 asana_helper = AsanaApiMockHelper()
                 mock_tasks_api = asana_helper.create_tasks_api_mock(
                     created_task={
@@ -163,11 +148,12 @@ class TestDueDateIntegration(unittest.TestCase):
                         "name": "Task 12346: Test No Due Date",
                         "completed": False,
                         "modified_at": "2025-09-10T10:00:00.000Z",
-                        # Note: No due_on field should be set
                     }
                 )
 
-                # Mock external APIs and functions that make API calls
+                app.ado_wit_client = MagicMock()
+                app.ado_wit_client.get_work_item.return_value = ado_work_item
+
                 with (
                     patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
                     patch(
@@ -175,35 +161,31 @@ class TestDueDateIntegration(unittest.TestCase):
                     ),
                     patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
                     patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                    # Mock functions that would make external calls
                     patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None),
                     patch("ado_asana_sync.sync.sync.get_asana_task_by_name", return_value=None),
                     patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
                     patch("ado_asana_sync.sync.sync.tag_asana_item", return_value=None),
                 ):
-                    # Act: Process the work item - internal due date logic works together
-                    process_backlog_item(
-                        app,  # REAL App with REAL database
-                        ado_work_item,  # REAL WorkItem without due date
-                        asana_users,  # REAL user list
-                        [],  # REAL project tasks
-                        "project456",  # REAL project
+                    processed_ids = set()
+                    sync_item_and_children(
+                        app,
+                        ado_work_item.id,
+                        processed_ids,
+                        asana_users,
+                        [],
+                        "project456",
                     )
 
-                    # Assert: Verify REAL database operations worked
-                    saved_items = app.matches.all()  # REAL database query
+                    saved_items = app.matches.all()
                     self.assertEqual(len(saved_items), 1)
 
                     saved_task = saved_items[0]
                     self.assertEqual(saved_task["ado_id"], 12346)
                     self.assertEqual(saved_task["title"], "Test No Due Date")
-                    # This proves REAL extract_due_date_from_ado() worked with None
                     self.assertIsNone(saved_task.get("due_date"))
 
-                    # Assert: Verify REAL Asana API integration without due_on
                     mock_tasks_api.create_task.assert_called_once()
                     create_task_call = mock_tasks_api.create_task.call_args[0][0]
-                    # This proves REAL create_asana_task_body() worked correctly with no due date
                     self.assertNotIn("due_on", create_task_call["data"])
                     self.assertEqual(create_task_call["data"]["name"], "Task 12346: Test No Due Date")
 
@@ -225,7 +207,6 @@ class TestDueDateIntegration(unittest.TestCase):
         - Validates REAL due date preservation logic
         """
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Set up REAL App with REAL database
             mock_dirname.return_value = temp_dir
             mock_ado_connection.return_value = MagicMock()
             mock_asana_client.return_value = MagicMock()
@@ -233,10 +214,8 @@ class TestDueDateIntegration(unittest.TestCase):
             app = TestDataBuilder.create_real_app(temp_dir)
 
             try:
-                app.connect()  # REAL database initialization
+                app.connect()
 
-                # First, create and save an existing task in the REAL database
-                # This simulates a task that was previously synced
                 existing_task_data = {
                     "ado_id": 12347,
                     "ado_rev": 1,
@@ -245,36 +224,34 @@ class TestDueDateIntegration(unittest.TestCase):
                     "url": "https://dev.azure.com/test-org/test-project/_workitems/edit/12347",
                     "asana_gid": "67892",
                     "asana_updated": "2025-09-06T10:00:00.000Z",
-                    "due_date": "2025-12-31",  # Original due date
+                    "due_date": "2025-12-31",
                 }
-                app.matches.insert(existing_task_data)  # REAL database insert
+                app.matches.insert(existing_task_data)
 
-                # Create REAL ADO work item with CHANGED due date (simulating ADO update)
                 ado_work_item = TestDataBuilder.create_ado_work_item(
                     item_id=12347,
                     title="Test Preserve Changes",
                     work_item_type="Task",
-                    due_date="2025-11-30T23:59:59.000Z",  # Changed from 2025-12-31
+                    due_date="2025-11-30T23:59:59.000Z",
                     assigned_to={"displayName": "Test User", "uniqueName": "test@example.com"},
                 )
-                ado_work_item.rev = 2  # Updated revision
+                ado_work_item.rev = 2
 
-                # Real user data
                 asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
 
-                # Mock current Asana task showing USER changed the due date
                 mock_asana_current_task = {
                     "gid": "67892",
                     "name": "Task 12347: Test Preserve Changes",
-                    "due_on": "2026-01-15",  # USER changed this from 2025-12-31 to 2026-01-15
-                    "modified_at": "2025-09-06T11:00:00.000Z",  # More recent than stored
+                    "due_on": "2026-01-15",
+                    "modified_at": "2025-09-06T11:00:00.000Z",
                 }
 
-                # Set up Asana API mocks
                 asana_helper = AsanaApiMockHelper()
                 mock_tasks_api = asana_helper.create_tasks_api_mock()
 
-                # Mock external APIs and functions that make API calls
+                app.ado_wit_client = MagicMock()
+                app.ado_wit_client.get_work_item.return_value = ado_work_item
+
                 with (
                     patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
                     patch(
@@ -282,45 +259,35 @@ class TestDueDateIntegration(unittest.TestCase):
                     ),
                     patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
                     patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                    # Mock external API calls
                     patch("ado_asana_sync.sync.sync.get_asana_task", return_value=mock_asana_current_task),
                     patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
                     patch("ado_asana_sync.sync.sync.get_asana_task_tags", return_value=[]),
                     patch("ado_asana_sync.sync.sync.tag_asana_item", return_value=None),
                 ):
-                    # Act: Process the work item (subsequent sync)
-                    # This should test the REAL logic for preserving user changes
-                    process_backlog_item(
-                        app,  # REAL App with REAL database
-                        ado_work_item,  # REAL WorkItem with changed due date
-                        asana_users,  # REAL user list
-                        [],  # REAL project tasks
-                        "project456",  # REAL project
+                    processed_ids = set()
+                    sync_item_and_children(
+                        app,
+                        ado_work_item.id,
+                        processed_ids,
+                        asana_users,
+                        [],
+                        "project456",
                     )
 
-                    # Assert: Verify REAL database was updated with new revision
-                    updated_items = app.matches.all()  # REAL database query
+                    updated_items = app.matches.all()
                     self.assertEqual(len(updated_items), 1)
 
                     updated_task = updated_items[0]
                     self.assertEqual(updated_task["ado_id"], 12347)
-                    self.assertEqual(updated_task["ado_rev"], 2)  # Should be updated
+                    self.assertEqual(updated_task["ado_rev"], 2)
                     self.assertEqual(updated_task["title"], "Test Preserve Changes")
 
-                    # The stored due_date might be updated to reflect the new ADO date
-                    # but the key test is that Asana due_on is preserved
-
-                    # Assert: Verify Asana update was called but WITHOUT due_on field
-                    # This is the key behavior - we preserve the user's Asana due date change
                     mock_tasks_api.update_task.assert_called_once()
                     update_call_args = mock_tasks_api.update_task.call_args
 
-                    # The update should NOT include due_on field to preserve user changes
                     if len(update_call_args.args) >= 2:
                         update_data = update_call_args.args[1]
                         if isinstance(update_data, dict) and "data" in update_data:
-                            # This is the critical assertion: due_on should NOT be included
-                            # to preserve the user's change from 2025-12-31 to 2026-01-15
                             self.assertNotIn(
                                 "due_on", update_data["data"], "due_on should not be included to preserve user changes"
                             )
@@ -341,7 +308,6 @@ class TestDueDateIntegration(unittest.TestCase):
         - Validates REAL logging and error recovery behavior
         """
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Set up REAL App with REAL database
             mock_dirname.return_value = temp_dir
             mock_ado_connection.return_value = MagicMock()
             mock_asana_client.return_value = MagicMock()
@@ -349,19 +315,17 @@ class TestDueDateIntegration(unittest.TestCase):
             app = TestDataBuilder.create_real_app(temp_dir)
 
             try:
-                app.connect()  # REAL database initialization
+                app.connect()
 
-                # Create REAL ADO work item with invalid due date
                 ado_work_item = TestDataBuilder.create_ado_work_item(
                     item_id=12348,
                     title="Test Invalid Due Date",
                     work_item_type="Task",
-                    due_date="invalid-date-format",  # Invalid format to test error handling
+                    due_date="invalid-date-format",
                 )
 
                 asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
 
-                # Set up Asana API mocks using helper
                 asana_helper = AsanaApiMockHelper()
                 mock_tasks_api = asana_helper.create_tasks_api_mock(
                     created_task={
@@ -369,11 +333,12 @@ class TestDueDateIntegration(unittest.TestCase):
                         "name": "Task 12348: Test Invalid Due Date",
                         "completed": False,
                         "modified_at": "2025-09-10T10:00:00.000Z",
-                        # Note: No due_on field should be set due to invalid date
                     }
                 )
 
-                # Mock external APIs and functions that make API calls
+                app.ado_wit_client = MagicMock()
+                app.ado_wit_client.get_work_item.return_value = ado_work_item
+
                 with (
                     patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
                     patch(
@@ -381,41 +346,35 @@ class TestDueDateIntegration(unittest.TestCase):
                     ),
                     patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
                     patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                    # Mock functions that would make external calls
                     patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None),
                     patch("ado_asana_sync.sync.sync.get_asana_task_by_name", return_value=None),
                     patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
                     patch("ado_asana_sync.sync.sync.tag_asana_item", return_value=None),
-                    # Mock logger to test warning behavior
                     patch("ado_asana_sync.sync.sync._LOGGER") as mock_logger,
                 ):
-                    # Act: Process the work item - REAL error handling should work
-                    process_backlog_item(
-                        app,  # REAL App with REAL database
-                        ado_work_item,  # REAL WorkItem with invalid due date
-                        asana_users,  # REAL user list
-                        [],  # REAL project tasks
-                        "project456",  # REAL project
+                    processed_ids = set()
+                    sync_item_and_children(
+                        app,
+                        ado_work_item.id,
+                        processed_ids,
+                        asana_users,
+                        [],
+                        "project456",
                     )
 
-                    # Assert: Verify REAL database operations worked despite error
-                    saved_items = app.matches.all()  # REAL database query
+                    saved_items = app.matches.all()
                     self.assertEqual(len(saved_items), 1)
 
                     saved_task = saved_items[0]
                     self.assertEqual(saved_task["ado_id"], 12348)
                     self.assertEqual(saved_task["title"], "Test Invalid Due Date")
-                    # This proves REAL extract_due_date_from_ado() handled error gracefully
                     self.assertIsNone(saved_task.get("due_date"))
 
-                    # Assert: Verify REAL Asana API integration worked without due_on
                     mock_tasks_api.create_task.assert_called_once()
                     create_task_call = mock_tasks_api.create_task.call_args[0][0]
-                    # This proves REAL create_asana_task_body() worked correctly with error handling
                     self.assertNotIn("due_on", create_task_call["data"])
                     self.assertEqual(create_task_call["data"]["name"], "Task 12348: Test Invalid Due Date")
 
-                    # Assert: Verify REAL warning logging worked
                     mock_logger.warning.assert_called()
                     warning_call = mock_logger.warning.call_args[0][0]
                     self.assertIn("Invalid due date format", warning_call)

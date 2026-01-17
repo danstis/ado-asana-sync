@@ -535,9 +535,7 @@ def sync_item_and_children(
         ado_task = app.ado_wit_client.get_work_item(ado_id, expand=ADO_RELATIONS)
 
         existing_match = TaskItem.search(app, ado_id=ado_task.id)
-        _LOGGER.debug(
-            "Work item %d search result: %s", ado_task.id, "Found match" if existing_match else "No match"
-        )
+        _LOGGER.debug("Work item %d search result: %s", ado_task.id, "Found match" if existing_match else "No match")
         ado_assigned = get_task_user(ado_task)
 
         if ado_assigned is None and existing_match is None:
@@ -606,9 +604,7 @@ def sync_item_and_children(
         _LOGGER.error("Failed to sync work item %d: %s", ado_id, e)
 
 
-def create_new_task_mapping(
-    app, ado_task, asana_matched_user, asana_project_tasks, asana_project, parent_gid=None
-):
+def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tasks, asana_project, parent_gid=None):
     """
     Creates a new task mapping between ADO and Asana.
     """
@@ -658,9 +654,7 @@ def create_new_task_mapping(
         )
 
 
-def update_existing_task(
-    app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=None
-):
+def update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=None):
     """
     Updates an existing Asana task based on ADO changes.
     """
@@ -920,9 +914,7 @@ def get_asana_project_tasks(app: App, asana_project) -> list[dict]:
         return []
 
 
-def create_asana_task(
-    app: App, asana_project: str, task: TaskItem, tag: str, parent_gid: str | None = None
-) -> None:
+def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str, parent_gid: str | None = None) -> None:
     """
     Create an Asana task in the specified project.
 
@@ -993,9 +985,7 @@ def create_asana_task(
                     _LOGGER.error("Failed to create task even without due date: %s", retry_exception)
 
 
-def update_asana_task(
-    app: App, task: TaskItem, tag: str, asana_project_gid: str, parent_gid: str | None = None
-) -> None:
+def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str, parent_gid: str | None = None) -> None:
     """
     Update an Asana task with the provided task details.
 
@@ -1014,11 +1004,12 @@ def update_asana_task(
             "html_notes": f"<body>{task.asana_notes_link}</body>",
             "assignee": task.assigned_to,
             "completed": task.state in _CLOSED_STATES,
-            "parent": parent_gid,
         }
     }
 
-    if parent_gid is None:
+    if parent_gid:
+        body["data"]["parent"] = parent_gid
+    else:
         body["data"]["projects"] = [asana_project_gid]
 
     if link_custom_field_id:
