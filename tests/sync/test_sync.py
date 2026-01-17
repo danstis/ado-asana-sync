@@ -1020,6 +1020,35 @@ class TestSyncItemAndChildrenRecursion(unittest.TestCase):
                 self.assertEqual(args2[2].ado_id, 2)
                 self.assertEqual(kwargs2.get("parent_gid"), "parent_gid")
 
+    @patch("ado_asana_sync.sync.sync.tag_asana_item")
+    @patch("ado_asana_sync.sync.sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.sync.asana.TasksApi")
+    def test_update_asana_task_calls_set_parent(self, mock_tasks_api, mock_find_field, mock_tag_item):
+        from ado_asana_sync.sync.sync import update_asana_task
+
+        app = MagicMock()
+        task = MagicMock()
+        task.asana_gid = "task_gid"
+        task.asana_title = "Test Task"
+        task.assigned_to = "user_gid"
+        task.state = "Active"
+        task.url = "http://test.com"
+        task.asana_notes_link = '<a href="http://test.com">Link</a>'
+
+        mock_find_field.return_value = None
+        mock_api_instance = mock_tasks_api.return_value
+        mock_api_instance.update_task.return_value = {"modified_at": "now"}
+
+        update_asana_task(app, task, "tag_gid", "project_gid", parent_gid="parent_gid")
+
+        call_args = mock_api_instance.update_task.call_args
+        self.assertIsNotNone(call_args)
+        body = call_args[0][0]
+        self.assertNotIn("parent", body["data"])
+        self.assertNotIn("projects", body["data"])
+
+        mock_api_instance.set_parent_for_task.assert_called_with({"data": {"parent": "parent_gid"}}, "task_gid")
+
 
 if __name__ == "__main__":
     unittest.main()

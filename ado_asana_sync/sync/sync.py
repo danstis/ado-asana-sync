@@ -1027,11 +1027,6 @@ def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str
         }
     }
 
-    if parent_gid:
-        body["data"]["parent"] = parent_gid
-    else:
-        body["data"]["projects"] = [asana_project_gid]
-
     if link_custom_field_id:
         body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(task.url)}
 
@@ -1041,6 +1036,13 @@ def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str
         task.updated_date = iso8601_utc(datetime.now())
         task.save(app)
         tag_asana_item(app, task, tag)
+
+        if parent_gid:
+            try:
+                tasks_api_instance.set_parent_for_task({"data": {"parent": parent_gid}}, task.asana_gid)
+            except ApiException as e:
+                _LOGGER.error("Failed to set parent for task %s: %s", task.asana_title, e)
+
     except ApiException as exception:
         _LOGGER.error("Exception when calling TasksApi->update_task: %s\n", exception)
 
