@@ -174,10 +174,20 @@ class TestTelemetrySamplingFilter(unittest.TestCase):
 
 class TestConfigureTelemetryLoggers(unittest.TestCase):
     def setUp(self):
-        """Clear filters from telemetry loggers before each test."""
+        """Save filters from telemetry loggers before each test."""
+        self.original_filters = {}
+        self.original_levels = {}
         for logger_name in TELEMETRY_LOGGER_NAMES:
             logger = logging.getLogger(logger_name)
-            logger.filters.clear()
+            self.original_filters[logger_name] = list(logger.filters)
+            self.original_levels[logger_name] = logger.level
+            self.addCleanup(self.restore_logger_state, logger_name)
+
+    def restore_logger_state(self, logger_name):
+        """Restore filters and level for a logger."""
+        logger = logging.getLogger(logger_name)
+        logger.filters = self.original_filters[logger_name]
+        logger.setLevel(self.original_levels[logger_name])
 
     def test_applies_sampling_filter_to_azure_logger(self):
         """Sampling filter is applied to azure logger."""
@@ -201,16 +211,18 @@ class TestConfigureTelemetryLoggers(unittest.TestCase):
             # Remove APPINSIGHTS_LOGLEVEL if set
             os.environ.pop("APPINSIGHTS_LOGLEVEL", None)
 
-            # Need to reimport to pick up env change
-            import importlib
-
-            import ado_asana_sync.utils.logging_tracing as lt
-
-            importlib.reload(lt)
-            lt.configure_telemetry_loggers()
+            configure_telemetry_loggers()
 
             azure_logger = logging.getLogger("azure")
             self.assertEqual(azure_logger.level, logging.WARNING)
+
+    def test_sets_telemetry_logger_level_from_env(self):
+        """Telemetry loggers use APPINSIGHTS_LOGLEVEL from environment."""
+        with patch.dict(os.environ, {"APPINSIGHTS_LOGLEVEL": "DEBUG"}):
+            configure_telemetry_loggers()
+
+            azure_logger = logging.getLogger("azure")
+            self.assertEqual(azure_logger.level, logging.DEBUG)
 
     def test_does_not_duplicate_filters(self):
         """Filter is not added multiple times."""
