@@ -74,7 +74,7 @@ Follow these steps to set up your development environment:
   - `sync/task_item.py`, `sync/pull_request_item.py`: data models
   - `sync/pull_request_sync.py`: PR reviewer task sync
   - `utils/`: logging/tracing, time helpers
-  - `database/`: TinyDB persistence
+  - `database/`: SQLite persistence
 - Config example: `data/projects.json.example`
 - Tests: `tests/`
 

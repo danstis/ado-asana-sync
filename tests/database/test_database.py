@@ -280,9 +280,15 @@ class TestDatabaseMigration(unittest.TestCase):
 
         db = Database(self.db_path)
 
-        # This should raise an exception due to the unique constraint violation
-        with self.assertRaises(Exception):
+        # This should raise a ValueError due to the pre-check validation
+        with self.assertRaises(ValueError) as cm:
             db.sync_projects_from_json(projects_data)
+
+        # Verify the error message contains specific details about the duplicate
+        error_msg = str(cm.exception)
+        self.assertIn("Duplicate project configuration found", error_msg)
+        self.assertIn("TestProject", error_msg)
+        self.assertIn("Team1", error_msg)
 
         db.close()
 

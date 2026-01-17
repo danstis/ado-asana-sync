@@ -1,9 +1,7 @@
 """
 SQLite database wrapper for ADO-Asana sync application.
 
-This module provides a thread-safe SQLite database wrapper that maintains
-compatibility with the existing TinyDB interface while providing better
-concurrency support and data integrity.
+This module provides a thread-safe native SQLite database wrapper for all persistence needs.
 """
 
 import json
@@ -22,7 +20,7 @@ CURRENT_SCHEMA_VERSION = 2
 
 class DatabaseTable:
     """
-    Represents a table in the SQLite database with TinyDB-like interface.
+    Represents a table in the SQLite database.
     """
 
     def __init__(self, db: "Database", table_name: str):
@@ -50,7 +48,7 @@ class DatabaseTable:
 
             for row_id, json_data in cursor:
                 record = json.loads(json_data)
-                record["doc_id"] = row_id  # Add doc_id for TinyDB compatibility
+                record["doc_id"] = row_id  # Add doc_id for internal compatibility
                 if query_func(record):
                     matching_ids.append(row_id)
 
@@ -412,6 +410,20 @@ class Database:
 
     def sync_projects_from_json(self, projects_data: List[Dict[str, str]]) -> None:
         """Sync projects from JSON data into the projects table."""
+        # Check for duplicates before DB operations to provide better error messages
+        seen = set()
+        duplicates = []
+        for project in projects_data:
+            key = (project["adoProjectName"], project["adoTeamName"])
+            if key in seen:
+                duplicates.append(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
+            seen.add(key)
+
+        if duplicates:
+            error_msg = f"Duplicate project configuration found in projects.json for: {', '.join(duplicates)}"
+            _LOGGER.error(error_msg)
+            raise ValueError(error_msg)
+
         with self.get_connection() as conn:
             # Clear existing projects
             conn.execute("DELETE FROM projects")
