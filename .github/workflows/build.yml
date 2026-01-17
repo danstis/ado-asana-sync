@@ -89,7 +89,7 @@ jobs:
           output-file: hadolint.out
           format: json
           failure-threshold: ignore
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: test-output
       - name: SonarCloud Scan
