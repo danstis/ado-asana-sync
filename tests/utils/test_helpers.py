@@ -143,10 +143,10 @@ class TestDataBuilder:
             "completed": completed,
             "modified_at": modified_at,
         }
-        
+
         if due_on:
             task_data["due_on"] = due_on
-            
+
         return task_data
 
     @staticmethod

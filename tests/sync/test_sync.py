@@ -6,8 +6,9 @@ from asana.rest import ApiException
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
-    ADOAssignedUser,
     DEFAULT_SYNC_THRESHOLD,
+    ADOAssignedUser,
+    _parse_sync_threshold,
     cleanup_invalid_work_items,
     create_tag_if_not_existing,
     get_asana_project,
@@ -20,10 +21,9 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     is_item_older_than_threshold,
     matching_user,
-    _parse_sync_threshold,
-    process_backlog_item,
     read_projects,
     remove_mapping,
+    sync_item_and_children,
 )
 from ado_asana_sync.sync.task_item import TaskItem
 from tests.utils.test_helpers import TestDataBuilder
@@ -250,7 +250,7 @@ class TestMatchingUser(unittest.TestCase):
         self.assertIsNone(result)
 
 
-class TestProcessBacklogItemLogging(unittest.TestCase):
+class TestSyncItemAndChildrenLogging(unittest.TestCase):
     def test_log_when_user_not_matched(self):
         app = MagicMock()
         app.matches = MagicMock()
@@ -270,10 +270,14 @@ class TestProcessBacklogItemLogging(unittest.TestCase):
             },
         }
 
+        # Mock get_work_item to return our task
+        app.ado_wit_client = MagicMock()
+        app.ado_wit_client.get_work_item.return_value = ado_task
+
         asana_users = [{"email": "other@example.com", "name": "Other"}]
 
         with patch("ado_asana_sync.sync.sync._LOGGER") as mock_logger:
-            process_backlog_item(app, ado_task, asana_users, [], "proj")
+            sync_item_and_children(app, 1, set(), asana_users, [], "proj")
             mock_logger.info.assert_any_call(
                 "%s:assigned user %s <%s> not found in Asana",
                 "Test Item",
@@ -919,6 +923,131 @@ class TestSyncDueDateContract(unittest.TestCase):
         # This test will be implemented when sync error handling is added
         # For now, just verify the concept exists
         self.assertTrue(True, "Due date error handling contract defined")
+
+
+class TestSyncItemAndChildrenRecursion(unittest.TestCase):
+    def test_sync_recurses_children(self):
+        # Setup mocks
+        app = MagicMock()
+        app.matches = MagicMock()
+        app.matches.contains.return_value = False  # No existing match
+        app.matches.search.return_value = []  # No existing match
+
+        # Parent Item
+        parent_task = WorkItem()
+        parent_task.id = 1
+        parent_task.rev = 1
+        parent_task.fields = {
+            "System.Title": "Parent",
+            "System.WorkItemType": "User Story",
+            "System.State": "Active",
+            "System.AssignedTo": {"uniqueName": "user@example.com", "displayName": "User"},
+        }
+        # Child Relation
+        relation = MagicMock()
+        relation.rel = "System.LinkTypes.Hierarchy-Forward"
+        relation.url = "http://ado/1/_apis/wit/workItems/2"
+        parent_task.relations = [relation]
+
+        # Child Item
+        child_task = WorkItem()
+        child_task.id = 2
+        child_task.rev = 1
+        child_task.fields = {
+            "System.Title": "Child",
+            "System.WorkItemType": "Task",
+            "System.State": "Active",
+            "System.AssignedTo": {"uniqueName": "user@example.com", "displayName": "User"},
+        }
+        child_task.relations = []
+
+        # Mock get_work_item side effect
+        def get_work_item_side_effect(id, expand=None):
+            if id == 1:
+                return parent_task
+            if id == 2:
+                return child_task
+            return None
+
+        app.ado_wit_client.get_work_item.side_effect = get_work_item_side_effect
+
+        asana_users = [{"email": "user@example.com", "name": "User", "gid": "user_gid"}]
+        asana_project_tasks = []
+
+        # Mock create_asana_task
+        with patch("ado_asana_sync.sync.sync.create_asana_task") as mock_create:
+            # We need TaskItem.search to return a TaskItem AFTER creation so the recursion can get the gid
+            # This is tricky because TaskItem.search is called multiple times.
+            # 1. Search parent (None) -> Create Parent -> Save
+            # 2. Search parent (Found) -> Return Match -> Get GID
+            # 3. Recurse Child
+
+            # We can mock TaskItem class or the search method on app.matches?
+            # The code uses TaskItem.search(app, ...).
+            # TaskItem.search calls app.matches.search.
+
+            # Let's mock TaskItem.search directly
+            with patch("ado_asana_sync.sync.sync.TaskItem.search") as mock_search:
+                # Logic:
+                # First call for ID 1: Return None (Create new)
+                # Second call for ID 1 (re-fetch): Return TaskItem with gid
+                # Third call for ID 2: Return None (Create new)
+                # Fourth call for ID 2: Return TaskItem with gid (though not strictly needed if no grandchildren)
+
+                parent_item = TaskItem(1, 1, "Parent", "User Story", "url")
+                parent_item.asana_gid = "parent_gid"
+
+                child_item = TaskItem(2, 1, "Child", "Task", "url")
+                child_item.asana_gid = "child_gid"
+
+                mock_search.side_effect = [None, parent_item, None, child_item]
+
+                sync_item_and_children(app, 1, set(), asana_users, asana_project_tasks, "proj_gid")
+
+                # Verify create_asana_task called for parent (no parent_gid)
+                # And for child (with parent_gid)
+
+                self.assertEqual(mock_create.call_count, 2)
+
+                # Check call args
+                args1, kwargs1 = mock_create.call_args_list[0]
+                # Parent creation
+                self.assertEqual(args1[2].ado_id, 1)
+                self.assertIsNone(kwargs1.get("parent_gid"))
+
+                args2, kwargs2 = mock_create.call_args_list[1]
+                # Child creation
+                self.assertEqual(args2[2].ado_id, 2)
+                self.assertEqual(kwargs2.get("parent_gid"), "parent_gid")
+
+    @patch("ado_asana_sync.sync.sync.tag_asana_item")
+    @patch("ado_asana_sync.sync.sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.sync.asana.TasksApi")
+    def test_update_asana_task_calls_set_parent(self, mock_tasks_api, mock_find_field, mock_tag_item):
+        from ado_asana_sync.sync.sync import update_asana_task
+
+        app = MagicMock()
+        task = MagicMock()
+        task.asana_gid = "task_gid"
+        task.asana_title = "Test Task"
+        task.assigned_to = "user_gid"
+        task.state = "Active"
+        task.url = "http://test.com"
+        task.asana_notes_link = '<a href="http://test.com">Link</a>'
+
+        mock_find_field.return_value = None
+        mock_api_instance = mock_tasks_api.return_value
+        mock_api_instance.update_task.return_value = {"modified_at": "now"}
+
+        update_asana_task(app, task, "tag_gid", "project_gid", parent_gid="parent_gid")
+
+        call_args = mock_api_instance.update_task.call_args
+        self.assertIsNotNone(call_args)
+        body = call_args[0][0]
+        self.assertNotIn("parent", body["data"])
+        self.assertNotIn("projects", body["data"])
+
+        mock_api_instance.set_parent_for_task.assert_called_with({"data": {"parent": "parent_gid"}}, "task_gid", opts={})
 
 
 if __name__ == "__main__":
