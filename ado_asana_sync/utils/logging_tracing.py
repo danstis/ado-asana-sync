@@ -36,9 +36,6 @@ from opentelemetry import trace
 # Console log level (default INFO)
 LOGLEVEL = os.environ.get("LOGLEVEL", "INFO").upper()
 
-# Telemetry log level (default WARNING to reduce volume)
-APPINSIGHTS_LOGLEVEL = os.environ.get("APPINSIGHTS_LOGLEVEL", "WARNING").upper()
-
 # Telemetry loggers to apply sampling filter to
 TELEMETRY_LOGGER_NAMES = ["azure", "opentelemetry"]
 
@@ -161,7 +158,8 @@ def configure_telemetry_loggers() -> None:
     logger namespaces (azure, opentelemetry) to reduce Application Insights
     ingestion volume while preserving error/critical events.
     """
-    telemetry_level = getattr(logging, APPINSIGHTS_LOGLEVEL, logging.WARNING)
+    appinsights_loglevel = os.environ.get("APPINSIGHTS_LOGLEVEL", "WARNING").upper()
+    telemetry_level = getattr(logging, appinsights_loglevel, logging.WARNING)
     sampling_filter = get_telemetry_filter()
 
     for logger_name in TELEMETRY_LOGGER_NAMES:
