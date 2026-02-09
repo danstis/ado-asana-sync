@@ -1026,9 +1026,38 @@ def cleanup_invalid_work_items(app: App) -> None:
         _LOGGER.info("Cleaned up %d invalid work item entries", len(invalid_items))
 
 
+def _get_deactivated_user_gids(app: App, asana_workspace_gid: str) -> set[str]:
+    """Return a set of user GIDs that are deactivated in the given workspace."""
+    memberships_api = asana.WorkspaceMembershipsApi(app.asana_client)
+    opts = {
+        "opt_fields": "is_active,user.gid",
+    }
+    try:
+        memberships = memberships_api.get_workspace_memberships_for_workspace(asana_workspace_gid, opts)
+        deactivated = set()
+        for m in memberships:
+            if m.get("is_active") is False:
+                user = m.get("user") or {}
+                user_gid = user.get("gid")
+                if user_gid:
+                    deactivated.add(user_gid)
+        return deactivated
+    except ApiException as exception:
+        _LOGGER.warning(
+            "Failed to fetch workspace memberships, cannot filter deactivated users: %s",
+            exception,
+        )
+        return set()
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        _LOGGER.warning("Unexpected error fetching workspace memberships: %s", e)
+        return set()
+
+
 def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
     """
-    Retrieves a list of Asana users in a specific workspace.
+    Retrieves a list of active Asana users in a specific workspace.
+
+    Deactivated users are filtered out by checking workspace membership status.
     """
     users_api_instance = asana.UsersApi(app.asana_client)
     opts = {
@@ -1038,10 +1067,29 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
 
     try:
         api_response = users_api_instance.get_users(opts)
-        return list(api_response)
+        all_users = list(api_response)
     except ApiException as exception:
         _LOGGER.error("Exception when calling UsersApi->get_users: %s\n", exception)
         return []
     except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("An unexpected error occurred: %s", str(e))
         return []
+
+    # Fetch workspace memberships to identify deactivated users
+    deactivated_gids = _get_deactivated_user_gids(app, asana_workspace_gid)
+
+    if not deactivated_gids:
+        return all_users
+
+    active_users = []
+    for u in all_users:
+        if u.get("gid") in deactivated_gids:
+            _LOGGER.debug(
+                "Skipping deactivated Asana user: %s <%s>",
+                u.get("name", ""),
+                u.get("email", ""),
+            )
+            continue
+        active_users.append(u)
+
+    return active_users
