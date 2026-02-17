@@ -88,7 +88,7 @@ def main() -> None:
         memberships = list(
             memberships_api.get_workspace_memberships_for_workspace(
                 workspace_gid,
-                {"opt_fields": "is_active,is_guest,user.gid,user.name,user.email"},
+                {"opt_fields": "is_active,is_guest,user,user.name"},
             )
         )
     except ApiException as exc:

@@ -798,6 +798,9 @@ class TestGetActiveUserGids(unittest.TestCase):
         result = _get_active_user_gids(app, "workspace123")
 
         self.assertEqual(result, {"user1", "user3"})
+        mock_api_instance.get_workspace_memberships_for_workspace.assert_called_once_with(
+            "workspace123", {"opt_fields": "is_active,user"}
+        )
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
     def test_returns_none_on_api_error(self, mock_memberships_api):

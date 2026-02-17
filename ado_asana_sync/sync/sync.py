@@ -1034,7 +1034,7 @@ def _get_active_user_gids(app: App, asana_workspace_gid: str) -> set[str] | None
     """
     memberships_api = asana.WorkspaceMembershipsApi(app.asana_client)
     opts = {
-        "opt_fields": "is_active,user.gid",
+        "opt_fields": "is_active,user",
     }
     try:
         memberships = memberships_api.get_workspace_memberships_for_workspace(asana_workspace_gid, opts)
