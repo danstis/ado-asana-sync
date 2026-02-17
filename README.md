@@ -104,6 +104,16 @@ To test the application manually, you can use the following steps:
 1. Reset approval and ensure the reviewer's task is reopened.
 1. Complete/abandon the PR and ensure all reviewer tasks are closed.
 
+#### Validating Asana User Status
+
+A validation script is included to verify which workspace users are active, inactive, or missing memberships:
+
+```bash
+uv run python scripts/validate_asana_users.py
+```
+
+This requires `ASANA_TOKEN` and `ASANA_WORKSPACE_NAME` to be set (via environment or `.env` file). The script compares the `/users` endpoint against workspace memberships and reports which users would be filtered out during sync.
+
 ### Reference
 
 #### ADO

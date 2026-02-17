@@ -8,7 +8,7 @@ from azure.devops.v7_0.work_item_tracking.models import WorkItem
 from ado_asana_sync.sync.sync import (
     DEFAULT_SYNC_THRESHOLD,
     ADOAssignedUser,
-    _get_deactivated_user_gids,
+    _get_active_user_gids,
     _parse_sync_threshold,
     cleanup_invalid_work_items,
     create_tag_if_not_existing,
@@ -779,12 +779,12 @@ class TestGetAsanaProjectTasks(unittest.TestCase):
         self.assertEqual(result, [])
 
 
-class TestGetDeactivatedUserGids(unittest.TestCase):
-    """Test _get_deactivated_user_gids function."""
+class TestGetActiveUserGids(unittest.TestCase):
+    """Test _get_active_user_gids function."""
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
-    def test_returns_deactivated_gids(self, mock_memberships_api):
-        """Test returns GIDs of deactivated users from workspace memberships."""
+    def test_returns_active_gids(self, mock_memberships_api):
+        """Test returns GIDs of active users from workspace memberships."""
         app = MagicMock()
         mock_api_instance = MagicMock()
         mock_memberships_api.return_value = mock_api_instance
@@ -795,25 +795,37 @@ class TestGetDeactivatedUserGids(unittest.TestCase):
             {"is_active": False, "user": {"gid": "user4"}},
         ]
 
-        result = _get_deactivated_user_gids(app, "workspace123")
+        result = _get_active_user_gids(app, "workspace123")
 
-        self.assertEqual(result, {"user2", "user4"})
+        self.assertEqual(result, {"user1", "user3"})
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
-    def test_returns_empty_set_on_api_error(self, mock_memberships_api):
-        """Test returns empty set when API call fails (graceful fallback)."""
+    def test_returns_none_on_api_error(self, mock_memberships_api):
+        """Test returns None when API call fails (signals fallback)."""
         app = MagicMock()
         mock_api_instance = MagicMock()
         mock_memberships_api.return_value = mock_api_instance
         mock_api_instance.get_workspace_memberships_for_workspace.side_effect = ApiException("API Error")
 
-        result = _get_deactivated_user_gids(app, "workspace123")
+        result = _get_active_user_gids(app, "workspace123")
 
-        self.assertEqual(result, set())
+        self.assertIsNone(result)
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
-    def test_returns_empty_set_when_all_active(self, mock_memberships_api):
-        """Test returns empty set when all users are active."""
+    def test_returns_none_on_unexpected_error(self, mock_memberships_api):
+        """Test returns None when an unexpected error occurs."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_memberships_api.return_value = mock_api_instance
+        mock_api_instance.get_workspace_memberships_for_workspace.side_effect = RuntimeError("boom")
+
+        result = _get_active_user_gids(app, "workspace123")
+
+        self.assertIsNone(result)
+
+    @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
+    def test_returns_all_gids_when_all_active(self, mock_memberships_api):
+        """Test returns all GIDs when all users are active."""
         app = MagicMock()
         mock_api_instance = MagicMock()
         mock_memberships_api.return_value = mock_api_instance
@@ -822,20 +834,36 @@ class TestGetDeactivatedUserGids(unittest.TestCase):
             {"is_active": True, "user": {"gid": "user2"}},
         ]
 
-        result = _get_deactivated_user_gids(app, "workspace123")
+        result = _get_active_user_gids(app, "workspace123")
 
-        self.assertEqual(result, set())
+        self.assertEqual(result, {"user1", "user2"})
+
+    @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
+    def test_skips_memberships_without_user_gid(self, mock_memberships_api):
+        """Test gracefully handles memberships with missing user data."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_memberships_api.return_value = mock_api_instance
+        mock_api_instance.get_workspace_memberships_for_workspace.return_value = [
+            {"is_active": True, "user": {"gid": "user1"}},
+            {"is_active": True, "user": {}},
+            {"is_active": True},
+        ]
+
+        result = _get_active_user_gids(app, "workspace123")
+
+        self.assertEqual(result, {"user1"})
 
 
 class TestGetAsanaUsers(unittest.TestCase):
     """Test get_asana_users function."""
 
-    @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
+    @patch("ado_asana_sync.sync.sync._get_active_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
-    def test_get_asana_users_success(self, mock_users_api, mock_get_deactivated):
+    def test_get_asana_users_success(self, mock_users_api, mock_get_active):
         """Test successful retrieval of Asana users when all are active."""
         app = MagicMock()
-        mock_get_deactivated.return_value = set()
+        mock_get_active.return_value = {"1", "2"}
 
         mock_api_instance = MagicMock()
         mock_users_api.return_value = mock_api_instance
@@ -877,12 +905,12 @@ class TestGetAsanaUsers(unittest.TestCase):
 
         self.assertEqual(result, [])
 
-    @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
+    @patch("ado_asana_sync.sync.sync._get_active_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
-    def test_get_asana_users_filters_deactivated_users(self, mock_users_api, mock_get_deactivated):
-        """Test that deactivated users are filtered out of the results."""
+    def test_get_asana_users_filters_deactivated_users(self, mock_users_api, mock_get_active):
+        """Test that users without active memberships are filtered out."""
         app = MagicMock()
-        mock_get_deactivated.return_value = {"user2"}
+        mock_get_active.return_value = {"user1"}  # Only user1 is active
 
         mock_api_instance = MagicMock()
         mock_users_api.return_value = mock_api_instance
@@ -896,12 +924,12 @@ class TestGetAsanaUsers(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["name"], "Active User")
 
-    @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
+    @patch("ado_asana_sync.sync.sync._get_active_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
-    def test_get_asana_users_includes_all_when_memberships_fail(self, mock_users_api, mock_get_deactivated):
+    def test_get_asana_users_includes_all_when_memberships_fail(self, mock_users_api, mock_get_active):
         """Test that all users are returned when membership lookup fails (graceful fallback)."""
         app = MagicMock()
-        mock_get_deactivated.return_value = set()  # Empty set on failure
+        mock_get_active.return_value = None  # None signals failure
 
         mock_api_instance = MagicMock()
         mock_users_api.return_value = mock_api_instance
@@ -914,12 +942,12 @@ class TestGetAsanaUsers(unittest.TestCase):
 
         self.assertEqual(len(result), 2)
 
-    @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
+    @patch("ado_asana_sync.sync.sync._get_active_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
-    def test_get_asana_users_includes_all_when_all_active(self, mock_users_api, mock_get_deactivated):
-        """Test that all users are returned when none are deactivated."""
+    def test_get_asana_users_includes_all_when_all_active(self, mock_users_api, mock_get_active):
+        """Test that all users are returned when all have active memberships."""
         app = MagicMock()
-        mock_get_deactivated.return_value = set()
+        mock_get_active.return_value = {"user1", "user2"}
 
         mock_api_instance = MagicMock()
         mock_users_api.return_value = mock_api_instance
@@ -932,12 +960,12 @@ class TestGetAsanaUsers(unittest.TestCase):
 
         self.assertEqual(len(result), 2)
 
-    @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
+    @patch("ado_asana_sync.sync.sync._get_active_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
-    def test_get_asana_users_filters_multiple_deactivated(self, mock_users_api, mock_get_deactivated):
-        """Test filtering when multiple users are deactivated."""
+    def test_get_asana_users_filters_multiple_deactivated(self, mock_users_api, mock_get_active):
+        """Test filtering when multiple users lack active memberships."""
         app = MagicMock()
-        mock_get_deactivated.return_value = {"user1", "user3"}
+        mock_get_active.return_value = {"user2"}  # Only user2 is active
 
         mock_api_instance = MagicMock()
         mock_users_api.return_value = mock_api_instance
@@ -951,6 +979,30 @@ class TestGetAsanaUsers(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["name"], "Active User")
+
+    @patch("ado_asana_sync.sync.sync._get_active_user_gids")
+    @patch("ado_asana_sync.sync.sync.asana.UsersApi")
+    def test_get_asana_users_filters_user_without_membership(self, mock_users_api, mock_get_active):
+        """Test that users present in /users but absent from memberships are filtered out."""
+        app = MagicMock()
+        # user3 appears in /users but has no workspace membership at all
+        mock_get_active.return_value = {"user1", "user2"}
+
+        mock_api_instance = MagicMock()
+        mock_users_api.return_value = mock_api_instance
+        mock_api_instance.get_users.return_value = [
+            {"gid": "user1", "name": "Active 1", "email": "a1@example.com"},
+            {"gid": "user2", "name": "Active 2", "email": "a2@example.com"},
+            {"gid": "user3", "name": "Removed User", "email": "removed@example.com"},
+        ]
+
+        result = get_asana_users(app, "workspace123")
+
+        self.assertEqual(len(result), 2)
+        names = [u["name"] for u in result]
+        self.assertIn("Active 1", names)
+        self.assertIn("Active 2", names)
+        self.assertNotIn("Removed User", names)
 
 
 class TestCleanupInvalidWorkItems(unittest.TestCase):
