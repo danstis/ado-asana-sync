@@ -1034,7 +1034,7 @@ def _get_active_user_gids(app: App, asana_workspace_gid: str) -> set[str] | None
     """
     memberships_api = asana.WorkspaceMembershipsApi(app.asana_client)
     opts = {
-        "opt_fields": "is_active,user.gid",
+        "opt_fields": "is_active,is_guest,user",
     }
     try:
         memberships = memberships_api.get_workspace_memberships_for_workspace(asana_workspace_gid, opts)
@@ -1046,8 +1046,13 @@ def _get_active_user_gids(app: App, asana_workspace_gid: str) -> set[str] | None
                 continue
             if m.get("is_active") is False:
                 _LOGGER.debug("Workspace membership inactive for user GID: %s", user_gid)
-            else:
-                active.add(user_gid)
+                continue
+
+            if m.get("is_guest") is True:
+                _LOGGER.debug("Skipping guest workspace membership for user GID: %s", user_gid)
+                continue
+
+            active.add(user_gid)
         return active
     except ApiException as exception:
         _LOGGER.warning(
