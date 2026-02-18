@@ -793,14 +793,30 @@ class TestGetActiveUserGids(unittest.TestCase):
             {"is_active": False, "user": {"gid": "user2"}},
             {"is_active": True, "user": {"gid": "user3"}},
             {"is_active": False, "user": {"gid": "user4"}},
+            {"is_active": True, "is_guest": True, "user": {"gid": "user5"}},
         ]
 
         result = _get_active_user_gids(app, "workspace123")
 
         self.assertEqual(result, {"user1", "user3"})
         mock_api_instance.get_workspace_memberships_for_workspace.assert_called_once_with(
-            "workspace123", {"opt_fields": "is_active,user"}
+            "workspace123", {"opt_fields": "is_active,is_guest,user"}
         )
+
+    @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
+    def test_excludes_guest_memberships(self, mock_memberships_api):
+        """Test guest memberships are excluded from active user GIDs."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_memberships_api.return_value = mock_api_instance
+        mock_api_instance.get_workspace_memberships_for_workspace.return_value = [
+            {"is_active": True, "is_guest": False, "user": {"gid": "user1"}},
+            {"is_active": True, "is_guest": True, "user": {"gid": "user2"}},
+        ]
+
+        result = _get_active_user_gids(app, "workspace123")
+
+        self.assertEqual(result, {"user1"})
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
     def test_returns_none_on_api_error(self, mock_memberships_api):

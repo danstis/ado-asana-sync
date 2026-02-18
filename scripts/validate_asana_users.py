@@ -3,7 +3,7 @@
 This script compares the ``/users`` endpoint against workspace memberships and
 reports:
 
-- Users returned by ``/users`` who have an active membership
+- Users returned by ``/users`` who have an active, non-guest membership
 - Users returned by ``/users`` who are marked inactive (``is_active: false``)
 - Users returned by ``/users`` who have no workspace membership at all
 
@@ -160,16 +160,19 @@ def main() -> None:
 
     # Build lookup of membership status by user GID
     membership_status: dict[str, bool] = {}
+    membership_is_guest: dict[str, bool] = {}
     membership_details: dict[str, dict[str, Any]] = {}
     for membership in memberships:
         user_obj = membership.get("user") or {}
         gid = user_obj.get("gid")
         if gid:
             membership_status[gid] = membership.get("is_active", True)
+            membership_is_guest[gid] = membership.get("is_guest", False)
             membership_details[gid] = membership
 
     # ---- Classify users ----
     active_users: list[dict[str, Any]] = []
+    guest_users: list[dict[str, Any]] = []
     inactive_users: list[dict[str, Any]] = []
     no_membership_users: list[dict[str, Any]] = []
 
@@ -179,13 +182,21 @@ def main() -> None:
             no_membership_users.append(user)
         elif membership_status[gid] is False:
             inactive_users.append(user)
+        elif membership_is_guest.get(gid, False):
+            guest_users.append(user)
         else:
             active_users.append(user)
 
     # ---- Report ----
-    print(f"\n{'ACTIVE users':30s}: {len(active_users)}")
+    print(f"\n{'ACTIVE users (non-guest)':30s}: {len(active_users)}")
+    print(f"{'GUEST users (is_guest=true)':30s}: {len(guest_users)}")
     print(f"{'INACTIVE users (is_active=false)':30s}: {len(inactive_users)}")
     print(f"{'Users with NO membership':30s}: {len(no_membership_users)}")
+
+    if guest_users:
+        print("\n--- GUEST users (is_guest: true) ---")
+        for user in guest_users:
+            print(f"  {_format_user(user)}")
 
     if inactive_users:
         print("\n--- INACTIVE users (is_active: false) ---")
@@ -229,9 +240,12 @@ def main() -> None:
                 print(f"  ... and {len(candidates) - 20} more")
 
     # Summary
-    would_be_filtered = len(inactive_users) + len(no_membership_users)
+    would_be_filtered = len(guest_users) + len(inactive_users) + len(no_membership_users)
     print("\n" + "=" * 70)
-    print(f"With the whitelist approach, {would_be_filtered} user(s) would be filtered out of sync.")
+    print(
+        f"With the whitelist approach, {would_be_filtered} user(s) would be filtered out "
+        "of sync (guests, inactive, or no membership)."
+    )
     if would_be_filtered == 0:
         print("All users returned by /users have active workspace memberships.")
         print(

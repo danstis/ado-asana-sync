@@ -106,7 +106,7 @@ To test the application manually, you can use the following steps:
 
 #### Validating Asana User Status
 
-A validation script is included to verify which workspace users are active, inactive, or missing memberships:
+A validation script is included to verify which workspace users are active (non-guest), guest, inactive, or missing memberships:
 
 ```bash
 uv run python scripts/validate_asana_users.py
