@@ -114,6 +114,12 @@ uv run python scripts/validate_asana_users.py
 
 This requires `ASANA_TOKEN` and `ASANA_WORKSPACE_NAME` to be set (via environment or `.env` file). The script compares the `/users` endpoint against workspace memberships and reports which users would be filtered out during sync.
 
+If your Admin Console shows users as **Removed** but they do not appear in `/users` or memberships, you can optionally probe Audit Log events (enterprise admin tokens) to surface recent user removal/deprovision activity:
+
+```bash
+ASANA_VALIDATE_AUDIT_LOG=1 uv run python scripts/validate_asana_users.py
+```
+
 ### Reference
 
 #### ADO
