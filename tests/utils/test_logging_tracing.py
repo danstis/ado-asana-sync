@@ -1,7 +1,7 @@
 import logging
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from opentelemetry import trace
 
@@ -10,6 +10,7 @@ from ado_asana_sync.utils.logging_tracing import (
     TELEMETRY_LOGGER_NAMES,
     TelemetrySamplingFilter,
     _get_sampling_rate,
+    attach_filter_to_telemetry_handlers,
     configure_telemetry_loggers,
     get_telemetry_filter,
     setup_logging_and_tracing,
@@ -22,15 +23,19 @@ class TestLoggingTracing(unittest.TestCase):
         self.assertIsInstance(logger, logging.Logger)
         self.assertIsInstance(tracer, trace.Tracer)
 
-    def test_setup_logging_and_tracing_configures_telemetry_loggers(self):
-        """Verify that telemetry loggers are configured after setup."""
-        setup_logging_and_tracing(__name__)
-
-        for logger_name in TELEMETRY_LOGGER_NAMES:
-            logger = logging.getLogger(logger_name)
-            # Check that sampling filter is applied
-            filter_types = [type(f).__name__ for f in logger.filters]
-            self.assertIn("TelemetrySamplingFilter", filter_types)
+    def test_setup_logging_and_tracing_configures_telemetry_logger_levels(self):
+        """Verify that telemetry loggers have their levels set after setup."""
+        original_levels = {name: logging.getLogger(name).level for name in TELEMETRY_LOGGER_NAMES}
+        try:
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("APPINSIGHTS_LOGLEVEL", None)
+                setup_logging_and_tracing(__name__)
+            for logger_name in TELEMETRY_LOGGER_NAMES:
+                logger = logging.getLogger(logger_name)
+                self.assertEqual(logger.level, logging.WARNING)
+        finally:
+            for name, level in original_levels.items():
+                logging.getLogger(name).setLevel(level)
 
 
 class TestGetSamplingRate(unittest.TestCase):
@@ -174,36 +179,17 @@ class TestTelemetrySamplingFilter(unittest.TestCase):
 
 class TestConfigureTelemetryLoggers(unittest.TestCase):
     def setUp(self):
-        """Save filters from telemetry loggers before each test."""
-        self.original_filters = {}
+        """Save level state from telemetry loggers before each test."""
         self.original_levels = {}
         for logger_name in TELEMETRY_LOGGER_NAMES:
             logger = logging.getLogger(logger_name)
-            self.original_filters[logger_name] = list(logger.filters)
             self.original_levels[logger_name] = logger.level
             self.addCleanup(self.restore_logger_state, logger_name)
 
     def restore_logger_state(self, logger_name):
-        """Restore filters and level for a logger."""
+        """Restore level for a logger."""
         logger = logging.getLogger(logger_name)
-        logger.filters = self.original_filters[logger_name]
         logger.setLevel(self.original_levels[logger_name])
-
-    def test_applies_sampling_filter_to_azure_logger(self):
-        """Sampling filter is applied to azure logger."""
-        configure_telemetry_loggers()
-
-        azure_logger = logging.getLogger("azure")
-        filter_types = [type(f).__name__ for f in azure_logger.filters]
-        self.assertIn("TelemetrySamplingFilter", filter_types)
-
-    def test_applies_sampling_filter_to_opentelemetry_logger(self):
-        """Sampling filter is applied to opentelemetry logger."""
-        configure_telemetry_loggers()
-
-        otel_logger = logging.getLogger("opentelemetry")
-        filter_types = [type(f).__name__ for f in otel_logger.filters]
-        self.assertIn("TelemetrySamplingFilter", filter_types)
 
     def test_sets_telemetry_logger_level_to_warning_by_default(self):
         """Telemetry loggers default to WARNING level."""
@@ -224,15 +210,104 @@ class TestConfigureTelemetryLoggers(unittest.TestCase):
             azure_logger = logging.getLogger("azure")
             self.assertEqual(azure_logger.level, logging.DEBUG)
 
-    def test_does_not_duplicate_filters(self):
-        """Filter is not added multiple times."""
-        configure_telemetry_loggers()
-        configure_telemetry_loggers()
-        configure_telemetry_loggers()
+    def test_sets_level_on_all_telemetry_loggers(self):
+        """All telemetry loggers get their level set."""
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("APPINSIGHTS_LOGLEVEL", None)
+            configure_telemetry_loggers()
 
-        azure_logger = logging.getLogger("azure")
-        filter_count = sum(1 for f in azure_logger.filters if isinstance(f, TelemetrySamplingFilter))
-        self.assertEqual(filter_count, 1)
+            for logger_name in TELEMETRY_LOGGER_NAMES:
+                logger = logging.getLogger(logger_name)
+                self.assertEqual(logger.level, logging.WARNING, f"{logger_name} logger level not set correctly")
+
+    def test_does_not_attach_filter_to_loggers(self):
+        """configure_telemetry_loggers does NOT attach sampling filter to loggers (filter goes on handler instead)."""
+        original_filters = {}
+        for logger_name in TELEMETRY_LOGGER_NAMES:
+            logger = logging.getLogger(logger_name)
+            original_filters[logger_name] = list(logger.filters)
+            logger.filters = []
+
+        try:
+            configure_telemetry_loggers()
+
+            for logger_name in TELEMETRY_LOGGER_NAMES:
+                logger = logging.getLogger(logger_name)
+                filter_types = [type(f).__name__ for f in logger.filters]
+                self.assertNotIn("TelemetrySamplingFilter", filter_types, f"Filter should NOT be on {logger_name} logger")
+        finally:
+            for logger_name in TELEMETRY_LOGGER_NAMES:
+                logger = logging.getLogger(logger_name)
+                logger.filters = original_filters[logger_name]
+
+
+class TestAttachFilterToTelemetryHandlers(unittest.TestCase):
+    def _make_mock_logging_handler(self):
+        """Create a mock that passes isinstance check for LoggingHandler."""
+        try:
+            from opentelemetry.sdk._logs._internal import LoggingHandler
+
+            handler = MagicMock(spec=LoggingHandler)
+            handler.filters = []
+
+            def add_filter(f):
+                handler.filters.append(f)
+
+            handler.addFilter.side_effect = add_filter
+            return handler
+        except ImportError:
+            return None
+
+    def test_attaches_filter_to_logging_handler(self):
+        """Filter is added to OpenTelemetry LoggingHandler on root logger."""
+        try:
+            from opentelemetry.sdk._logs._internal import LoggingHandler  # noqa: F401
+        except ImportError:
+            self.skipTest("opentelemetry.sdk not available")
+
+        mock_handler = self._make_mock_logging_handler()
+        original_handlers = logging.root.handlers[:]
+        logging.root.handlers = [mock_handler]
+        try:
+            attach_filter_to_telemetry_handlers()
+            self.assertEqual(len(mock_handler.filters), 1)
+            self.assertIsInstance(mock_handler.filters[0], TelemetrySamplingFilter)
+        finally:
+            logging.root.handlers = original_handlers
+
+    def test_idempotent_does_not_duplicate_filter(self):
+        """Calling twice does not add the filter more than once."""
+        try:
+            from opentelemetry.sdk._logs._internal import LoggingHandler  # noqa: F401
+        except ImportError:
+            self.skipTest("opentelemetry.sdk not available")
+
+        mock_handler = self._make_mock_logging_handler()
+        original_handlers = logging.root.handlers[:]
+        logging.root.handlers = [mock_handler]
+        try:
+            attach_filter_to_telemetry_handlers()
+            attach_filter_to_telemetry_handlers()
+            count = sum(1 for f in mock_handler.filters if isinstance(f, TelemetrySamplingFilter))
+            self.assertEqual(count, 1)
+        finally:
+            logging.root.handlers = original_handlers
+
+    def test_noop_when_no_logging_handler_on_root(self):
+        """No error when root logger has no OpenTelemetry LoggingHandler."""
+        plain_handler = logging.StreamHandler()
+        original_handlers = logging.root.handlers[:]
+        logging.root.handlers = [plain_handler]
+        try:
+            attach_filter_to_telemetry_handlers()
+            self.assertEqual(len(plain_handler.filters), 0)
+        finally:
+            logging.root.handlers = original_handlers
+
+    def test_graceful_when_import_fails(self):
+        """Returns without error when opentelemetry.sdk._logs._internal is unavailable."""
+        with patch.dict("sys.modules", {"opentelemetry.sdk._logs._internal": None}):
+            attach_filter_to_telemetry_handlers()
 
 
 class TestGetTelemetryFilter(unittest.TestCase):

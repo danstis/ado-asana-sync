@@ -29,7 +29,6 @@ Telemetry Sampling:
 import logging
 import os
 import random
-from typing import Optional
 
 from opentelemetry import trace
 
@@ -84,7 +83,7 @@ class TelemetrySamplingFilter(logging.Filter):
     testing via the `set_random_seed` method.
     """
 
-    def __init__(self, name: str = "", sampling_rates: Optional[dict[int, float]] = None):
+    def __init__(self, name: str = "", sampling_rates: dict[int, float] | None = None):
         """
         Initialize the sampling filter.
 
@@ -133,41 +132,57 @@ class TelemetrySamplingFilter(logging.Filter):
         return self._random.random() < rate
 
 
-# Global filter instance for telemetry loggers
-_telemetry_filter: Optional[TelemetrySamplingFilter] = None
+# Global filter instance — eagerly initialized for thread-safety
+_telemetry_filter = TelemetrySamplingFilter()
 
 
 def get_telemetry_filter() -> TelemetrySamplingFilter:
-    """
-    Get or create the global telemetry sampling filter.
-
-    Returns:
-        The global TelemetrySamplingFilter instance
-    """
-    global _telemetry_filter
-    if _telemetry_filter is None:
-        _telemetry_filter = TelemetrySamplingFilter()
+    """Get the global telemetry sampling filter instance."""
     return _telemetry_filter
 
 
 def configure_telemetry_loggers() -> None:
     """
-    Configure telemetry loggers with sampling filter and appropriate log level.
+    Configure telemetry loggers with appropriate log level.
 
-    This applies the sampling filter and APPINSIGHTS_LOGLEVEL to all telemetry
-    logger namespaces (azure, opentelemetry) to reduce Application Insights
-    ingestion volume while preserving error/critical events.
+    This applies APPINSIGHTS_LOGLEVEL to all telemetry logger namespaces
+    (azure, opentelemetry). Level inheritance IS effective for child loggers,
+    so setting the parent logger level is sufficient to suppress verbose output.
+
+    Note: The sampling filter is NOT attached to individual loggers here because
+    Python's logging propagation does not apply parent logger filters to
+    propagated records from child loggers. Instead, call
+    attach_filter_to_telemetry_handlers() after configure_azure_monitor() to
+    attach the filter directly to the OpenTelemetry LoggingHandler on the root
+    logger, which processes all records regardless of origin.
     """
     appinsights_loglevel = os.environ.get("APPINSIGHTS_LOGLEVEL", "WARNING").upper()
     telemetry_level = getattr(logging, appinsights_loglevel, logging.WARNING)
-    sampling_filter = get_telemetry_filter()
 
     for logger_name in TELEMETRY_LOGGER_NAMES:
         logger = logging.getLogger(logger_name)
         logger.setLevel(telemetry_level)
-        # Add filter if not already present
-        if sampling_filter not in logger.filters:
-            logger.addFilter(sampling_filter)
+
+
+def attach_filter_to_telemetry_handlers() -> None:
+    """Attach sampling filter to OpenTelemetry logging handlers on the root logger.
+
+    Must be called AFTER configure_azure_monitor() has been called, as it searches
+    the root logger's handlers for the OpenTelemetry LoggingHandler installed by
+    Azure Monitor.
+
+    Records from child loggers (e.g. azure.core.http) bypass parent logger filters
+    during propagation, so the filter must be attached to the handler that processes
+    all records — the LoggingHandler on the root logger.
+    """
+    try:
+        from opentelemetry.sdk._logs._internal import LoggingHandler  # type: ignore[import-untyped]
+    except ImportError:
+        return
+    sampling_filter = get_telemetry_filter()
+    for handler in logging.root.handlers:
+        if isinstance(handler, LoggingHandler) and sampling_filter not in handler.filters:
+            handler.addFilter(sampling_filter)
 
 
 def setup_logging_and_tracing(module_name: str):

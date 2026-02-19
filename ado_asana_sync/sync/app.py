@@ -18,6 +18,7 @@ from azure.monitor.opentelemetry import configure_azure_monitor
 from msrest.authentication import BasicAuthentication
 
 from ado_asana_sync.database import Database, DatabaseTable
+from ado_asana_sync.utils.logging_tracing import attach_filter_to_telemetry_handlers
 
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
@@ -152,6 +153,7 @@ class App:
             },
         )
         _LOGGER.info("Azure Monitor configured with %.1f%% trace sampling", self.trace_sampling_percentage * 100)
+        attach_filter_to_telemetry_handlers()
         # Setup SQLite database.
         _LOGGER.debug("Opening local database")
         data_dir = os.path.join(os.path.dirname(__package__), "data")
