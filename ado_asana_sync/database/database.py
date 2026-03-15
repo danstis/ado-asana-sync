@@ -430,13 +430,29 @@ class Database:
 
             # Insert new projects
             for project in projects_data:
-                conn.execute(
-                    """
-                    INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
-                    VALUES (?, ?, ?)
-                """,
-                    (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
-                )
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                        VALUES (?, ?, ?)
+                    """,
+                        (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    if "UNIQUE constraint failed: projects.ado_project_name" not in str(exc):
+                        raise
+
+                    conflicting_projects = [
+                        f"{project_item['adoProjectName']} (Team: {project_item['adoTeamName']})"
+                        for project_item in projects_data
+                        if project_item["adoProjectName"] == project["adoProjectName"]
+                    ]
+                    project_list = ", ".join(conflicting_projects) or project["adoProjectName"]
+                    raise ValueError(
+                        "Duplicate ADO project name found while syncing projects.json for "
+                        f"{project_list}. The database still appears to use the legacy "
+                        "single-project unique constraint on ado_project_name."
+                    ) from exc
 
             _LOGGER.info("Synced %d projects to database", len(projects_data))
 
