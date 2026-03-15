@@ -22,6 +22,7 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     is_item_older_than_threshold,
     matching_user,
+    process_backlog_item,
     read_projects,
     remove_mapping,
     sync_item_and_children,
@@ -837,7 +838,7 @@ class TestGetAsanaUsers(unittest.TestCase):
     @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
     def test_get_asana_users_success(self, mock_users_api, mock_get_deactivated):
-        """Test successful retrieval of Asana users."""
+        """Test successful retrieval of Asana users when all are active."""
         app = MagicMock()
         mock_get_deactivated.return_value = set()
 
