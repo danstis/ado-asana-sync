@@ -292,6 +292,24 @@ class TestDatabaseMigration(unittest.TestCase):
 
         db.close()
 
+    def test_duplicate_project_team_combination_reports_each_duplicate_once(self):
+        """Test that repeated duplicate entries are reported once to keep the error concise."""
+        projects_data = [
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1"},
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1-Duplicate1"},
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1-Duplicate2"},
+        ]
+
+        db = Database(self.db_path)
+
+        with self.assertRaises(ValueError) as cm:
+            db.sync_projects_from_json(projects_data)
+
+        error_msg = str(cm.exception)
+        self.assertEqual(error_msg.count("TestProject (Team: Team1)"), 1)
+
+        db.close()
+
     def test_legacy_project_unique_constraint_lists_duplicate_project_details(self):
         """Test that old single-column project constraints report the duplicate project clearly."""
         projects_data = [
