@@ -441,6 +441,15 @@ def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asan
     return processed_ids
 
 
+def process_backlog_item(app, ado_item_batch, asana_users, asana_project_tasks, asana_project):
+    """
+    Backwards-compatible wrapper for the older API name `process_backlog_item` used in tests.
+
+    Delegates to `process_backlog_items` which handles a batch of ADO backlog items.
+    """
+    return process_backlog_items(app, ado_item_batch, asana_users, asana_project_tasks, asana_project)
+
+
 def extract_due_date_from_ado(ado_work_item) -> str | None:
     """
     Extract due date from ADO work item and convert to YYYY-MM-DD format.
