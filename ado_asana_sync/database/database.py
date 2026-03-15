@@ -412,12 +412,18 @@ class Database:
         """Sync projects from JSON data into the projects table."""
         # Check for duplicates before DB operations to provide better error messages
         seen = set()
+        duplicate_keys = set()
         duplicates = []
+        project_entries_by_name: Dict[str, List[str]] = {}
         for project in projects_data:
             key = (project["adoProjectName"], project["adoTeamName"])
-            if key in seen:
+            if key in seen and key not in duplicate_keys:
                 duplicates.append(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
+                duplicate_keys.add(key)
             seen.add(key)
+            project_entries_by_name.setdefault(project["adoProjectName"], []).append(
+                f"{project['adoProjectName']} (Team: {project['adoTeamName']})"
+            )
 
         if duplicates:
             error_msg = f"Duplicate project configuration found in projects.json for: {', '.join(duplicates)}"
@@ -430,15 +436,45 @@ class Database:
 
             # Insert new projects
             for project in projects_data:
-                conn.execute(
-                    """
-                    INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
-                    VALUES (?, ?, ?)
-                """,
-                    (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
-                )
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
+                        VALUES (?, ?, ?)
+                    """,
+                        (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    if not self._is_legacy_project_name_unique_constraint(conn, exc):
+                        raise
+
+                    conflicting_projects = project_entries_by_name.get(project["adoProjectName"], [])
+                    project_list = ", ".join(conflicting_projects) or project["adoProjectName"]
+                    raise ValueError(
+                        "Duplicate ADO project name found while syncing projects.json for "
+                        f"{project_list}. The database still appears to use the legacy "
+                        "single-project unique constraint on ado_project_name."
+                    ) from exc
 
             _LOGGER.info("Synced %d projects to database", len(projects_data))
+
+    def _is_legacy_project_name_unique_constraint(self, conn: sqlite3.Connection, exc: sqlite3.IntegrityError) -> bool:
+        """Return True when the database still uses the old unique constraint on ado_project_name."""
+        if getattr(exc, "sqlite_errorcode", None) != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+            return False
+
+        cursor = conn.execute("PRAGMA index_list(projects)")
+        for index in cursor.fetchall():
+            if not index["unique"]:
+                continue
+
+            index_name = index["name"]
+            index_columns = conn.execute(f"PRAGMA index_info('{index_name}')").fetchall()
+            column_names = [column["name"] for column in index_columns]
+            if column_names == ["ado_project_name"]:
+                return True
+
+        return False
 
     def get_projects(self) -> List[Dict[str, str]]:
         """Get all projects from the database."""

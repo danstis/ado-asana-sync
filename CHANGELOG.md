@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Project Sync Errors**: Improved duplicate project constraint errors during `projects.json` sync
+  - Legacy single-column project constraints now report the duplicate ADO project name directly
+  - Error messages include the conflicting project/team entries to speed up configuration fixes
 - **Pull Request Approval Detection**: Fixed reviewer approval status not properly closing Asana tasks
   - Now correctly handles both "approved" and "approvedWithSuggestions" votes
   - Properly maps ADO integer vote values (10, 5, 0, -5, -10) to string equivalents

@@ -292,6 +292,58 @@ class TestDatabaseMigration(unittest.TestCase):
 
         db.close()
 
+    def test_duplicate_project_team_combination_reports_each_duplicate_once(self):
+        """Test that repeated duplicate entries are reported once to keep the error concise."""
+        projects_data = [
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1"},
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1-Duplicate1"},
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1-Duplicate2"},
+        ]
+
+        db = Database(self.db_path)
+
+        with self.assertRaises(ValueError) as cm:
+            db.sync_projects_from_json(projects_data)
+
+        error_msg = str(cm.exception)
+        self.assertEqual(error_msg.count("TestProject (Team: Team1)"), 1)
+
+        db.close()
+
+    def test_legacy_project_unique_constraint_lists_duplicate_project_details(self):
+        """Test that old single-column project constraints report the duplicate project clearly."""
+        projects_data = [
+            {"adoProjectName": "TestProject", "adoTeamName": "Team1", "asanaProjectName": "TestProject-Team1"},
+            {"adoProjectName": "TestProject", "adoTeamName": "Team2", "asanaProjectName": "TestProject-Team2"},
+        ]
+
+        db = Database(self.db_path)
+
+        with db.get_connection() as conn:
+            conn.execute("DROP TABLE IF EXISTS projects")
+            conn.execute("""
+                CREATE TABLE projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ado_project_name TEXT NOT NULL UNIQUE,
+                    ado_team_name TEXT NOT NULL,
+                    asana_project_name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+        with self.assertRaises(ValueError) as cm:
+            db.sync_projects_from_json(projects_data)
+
+        error_msg = str(cm.exception)
+        self.assertIn("Duplicate ADO project name found", error_msg)
+        self.assertIn("TestProject", error_msg)
+        self.assertIn("Team1", error_msg)
+        self.assertIn("Team2", error_msg)
+        self.assertIn("legacy single-project unique constraint", error_msg)
+
+        db.close()
+
     def test_migration_from_old_schema(self):
         """Test migration from old single-column unique constraint to new composite constraint."""
         # This test is now covered by test_schema_versioning_old_database_migration
