@@ -24,6 +24,13 @@ This project aims to synchronize work items and pull requests between Azure DevO
   - `SYNC_THRESHOLD` - Number of days to continue syncing closed tasks before removing their mappings (default: 30). Must be a non-negative integer.
   - `SLEEP_TIME` - Duration in seconds to sleep between sync runs. Must be a positive integer.
   - `SYNCED_TAG_NAME` - Name of the tag in Asana to append to all synced items. Must be a valid Asana tag name.
+  - `LOGLEVEL` - Console log level (default: INFO). Controls what is shown in the terminal.
+  - `APPINSIGHTS_LOGLEVEL` - Application Insights log level (default: WARNING). Controls minimum level sent to telemetry.
+  - `APPINSIGHTS_SAMPLE_DEBUG` - Sampling rate for DEBUG logs sent to telemetry (default: 0.05 = 5%).
+  - `APPINSIGHTS_SAMPLE_INFO` - Sampling rate for INFO logs sent to telemetry (default: 0.05 = 5%).
+  - `APPINSIGHTS_SAMPLE_WARNING` - Sampling rate for WARNING logs sent to telemetry (default: 1.0 = 100%).
+  - `APPINSIGHTS_SAMPLE_ERROR` - Sampling rate for ERROR logs sent to telemetry (default: 1.0 = 100%).
+  - `APPINSIGHTS_SAMPLE_CRITICAL` - Sampling rate for CRITICAL logs sent to telemetry (default: 1.0 = 100%).
 - Run the container with the configured environment variables.
 - The application will start syncing work items and pull requests between ADO and Asana based on the configured settings.
 

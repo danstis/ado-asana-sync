@@ -25,12 +25,12 @@ jobs:
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
       - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v4.2.0
+        uses: gittools/actions/gitversion/setup@v4.3.3
         with:
           versionSpec: "6.x"
       - name: Use GitVersion
         id: gitversion # step id used as reference for output values
-        uses: gittools/actions/gitversion/execute@v4.2.0
+        uses: gittools/actions/gitversion/execute@v4.3.3
       - name: Create annotation for build error
         run: |
           echo "::notice::FullSemVer ${{ steps.gitversion.outputs.FullSemVer }}"
@@ -53,7 +53,7 @@ jobs:
         run: uv sync --dev
       - name: Test with pytest
         run: uv run test
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: test-output
           path: coverage.xml
@@ -89,7 +89,7 @@ jobs:
           output-file: hadolint.out
           format: json
           failure-threshold: ignore
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: test-output
       - name: SonarCloud Scan
