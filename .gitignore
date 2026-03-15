@@ -116,3 +116,4 @@ data/
 .quint/quint.db
 .quint/state.json
 .auto-claude
+.omc
