@@ -417,10 +417,9 @@ class Database:
         project_entries_by_name: Dict[str, List[str]] = {}
         for project in projects_data:
             key = (project["adoProjectName"], project["adoTeamName"])
-            if key in seen:
-                if key not in duplicate_keys:
-                    duplicates.append(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
-                    duplicate_keys.add(key)
+            if key in seen and key not in duplicate_keys:
+                duplicates.append(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
+                duplicate_keys.add(key)
             seen.add(key)
             project_entries_by_name.setdefault(project["adoProjectName"], []).append(
                 f"{project['adoProjectName']} (Team: {project['adoTeamName']})"
