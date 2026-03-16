@@ -11,6 +11,7 @@ dependencies = [
     "asana>=5.0.3",
     "azure-devops>=7.1.0b3",
     "azure-monitor-opentelemetry>=1.0.0",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [dependency-groups]
@@ -21,6 +22,7 @@ dev = [
     "pytest>=7.4,<10.0",
     "mdformat>=0.7.0",
     "mdformat-gfm>=0.3,<1.1",
+    "types-python-dateutil>=2.9.0.20260305",
 ]
 
 [tool.ruff]

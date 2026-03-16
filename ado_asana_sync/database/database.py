@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 _LOGGER = logging.getLogger(__name__)
 
 # Current database schema version
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 class DatabaseTable:
@@ -250,6 +250,8 @@ class Database:
                     ado_project_name TEXT NOT NULL,
                     ado_team_name TEXT NOT NULL,
                     asana_project_name TEXT NOT NULL,
+                    last_sync_at TEXT,
+                    last_full_sync_at TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(ado_project_name, ado_team_name)
@@ -323,15 +325,20 @@ class Database:
             self._migrate_to_version_2(conn)
             self._record_migration(conn, 2, "Add composite unique constraint for projects table")
 
-        # Future migrations would be added here:
-        # if current_version < 3:
-        #     self._migrate_to_version_3(conn)
-        #     self._record_migration(conn, 3, "Description of version 3 migration")
+        if current_version < 3:
+            self._migrate_to_version_3(conn)
+            self._record_migration(conn, 3, "Add sync checkpoint columns to projects table")
 
     def get_current_schema_version(self) -> int:
         """Get the current schema version from the database."""
         with self.get_connection() as conn:
             return self.get_schema_version(conn)
+
+    def _migrate_to_version_3(self, conn):
+        """Migrate to version 3: add sync checkpoint columns to projects table."""
+        conn.execute("ALTER TABLE projects ADD COLUMN last_sync_at TEXT")
+        conn.execute("ALTER TABLE projects ADD COLUMN last_full_sync_at TEXT")
+        _LOGGER.info("Added last_sync_at and last_full_sync_at columns to projects table")
 
     def _migrate_to_version_2(self, conn):
         """Migrate to version 2: composite unique constraint for projects."""
@@ -408,6 +415,35 @@ class Database:
         """Get a table interface."""
         return DatabaseTable(self, table_name)
 
+    def get_sync_checkpoint(self, ado_project_name: str, ado_team_name: str) -> dict:
+        """Get the sync checkpoint for a project."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT last_sync_at, last_full_sync_at FROM projects WHERE ado_project_name = ? AND ado_team_name = ?",
+                (ado_project_name, ado_team_name),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return {"last_sync_at": None, "last_full_sync_at": None}
+            return {"last_sync_at": row[0], "last_full_sync_at": row[1]}
+
+    def set_sync_checkpoint(
+        self, ado_project_name: str, ado_team_name: str, run_started_at: str, full_scan: bool = False
+    ) -> None:
+        """Set the sync checkpoint for a project."""
+        with self.get_connection() as conn:
+            if full_scan:
+                conn.execute(
+                    "UPDATE projects SET last_sync_at = ?, last_full_sync_at = ?"
+                    " WHERE ado_project_name = ? AND ado_team_name = ?",
+                    (run_started_at, run_started_at, ado_project_name, ado_team_name),
+                )
+            else:
+                conn.execute(
+                    "UPDATE projects SET last_sync_at = ? WHERE ado_project_name = ? AND ado_team_name = ?",
+                    (run_started_at, ado_project_name, ado_team_name),
+                )
+
     def sync_projects_from_json(self, projects_data: List[Dict[str, str]]) -> None:
         """Sync projects from JSON data into the projects table."""
         # Check for duplicates before DB operations to provide better error messages
@@ -430,22 +466,33 @@ class Database:
             _LOGGER.error(error_msg)
             raise ValueError(error_msg)
 
-        with self.get_connection() as conn:
-            # Clear existing projects
-            conn.execute("DELETE FROM projects")
+        incoming_keys = {(p["adoProjectName"], p["adoTeamName"]) for p in projects_data}
 
-            # Insert new projects
+        with self.get_connection() as conn:
+            # Upsert each project (preserves last_sync_at and last_full_sync_at)
             for project in projects_data:
                 try:
                     conn.execute(
                         """
                         INSERT INTO projects (ado_project_name, ado_team_name, asana_project_name)
                         VALUES (?, ?, ?)
-                    """,
+                        ON CONFLICT(ado_project_name, ado_team_name)
+                        DO UPDATE SET asana_project_name=excluded.asana_project_name, updated_at=CURRENT_TIMESTAMP
+                        """,
                         (project["adoProjectName"], project["adoTeamName"], project["asanaProjectName"]),
                     )
-                except sqlite3.IntegrityError as exc:
-                    if not self._is_legacy_project_name_unique_constraint(conn, exc):
+                except (sqlite3.IntegrityError, sqlite3.OperationalError) as exc:
+                    # OperationalError: legacy table lacks the composite unique constraint needed
+                    # for ON CONFLICT targeting.  IntegrityError: duplicate key violation.
+                    is_legacy = (
+                        isinstance(exc, sqlite3.OperationalError)
+                        and ("ON CONFLICT clause does not match" in str(exc))
+                        or (
+                            isinstance(exc, sqlite3.IntegrityError)
+                            and self._is_legacy_project_name_unique_constraint(conn, exc)
+                        )
+                    )
+                    if not is_legacy:
                         raise
 
                     conflicting_projects = project_entries_by_name.get(project["adoProjectName"], [])
@@ -455,6 +502,17 @@ class Database:
                         f"{project_list}. The database still appears to use the legacy "
                         "single-project unique constraint on ado_project_name."
                     ) from exc
+
+            # Delete projects no longer in the incoming list
+            cursor = conn.execute("SELECT ado_project_name, ado_team_name FROM projects")
+            existing_keys = {(row[0], row[1]) for row in cursor.fetchall()}
+            keys_to_delete = existing_keys - incoming_keys
+            for ado_project_name, ado_team_name in keys_to_delete:
+                conn.execute(
+                    "DELETE FROM projects WHERE ado_project_name = ? AND ado_team_name = ?",
+                    (ado_project_name, ado_team_name),
+                )
+                _LOGGER.info("Removed project %s/%s (no longer in projects.json)", ado_project_name, ado_team_name)
 
             _LOGGER.info("Synced %d projects to database", len(projects_data))
 

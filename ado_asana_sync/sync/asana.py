@@ -13,6 +13,26 @@ from .app import App
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 
+def get_asana_tasks_modified_since(app: App, project_gid: str, modified_since_iso: str) -> list[dict]:
+    """
+    Returns Asana tasks modified since the given ISO 8601 timestamp.
+
+    :param app: The application object.
+    :param project_gid: The Asana project GID.
+    :param modified_since_iso: ISO 8601 UTC timestamp.
+    :return: List of task dicts.
+    """
+    with _TRACER.start_as_current_span("get_asana_tasks_modified_since") as span:
+        span.set_attributes({"project_gid": project_gid, "modified_since": modified_since_iso})
+        api_instance = asana.TasksApi(app.asana_client)
+        opts = {
+            "modified_since": modified_since_iso,
+            "opt_fields": "gid,name,completed,modified_at,assignee,due_on,tags",
+        }
+        result = api_instance.get_tasks_for_project(project_gid, opts)
+        return list(result)
+
+
 def get_asana_task(app: App, task_gid: str) -> dict | None:
     """
     Returns the entire task dict for the Asana task with the given gid.

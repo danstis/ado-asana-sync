@@ -14,6 +14,7 @@ import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
+from dateutil.parser import parse as parse_iso
 
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
@@ -78,6 +79,45 @@ def _parse_sync_threshold(value: str | None) -> int:
 
 
 _SYNC_THRESHOLD = _parse_sync_threshold(os.environ.get("SYNC_THRESHOLD"))
+
+
+def determine_sync_mode(checkpoint: dict, force_full: bool, overlap_minutes: int) -> tuple[str, datetime | None]:
+    """
+    Determine sync mode based on checkpoint state.
+
+    Returns (mode, fetch_since) where mode is "full" or "incremental"
+    and fetch_since is the lower bound for the incremental window (or None for full).
+    """
+    if force_full:
+        return "full", None
+    if checkpoint["last_sync_at"] is None:
+        return "full", None
+    last_full = checkpoint["last_full_sync_at"]
+    if last_full is None or (datetime.now(timezone.utc) - parse_iso(last_full)) >= timedelta(hours=24):
+        return "full", None
+    since = parse_iso(checkpoint["last_sync_at"]) - timedelta(minutes=overlap_minutes)
+    return "incremental", since
+
+
+def get_ado_work_items_modified_since(app: App, project_name: str, since_dt: datetime) -> list[int]:
+    """
+    Returns ADO work item IDs modified since the given datetime.
+    """
+    if app.ado_wit_client is None:
+        raise ValueError("app.ado_wit_client is None")
+    wiql = {
+        "query": (
+            f"SELECT [System.Id] FROM WorkItems WHERE "
+            f"[System.TeamProject] = '{project_name}' AND "
+            f"[System.ChangedDate] >= '{since_dt.isoformat()}'"
+        )
+    }
+    from azure.devops.v7_0.work_item_tracking.models import Wiql  # pylint: disable=import-outside-toplevel
+
+    result = app.ado_wit_client.query_by_wiql(Wiql(query=wiql["query"]))
+    if result is None or result.work_items is None:
+        return []
+    return [wi.id for wi in result.work_items]
 
 
 def start_sync(app: App) -> None:
@@ -286,14 +326,27 @@ def sync_project(app: App, project):
     """
     Synchronizes a project by mapping ADO work items to Asana tasks.
     """
+    from .app import FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES  # pylint: disable=import-outside-toplevel
+
+    # Capture run start time BEFORE any API calls
+    run_started_at = datetime.now(timezone.utc)
+
+    project_name = project["adoProjectName"]
+    team_name = project["adoTeamName"]
+
     # Log the item being synced.
     _LOGGER.info(
         "syncing from %s/%s -> %s/%s",
-        project["adoProjectName"],
-        project["adoTeamName"],
+        project_name,
+        team_name,
         app.asana_workspace_name,
         project["asanaProjectName"],
     )
+
+    # Determine sync mode
+    null_checkpoint: dict = {"last_sync_at": None, "last_full_sync_at": None}
+    checkpoint = app.db.get_sync_checkpoint(project_name, team_name) if app.db else null_checkpoint
+    sync_mode, fetch_since = determine_sync_mode(checkpoint, FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES)
 
     # Get project IDs
     try:
@@ -305,14 +358,14 @@ def sync_project(app: App, project):
     # Get all Asana users in the workspace, this will enable user matching.
     asana_users = get_asana_users(app, asana_workspace_id)
     _LOGGER.debug("Found %d Asana users in workspace", len(asana_users))
-    for user in asana_users:
-        _LOGGER.debug("Asana user: %s <%s>", user.get("name", ""), user.get("email", ""))
 
-    # Get all Asana Tasks in this project.
+    # Always fetch all Asana tasks — the name-based lookup in create_new_task_mapping
+    # requires the full task list regardless of sync mode.
     _LOGGER.info(
-        "Getting all Asana tasks for project %s [%s]",
-        project["adoProjectName"],
+        "Getting Asana tasks for project %s [%s] (mode=%s)",
+        project_name,
         asana_project,
+        sync_mode,
     )
     asana_project_tasks = get_asana_project_tasks(app, asana_project)
 
@@ -323,20 +376,18 @@ def sync_project(app: App, project):
         TeamContext(team_id=ado_team.id, project_id=ado_project.id),
         "Microsoft.RequirementCategory",
     )
-
     _LOGGER.info(
-        "Found %d work items in ADO backlog for project %s",
+        "Project %s/%s: mode=%s, ado_items=%d, asana_tasks=%d",
+        project_name,
+        team_name,
+        sync_mode,
         len(ado_items.work_items) if ado_items.work_items else 0,
-        project["adoProjectName"],
+        len(asana_project_tasks),
     )
-
-    if ado_items.work_items:
-        item_ids = [item.target.id for item in ado_items.work_items]
-        _LOGGER.info("Found %d ADO work items in backlog", len(item_ids))
 
     # Process backlog items
     processed_item_ids = process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asana_project)
-    _LOGGER.info("Completed backlog processing for project %s", project["adoProjectName"])
+    _LOGGER.info("Completed backlog processing for project %s", project_name)
 
     # Clean up any invalid entries that may have gotten mixed between tables
     cleanup_invalid_work_items(app)
@@ -352,7 +403,7 @@ def sync_project(app: App, project):
 
     process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
-    # Sync pull requests for this project
+    # Sync pull requests for this project (always full - PR sync is not incremental)
     try:
         from .pull_request_sync import sync_pull_requests  # pylint: disable=import-outside-toplevel
 
@@ -361,9 +412,15 @@ def sync_project(app: App, project):
     except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error(
             "Error syncing pull requests for project %s: %s",
-            project["adoProjectName"],
+            project_name,
             e,
         )
+
+    # Record checkpoint only after successful completion
+    if app.db:
+        is_full = sync_mode == "full"
+        app.db.set_sync_checkpoint(project_name, team_name, run_started_at.isoformat(), full_scan=is_full)
+        _LOGGER.info("Checkpoint recorded for project %s/%s (full_scan=%s)", project_name, team_name, is_full)
 
 
 def get_project_ids(app: App, project) -> Tuple[Any, Any, str, str | None]:  # noqa: C901

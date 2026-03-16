@@ -379,8 +379,8 @@ class TestDatabaseMigration(unittest.TestCase):
         # Create new database instance - this should trigger migration
         db = Database(self.db_path)
 
-        # Verify the migration was applied (schema version should be 2)
-        self.assertEqual(db.get_current_schema_version(), 2)
+        # Verify the migration was applied (schema version should be 3)
+        self.assertEqual(db.get_current_schema_version(), 3)
 
         # Verify the old data is still there
         projects = db.get_projects()
@@ -412,7 +412,7 @@ class TestDatabaseMigration(unittest.TestCase):
 
         # New database should be at current version
         current_version = db.get_current_schema_version()
-        self.assertEqual(current_version, 2)  # CURRENT_SCHEMA_VERSION
+        self.assertEqual(current_version, 3)  # CURRENT_SCHEMA_VERSION
 
         # Verify schema_version table has the initial record
         with db.get_connection() as conn:
@@ -420,7 +420,7 @@ class TestDatabaseMigration(unittest.TestCase):
             records = cursor.fetchall()
 
             self.assertEqual(len(records), 1)
-            self.assertEqual(records[0][0], 2)  # version
+            self.assertEqual(records[0][0], 3)  # version
             self.assertEqual(records[0][1], "Initial schema creation")  # description
 
         db.close()
@@ -457,18 +457,20 @@ class TestDatabaseMigration(unittest.TestCase):
         db.close()
         db = Database(self.db_path)
 
-        # Should now be at version 2
+        # Should now be at version 3 (v2 + v3 migrations applied)
         current_version = db.get_current_schema_version()
-        self.assertEqual(current_version, 2)
+        self.assertEqual(current_version, 3)
 
-        # Verify migration was recorded
+        # Verify both migrations were recorded
         with db.get_connection() as conn:
             cursor = conn.execute("SELECT version, description FROM schema_version ORDER BY id")
             records = cursor.fetchall()
 
-            self.assertEqual(len(records), 1)
+            self.assertEqual(len(records), 2)
             self.assertEqual(records[0][0], 2)  # version
-            self.assertEqual(records[0][1], "Add composite unique constraint for projects table")  # description
+            self.assertEqual(records[0][1], "Add composite unique constraint for projects table")
+            self.assertEqual(records[1][0], 3)  # version
+            self.assertEqual(records[1][1], "Add sync checkpoint columns to projects table")
 
         # Verify data was preserved
         projects = db.get_projects()
