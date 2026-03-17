@@ -29,7 +29,7 @@ ASANA_TAG_NAME = os.environ.get("SYNCED_TAG_NAME", "synced")
 # SLEEP_TIME defines the sleep time between sync tasks in seconds.
 SLEEP_TIME = max(30, int(os.environ.get("SLEEP_TIME", 300)))
 # SYNC_OVERLAP_MINUTES defines the overlap in minutes when computing the incremental sync window.
-SYNC_OVERLAP_MINUTES = int(os.environ.get("SYNC_OVERLAP_MINUTES", 5))
+SYNC_OVERLAP_MINUTES = max(0, int(os.environ.get("SYNC_OVERLAP_MINUTES", 5)))
 # FORCE_FULL_SYNC forces a full sync on the next run if set to True.
 FORCE_FULL_SYNC = os.environ.get("FORCE_FULL_SYNC", "false").lower() in ("1", "true", "yes")
 

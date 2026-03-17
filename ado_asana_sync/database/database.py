@@ -461,15 +461,13 @@ class Database:
     def sync_projects_from_json(self, projects_data: List[Dict[str, str]]) -> None:
         """Sync projects from JSON data into the projects table."""
         # Check for duplicates before DB operations to provide better error messages
-        seen = set()
-        duplicate_keys = set()
-        duplicates = []
+        seen: set = set()
+        duplicates: set[str] = set()
         project_entries_by_name: Dict[str, List[str]] = {}
         for project in projects_data:
             key = (project["adoProjectName"], project["adoTeamName"])
-            if key in seen and key not in duplicate_keys:
-                duplicates.append(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
-                duplicate_keys.add(key)
+            if key in seen:
+                duplicates.add(f"{project['adoProjectName']} (Team: {project['adoTeamName']})")
             seen.add(key)
             project_entries_by_name.setdefault(project["adoProjectName"], []).append(
                 f"{project['adoProjectName']} (Team: {project['adoTeamName']})"
