@@ -10,7 +10,6 @@ dependencies = [
     { name = "asana" },
     { name = "azure-devops" },
     { name = "azure-monitor-opentelemetry" },
-    { name = "python-dateutil" },
 ]
 
 [package.dev-dependencies]
@@ -21,7 +20,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "types-python-dateutil" },
 ]
 
 [package.metadata]
@@ -29,7 +27,6 @@ requires-dist = [
     { name = "asana", specifier = ">=5.0.3" },
     { name = "azure-devops", specifier = ">=7.1.0b3" },
     { name = "azure-monitor-opentelemetry", specifier = ">=1.0.0" },
-    { name = "python-dateutil", specifier = ">=2.9.0.post0" },
 ]
 
 [package.metadata.requires-dev]
@@ -40,7 +37,6 @@ dev = [
     { name = "pytest", specifier = ">=7.4,<10.0" },
     { name = "pytest-cov", specifier = ">=4.1,<8.0" },
     { name = "ruff", specifier = ">=0.1.0" },
-    { name = "types-python-dateutil", specifier = ">=2.9.0.20260305" },
 ]
 
 [[package]]
@@ -1026,15 +1022,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
-]
-
-[[package]]
-name = "types-python-dateutil"
-version = "2.9.0.20260305"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1d/c7/025c624f347e10476b439a6619a95f1d200250ea88e7ccea6e09e48a7544/types_python_dateutil-2.9.0.20260305.tar.gz", hash = "sha256:389717c9f64d8f769f36d55a01873915b37e97e52ce21928198d210fbd393c8b", size = 16885, upload-time = "2026-03-05T04:00:47.409Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/77/8c0d1ec97f0d9707ad3d8fa270ab8964e7b31b076d2f641c94987395cc75/types_python_dateutil-2.9.0.20260305-py3-none-any.whl", hash = "sha256:a3be9ca444d38cadabd756cfbb29780d8b338ae2a3020e73c266a83cc3025dd7", size = 18419, upload-time = "2026-03-05T04:00:46.392Z" },
 ]
 
 [[package]]

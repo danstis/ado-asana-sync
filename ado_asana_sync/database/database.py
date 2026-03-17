@@ -10,7 +10,15 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
+
+
+class SyncCheckpoint(TypedDict):
+    """Typed checkpoint dict returned by get_sync_checkpoint."""
+
+    last_sync_at: Optional[str]
+    last_full_sync_at: Optional[str]
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -334,12 +342,6 @@ class Database:
         with self.get_connection() as conn:
             return self.get_schema_version(conn)
 
-    def _migrate_to_version_3(self, conn):
-        """Migrate to version 3: add sync checkpoint columns to projects table."""
-        conn.execute("ALTER TABLE projects ADD COLUMN last_sync_at TEXT")
-        conn.execute("ALTER TABLE projects ADD COLUMN last_full_sync_at TEXT")
-        _LOGGER.info("Added last_sync_at and last_full_sync_at columns to projects table")
-
     def _migrate_to_version_2(self, conn):
         """Migrate to version 2: composite unique constraint for projects."""
         # Check if projects table exists and what its schema looks like
@@ -393,6 +395,12 @@ class Database:
         else:
             _LOGGER.debug("Projects table already has composite unique constraint, skipping migration")
 
+    def _migrate_to_version_3(self, conn):
+        """Migrate to version 3: add sync checkpoint columns to projects table."""
+        conn.execute("ALTER TABLE projects ADD COLUMN last_sync_at TEXT")
+        conn.execute("ALTER TABLE projects ADD COLUMN last_full_sync_at TEXT")
+        _LOGGER.info("Schema migration v3: added last_sync_at and last_full_sync_at columns to projects table")
+
     @contextmanager
     def get_connection(self):
         """Get a thread-local database connection."""
@@ -415,7 +423,7 @@ class Database:
         """Get a table interface."""
         return DatabaseTable(self, table_name)
 
-    def get_sync_checkpoint(self, ado_project_name: str, ado_team_name: str) -> dict:
+    def get_sync_checkpoint(self, ado_project_name: str, ado_team_name: str) -> "SyncCheckpoint":
         """Get the sync checkpoint for a project."""
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -424,8 +432,8 @@ class Database:
             )
             row = cursor.fetchone()
             if row is None:
-                return {"last_sync_at": None, "last_full_sync_at": None}
-            return {"last_sync_at": row[0], "last_full_sync_at": row[1]}
+                return SyncCheckpoint(last_sync_at=None, last_full_sync_at=None)
+            return SyncCheckpoint(last_sync_at=row[0], last_full_sync_at=row[1])
 
     def set_sync_checkpoint(
         self, ado_project_name: str, ado_team_name: str, run_started_at: str, full_scan: bool = False
@@ -433,15 +441,21 @@ class Database:
         """Set the sync checkpoint for a project."""
         with self.get_connection() as conn:
             if full_scan:
-                conn.execute(
+                cursor = conn.execute(
                     "UPDATE projects SET last_sync_at = ?, last_full_sync_at = ?"
                     " WHERE ado_project_name = ? AND ado_team_name = ?",
                     (run_started_at, run_started_at, ado_project_name, ado_team_name),
                 )
             else:
-                conn.execute(
+                cursor = conn.execute(
                     "UPDATE projects SET last_sync_at = ? WHERE ado_project_name = ? AND ado_team_name = ?",
                     (run_started_at, ado_project_name, ado_team_name),
+                )
+            if cursor.rowcount == 0:
+                _LOGGER.warning(
+                    "set_sync_checkpoint: no project row found for %s/%s, checkpoint not saved",
+                    ado_project_name,
+                    ado_team_name,
                 )
 
     def sync_projects_from_json(self, projects_data: List[Dict[str, str]]) -> None:

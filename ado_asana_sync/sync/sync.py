@@ -14,8 +14,8 @@ import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
-from dateutil.parser import parse as parse_iso
 
+from ado_asana_sync.database import SyncCheckpoint
 from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
@@ -81,7 +81,7 @@ def _parse_sync_threshold(value: str | None) -> int:
 _SYNC_THRESHOLD = _parse_sync_threshold(os.environ.get("SYNC_THRESHOLD"))
 
 
-def determine_sync_mode(checkpoint: dict, force_full: bool, overlap_minutes: int) -> tuple[str, datetime | None]:
+def determine_sync_mode(checkpoint: SyncCheckpoint, force_full: bool, overlap_minutes: int) -> tuple[str, datetime | None]:
     """
     Determine sync mode based on checkpoint state.
 
@@ -93,31 +93,10 @@ def determine_sync_mode(checkpoint: dict, force_full: bool, overlap_minutes: int
     if checkpoint["last_sync_at"] is None:
         return "full", None
     last_full = checkpoint["last_full_sync_at"]
-    if last_full is None or (datetime.now(timezone.utc) - parse_iso(last_full)) >= timedelta(hours=24):
+    if last_full is None or (datetime.now(timezone.utc) - datetime.fromisoformat(last_full)) >= timedelta(hours=24):
         return "full", None
-    since = parse_iso(checkpoint["last_sync_at"]) - timedelta(minutes=overlap_minutes)
+    since = datetime.fromisoformat(checkpoint["last_sync_at"]) - timedelta(minutes=overlap_minutes)
     return "incremental", since
-
-
-def get_ado_work_items_modified_since(app: App, project_name: str, since_dt: datetime) -> list[int]:
-    """
-    Returns ADO work item IDs modified since the given datetime.
-    """
-    if app.ado_wit_client is None:
-        raise ValueError("app.ado_wit_client is None")
-    wiql = {
-        "query": (
-            f"SELECT [System.Id] FROM WorkItems WHERE "
-            f"[System.TeamProject] = '{project_name}' AND "
-            f"[System.ChangedDate] >= '{since_dt.isoformat()}'"
-        )
-    }
-    from azure.devops.v7_0.work_item_tracking.models import Wiql  # pylint: disable=import-outside-toplevel
-
-    result = app.ado_wit_client.query_by_wiql(Wiql(query=wiql["query"]))
-    if result is None or result.work_items is None:
-        return []
-    return [wi.id for wi in result.work_items]
 
 
 def start_sync(app: App) -> None:
@@ -344,9 +323,9 @@ def sync_project(app: App, project):
     )
 
     # Determine sync mode
-    null_checkpoint: dict = {"last_sync_at": None, "last_full_sync_at": None}
+    null_checkpoint = SyncCheckpoint(last_sync_at=None, last_full_sync_at=None)
     checkpoint = app.db.get_sync_checkpoint(project_name, team_name) if app.db else null_checkpoint
-    sync_mode, fetch_since = determine_sync_mode(checkpoint, FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES)
+    sync_mode, _ = determine_sync_mode(checkpoint, FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES)
 
     # Get project IDs
     try:

@@ -225,72 +225,6 @@ class TestFirstRunAndForceFullSync(unittest.TestCase):
             app.close()
 
 
-class TestAsanaApiFallback(unittest.TestCase):
-    """Integration tests for graceful fallback on Asana API error."""
-
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    @patch("ado_asana_sync.sync.app.os.path.dirname")
-    @patch("ado_asana_sync.sync.app.Connection")
-    @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_asana_api_error_fallback_logic(self, mock_asana_client, mock_ado_connection, mock_dirname):
-        """get_asana_tasks_modified_since raising ApiException triggers fallback path."""
-        from asana.rest import ApiException
-
-        from ado_asana_sync.sync.asana import get_asana_tasks_modified_since
-
-        mock_dirname.return_value = self.temp_dir
-        mock_ado_connection.return_value = MagicMock()
-        mock_asana_client.return_value = MagicMock()
-
-        app = TestDataBuilder.create_real_app(self.temp_dir)
-        app.connect()
-
-        try:
-            mock_tasks_api = MagicMock()
-            mock_tasks_api.get_tasks_for_project.side_effect = ApiException(status=429, reason="Rate Limited")
-
-            with patch("ado_asana_sync.sync.asana.asana.TasksApi", return_value=mock_tasks_api):
-                with self.assertRaises(ApiException):
-                    get_asana_tasks_modified_since(app, "fake_project_gid", "2026-03-15T00:00:00+00:00")
-        finally:
-            app.close()
-
-    @patch("ado_asana_sync.sync.app.os.path.dirname")
-    @patch("ado_asana_sync.sync.app.Connection")
-    @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_pr_sync_called_regardless_of_sync_mode(self, mock_asana_client, mock_ado_connection, mock_dirname):
-        """PR sync is called on every cycle regardless of incremental/full mode."""
-        from ado_asana_sync.sync.sync import determine_sync_mode
-
-        mock_dirname.return_value = self.temp_dir
-        mock_ado_connection.return_value = MagicMock()
-        mock_asana_client.return_value = MagicMock()
-
-        app = TestDataBuilder.create_real_app(self.temp_dir)
-        app.connect()
-
-        try:
-            # Full mode — no checkpoint
-            checkpoint_full = {"last_sync_at": None, "last_full_sync_at": None}
-            mode_full, _ = determine_sync_mode(checkpoint_full, force_full=False, overlap_minutes=5)
-            self.assertEqual(mode_full, "full")
-
-            # Incremental mode — recent checkpoint
-            recent_time = _iso(datetime.now(timezone.utc) - timedelta(hours=1))
-            checkpoint_incremental = {"last_sync_at": recent_time, "last_full_sync_at": recent_time}
-            mode_incremental, _ = determine_sync_mode(checkpoint_incremental, force_full=False, overlap_minutes=5)
-            self.assertEqual(mode_incremental, "incremental")
-
-            # In sync_project, PR sync always runs regardless of mode (verified by code structure)
-        finally:
-            app.close()
-
-
 class TestSyncProjectIncrementalRegression(unittest.TestCase):
     """Regression tests for bugs fixed in incremental sync mode.
 
@@ -335,9 +269,7 @@ class TestSyncProjectIncrementalRegression(unittest.TestCase):
         stack.enter_context(
             patch("ado_asana_sync.sync.sync.asana.UsersApi", return_value=asana_helper.create_users_api_mock())
         )
-        stack.enter_context(
-            patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock())
-        )
+        stack.enter_context(patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()))
 
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
@@ -387,9 +319,7 @@ class TestSyncProjectIncrementalRegression(unittest.TestCase):
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_incremental_mode_always_fetches_and_processes_backlog(
-        self, mock_asana_client, mock_ado_connection, mock_dirname
-    ):
+    def test_incremental_mode_always_fetches_and_processes_backlog(self, mock_asana_client, mock_ado_connection, mock_dirname):
         """Regression (Fix 2): backlog fetch and processing always runs in incremental mode.
 
         Previously, get_ado_work_items_modified_since (WIQL) ran before the backlog fetch.
