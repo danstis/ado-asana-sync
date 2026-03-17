@@ -325,6 +325,7 @@ def sync_project(app: App, project):
     # Determine sync mode
     null_checkpoint = SyncCheckpoint(last_sync_at=None, last_full_sync_at=None)
     checkpoint = app.db.get_sync_checkpoint(project_name, team_name) if app.db else null_checkpoint
+    # fetch_since is infrastructure for future incremental ADO WIQL queries; unused until that follow-up is implemented.
     sync_mode, _ = determine_sync_mode(checkpoint, FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES)
 
     # Get project IDs
@@ -395,7 +396,8 @@ def sync_project(app: App, project):
             e,
         )
 
-    # Record checkpoint only after successful completion
+    # Record checkpoint after successful work-item sync. PR sync failures are non-blocking
+    # and do not prevent the checkpoint from being saved.
     if app.db:
         is_full = sync_mode == "full"
         app.db.set_sync_checkpoint(project_name, team_name, run_started_at.isoformat(), full_scan=is_full)
