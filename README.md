@@ -11,28 +11,101 @@
 
 This project aims to synchronize work items and pull requests between Azure DevOps (ADO) and Asana. It's currently in development and not ready for use. Breaking changes will occur as needed.
 
-## How to use
+## Setup and Configuration
 
-- Get the latest container image from the [Github Container Registry](https://github.com/danstis/ado-asana-sync/pkgs/container/ado-asana-sync).
-- Configure the environment variables with the relevant values:
-  - `ADO_PAT` - Your Personal Access Token for ADO to accesst the work items.
-  - `ADO_URL` - The full URL of your Azure DevOps instance.
-  - `ASANA_TOKEN` - Your Personal Access Token for Asana to access the work items.
-  - `ASANA_WORKSPACE_NAME` - Name of the Asana workspace to sync with.
-  - `CLOSED_STATES` - Comma separated list of states that will be considered closed.
-  - `THREAD_COUNT` - Number of projects to sync in parallel. Must be a positive integer.
-  - `SYNC_THRESHOLD` - Number of days to continue syncing closed tasks before removing their mappings (default: 30). Must be a non-negative integer.
-  - `SLEEP_TIME` - Duration in seconds to sleep between sync runs. Must be a positive integer.
-  - `SYNCED_TAG_NAME` - Name of the tag in Asana to append to all synced items. Must be a valid Asana tag name.
-  - `LOGLEVEL` - Console log level (default: INFO). Controls what is shown in the terminal.
-  - `APPINSIGHTS_LOGLEVEL` - Application Insights log level (default: WARNING). Controls minimum level sent to telemetry.
-  - `APPINSIGHTS_SAMPLE_DEBUG` - Sampling rate for DEBUG logs sent to telemetry (default: 0.05 = 5%).
-  - `APPINSIGHTS_SAMPLE_INFO` - Sampling rate for INFO logs sent to telemetry (default: 0.05 = 5%).
-  - `APPINSIGHTS_SAMPLE_WARNING` - Sampling rate for WARNING logs sent to telemetry (default: 1.0 = 100%).
-  - `APPINSIGHTS_SAMPLE_ERROR` - Sampling rate for ERROR logs sent to telemetry (default: 1.0 = 100%).
-  - `APPINSIGHTS_SAMPLE_CRITICAL` - Sampling rate for CRITICAL logs sent to telemetry (default: 1.0 = 100%).
-- Run the container with the configured environment variables.
-- The application will start syncing work items and pull requests between ADO and Asana based on the configured settings.
+This guide covers everything you need to configure and run the sync tool, either locally for development or via Docker.
+
+### Prerequisites
+
+- **Python** (if running locally): Install [uv](https://docs.astral.sh/uv/) to manage dependencies and run the application.
+- **Docker** (if running via containers): Install Docker and Docker Compose.
+- **Azure DevOps (ADO) PAT**: A Personal Access Token with read access to Work Items, and Code (Read) access (which is required to sync pull requests).
+- **Asana PAT**: A Personal Access Token with access to the target workspace and projects.
+
+### Configuration
+
+The application requires environment variables and a project mapping file.
+
+#### 1. Environment Variables
+
+Create a `.env` file in the root directory. You can copy the example file to get started:
+
+```bash
+cp .env.example .env
+```
+
+**Required Variables:**
+- `ADO_PAT`: Your Personal Access Token for Azure DevOps.
+- `ADO_URL`: The full URL of your Azure DevOps instance (e.g., `https://dev.azure.com/your-org`).
+- `ASANA_TOKEN`: Your Personal Access Token for Asana.
+- `ASANA_WORKSPACE_NAME`: The exact name of your Asana workspace.
+
+**Optional Variables:**
+- `CLOSED_STATES`: Comma-separated ADO states considered closed (default: `Closed,Removed,Done`).
+- `THREAD_COUNT`: Number of projects to sync in parallel (default: `8`).
+- `SLEEP_TIME`: Seconds to sleep between sync runs (default: `300`).
+- `SYNC_THRESHOLD`: Days to continue syncing closed tasks before unmapping (default: `30`).
+- `SYNCED_TAG_NAME`: Asana tag appended to all synced items (default: `synced`).
+- `LOGLEVEL`: Console log level (default: `INFO`).
+- *See `.env.example` for additional Application Insights telemetry configurations.*
+
+#### 2. Project Mapping
+
+The application needs to know which ADO teams map to which Asana projects. Create a `projects.json` file in the `data/` directory:
+
+```bash
+cp data/projects.json.example data/projects.json
+```
+
+**Mapping Structure:**
+```json
+[
+  {
+    "adoProjectName": "your-ado-project",
+    "adoTeamName": "Backend Team",
+    "asanaProjectName": "your-asana-project-backend"
+  }
+]
+```
+- `adoProjectName`: The name of your Azure DevOps project.
+- `adoTeamName`: The specific team within the ADO project whose backlog you want to sync.
+- `asanaProjectName`: The corresponding Asana project name.
+
+### Running the Application
+
+You can run the sync tool either locally using `uv` or via Docker.
+
+#### Option A: Running Locally (Development)
+
+1. **Install dependencies:**
+   ```bash
+   uv sync
+   ```
+2. **Run the application:**
+   ```bash
+   uv run python -m ado_asana_sync.sync
+   ```
+
+#### Option B: Running via Docker
+
+The repository includes a `compose.yml` file for easy deployment.
+
+1. **Build and start the container:**
+   ```bash
+   docker compose up --build
+   ```
+
+To run in the background, append `-d` to the command. The container will automatically pick up your `.env` file and mount the `data/projects.json` configuration.
+
+### Verifying the Setup
+
+Once running, the application will:
+1. Connect to Azure DevOps and Asana to validate credentials.
+2. Read the `data/projects.json` mapping.
+3. Begin synchronizing active work items and pull requests based on the mapping.
+4. Output logs indicating the sync progress.
+
+You can verify the first sync by checking your mapped Asana project for newly created tasks with the configured synced tag.
 
 ## Features
 
