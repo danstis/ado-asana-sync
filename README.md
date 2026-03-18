@@ -19,7 +19,7 @@ This guide covers everything you need to configure and run the sync tool, either
 
 - **Python** (if running locally): Install [uv](https://docs.astral.sh/uv/) to manage dependencies and run the application.
 - **Docker** (if running via containers): Install Docker and Docker Compose.
-- **Azure DevOps (ADO) PAT**: A Personal Access Token with read access to work items, pull requests, and source code.
+- **Azure DevOps (ADO) PAT**: A Personal Access Token with read access to Work Items, and Code (Read) access (which is required to sync pull requests).
 - **Asana PAT**: A Personal Access Token with access to the target workspace and projects.
 
 ### Configuration
@@ -68,7 +68,7 @@ cp data/projects.json.example data/projects.json
 ]
 ```
 - `adoProjectName`: The name of your Azure DevOps project.
-- `adoTeamName`: The specific team within the ADO project.
+- `adoTeamName`: The specific team within the ADO project whose backlog you want to sync.
 - `asanaProjectName`: The corresponding Asana project name.
 
 ### Running the Application
