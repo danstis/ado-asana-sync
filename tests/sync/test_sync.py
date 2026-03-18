@@ -22,7 +22,6 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     is_item_older_than_threshold,
     matching_user,
-    process_backlog_item,
     read_projects,
     remove_mapping,
     sync_item_and_children,
