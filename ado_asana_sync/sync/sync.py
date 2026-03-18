@@ -13,7 +13,7 @@ from typing import Any, Tuple
 import asana  # type: ignore
 from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
-from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
+from azure.devops.v7_0.work_item_tracking.models import Wiql, WorkItem  # type: ignore
 
 from ado_asana_sync.database import SyncCheckpoint
 from ado_asana_sync.utils.date import iso8601_utc
@@ -97,6 +97,27 @@ def determine_sync_mode(checkpoint: SyncCheckpoint, force_full: bool, overlap_mi
         return "full", None
     since = datetime.fromisoformat(checkpoint["last_sync_at"]) - timedelta(minutes=overlap_minutes)
     return "incremental", since
+
+
+def get_ado_work_items_modified_since(app: App, project_name: str, since_dt: datetime) -> list[int]:
+    """Return IDs of ADO work items modified since since_dt using a WIQL query.
+
+    Uses the incremental sync window (last_sync_at - overlap) as the lower bound.
+    Returns a list of integer work item IDs; empty list if none have changed.
+    """
+    if app.ado_wit_client is None:
+        raise ValueError("app.ado_wit_client is None")
+    since_str = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Escape single quotes in project_name (WIQL string literal convention).
+    # project_name comes from operator-managed config but may contain apostrophes.
+    safe_project_name = project_name.replace("'", "''")
+    query = (
+        f"SELECT [System.Id] FROM WorkItems "
+        f"WHERE [System.TeamProject] = '{safe_project_name}' "
+        f"AND [System.ChangedDate] >= '{since_str}'"
+    )
+    result = app.ado_wit_client.query_by_wiql(Wiql(query=query), top=20000)
+    return [wi.id for wi in (result.work_items or [])]
 
 
 def start_sync(app: App) -> None:
@@ -325,14 +346,17 @@ def sync_project(app: App, project):
     # Determine sync mode
     null_checkpoint = SyncCheckpoint(last_sync_at=None, last_full_sync_at=None)
     checkpoint = app.db.get_sync_checkpoint(project_name, team_name) if app.db else null_checkpoint
-    # fetch_since is infrastructure for future incremental ADO WIQL queries; unused until that follow-up is implemented.
-    sync_mode, _ = determine_sync_mode(checkpoint, FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES)
+    sync_mode, fetch_since = determine_sync_mode(checkpoint, FORCE_FULL_SYNC, SYNC_OVERLAP_MINUTES)
 
     # Get project IDs
     try:
         ado_project, ado_team, asana_workspace_id, asana_project = get_project_ids(app, project)
     except Exception as e:  # pylint: disable=broad-exception-caught
         _LOGGER.error("Error getting project IDs: %s", e)
+        return
+
+    if asana_project is None:
+        _LOGGER.error("Asana project not found for %s, skipping sync", project_name)
         return
 
     # Get all Asana users in the workspace, this will enable user matching.
@@ -349,39 +373,66 @@ def sync_project(app: App, project):
     )
     asana_project_tasks = get_asana_project_tasks(app, asana_project)
 
-    # Get the backlog items for the ADO project and team.
-    if app.ado_work_client is None:
-        raise ValueError("app.ado_work_client is None")
-    ado_items = app.ado_work_client.get_backlog_level_work_items(
-        TeamContext(team_id=ado_team.id, project_id=ado_project.id),
-        "Microsoft.RequirementCategory",
-    )
-    _LOGGER.info(
-        "Project %s/%s: mode=%s, ado_items=%d, asana_tasks=%d",
-        project_name,
-        team_name,
-        sync_mode,
-        len(ado_items.work_items) if ado_items.work_items else 0,
-        len(asana_project_tasks),
-    )
+    # Fetch and process ADO work items according to sync mode.
+    # is_full tracks whether this cycle ran a full backlog scan (for checkpoint recording).
+    is_full = True
+    processed_item_ids: set[int] = set()
 
-    # Process backlog items
-    processed_item_ids = process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asana_project)
-    _LOGGER.info("Completed backlog processing for project %s", project_name)
+    if sync_mode == "incremental" and fetch_since is not None:
+        try:
+            ado_ids = get_ado_work_items_modified_since(app, project_name, fetch_since)
+            _LOGGER.info(
+                "Project %s/%s: mode=incremental, ado_items=%d, asana_tasks=%d",
+                project_name,
+                team_name,
+                len(ado_ids),
+                len(asana_project_tasks),
+            )
+            for ado_id in ado_ids:
+                sync_item_and_children(app, ado_id, processed_item_ids, asana_users, asana_project_tasks, asana_project)
+            _LOGGER.info("Completed incremental processing for project %s", project_name)
+            is_full = False
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            _LOGGER.warning(
+                "Project %s: incremental ADO fetch failed (%s), falling back to full backlog scan",
+                project_name,
+                e,
+            )
+            sync_mode = "full"
 
-    # Clean up any invalid entries that may have gotten mixed between tables
+    if sync_mode == "full":
+        # Full backlog fetch — used on first run, daily, forced, or after incremental failure.
+        if app.ado_work_client is None:
+            raise ValueError("app.ado_work_client is None")
+        ado_items = app.ado_work_client.get_backlog_level_work_items(
+            TeamContext(team_id=ado_team.id, project_id=ado_project.id),
+            "Microsoft.RequirementCategory",
+        )
+        _LOGGER.info(
+            "Project %s/%s: mode=full, ado_items=%d, asana_tasks=%d",
+            project_name,
+            team_name,
+            len(ado_items.work_items) if ado_items.work_items else 0,
+            len(asana_project_tasks),
+        )
+        processed_item_ids = process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asana_project)
+        _LOGGER.info("Completed backlog processing for project %s", project_name)
+
+        # Process closed/removed items — only meaningful after a full backlog scan.
+        # In incremental mode, process_closed_items is skipped because processed_item_ids
+        # contains only changed items; running it would incorrectly treat all unchanged
+        # mapped items as closed. The daily full scan handles actual closures.
+        if app.matches is None:
+            raise ValueError("app.matches is None")
+        all_tasks = app.matches.all()
+        _LOGGER.info("Found %d existing matched items in database", len(all_tasks))
+        items_not_in_backlog = [t for t in all_tasks if t["ado_id"] not in processed_item_ids]
+        _LOGGER.info("Processing %d items that are no longer in backlog", len(items_not_in_backlog))
+        process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
+        is_full = True
+
+    # Clean up any invalid entries that may have gotten mixed between tables (always runs).
     cleanup_invalid_work_items(app)
-
-    # Process any existing matched items that are no longer returned in the backlog (closed or removed).
-    if app.matches is None:
-        raise ValueError("app.matches is None")
-    all_tasks = app.matches.all()
-
-    _LOGGER.info("Found %d existing matched items in database", len(all_tasks))
-    items_not_in_backlog = [t for t in all_tasks if t["ado_id"] not in processed_item_ids]
-    _LOGGER.info("Processing %d items that are no longer in backlog", len(items_not_in_backlog))
-
-    process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_project)
 
     # Sync pull requests for this project (always full - PR sync is not incremental)
     try:
@@ -399,7 +450,6 @@ def sync_project(app: App, project):
     # Record checkpoint after successful work-item sync. PR sync failures are non-blocking
     # and do not prevent the checkpoint from being saved.
     if app.db:
-        is_full = sync_mode == "full"
         app.db.set_sync_checkpoint(project_name, team_name, run_started_at.isoformat(), full_scan=is_full)
         _LOGGER.info("Checkpoint recorded for project %s/%s (full_scan=%s)", project_name, team_name, is_full)
 

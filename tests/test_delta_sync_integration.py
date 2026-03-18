@@ -225,17 +225,14 @@ class TestFirstRunAndForceFullSync(unittest.TestCase):
             app.close()
 
 
-class TestSyncProjectIncrementalRegression(unittest.TestCase):
-    """Regression tests for bugs fixed in incremental sync mode.
+class TestSyncProjectIncrementalMode(unittest.TestCase):
+    """Integration tests for incremental sync mode (FR-002: WIQL-based ADO fetch).
 
-    Bug 1: Incremental Asana fetch returned only recently-modified tasks, so
-           get_asana_task_by_name() failed to find unchanged Asana tasks when
-           their ADO counterpart was updated.  Fix: always use full Asana fetch.
-
-    Bug 2: get_ado_work_items_modified_since() (WIQL call) could throw and
-           silently abort sync_project before process_backlog_items ran, because
-           executor.map() swallows worker exceptions.  Fix: removed the unused
-           WIQL call from sync_project entirely.
+    Incremental mode:
+    - Uses query_by_wiql instead of get_backlog_level_work_items
+    - Always fetches full Asana task list (architectural requirement for name-based lookup)
+    - Skips process_closed_items (only safe after a full backlog scan)
+    - Falls back to full backlog fetch if WIQL raises an exception
     """
 
     def setUp(self):
@@ -256,9 +253,7 @@ class TestSyncProjectIncrementalRegression(unittest.TestCase):
         return app
 
     def _common_patches(self, stack, asana_helper, mock_tasks_api):
-        """Enter patches shared by both regression tests."""
-        from tests.utils.test_helpers import AsanaApiMockHelper  # noqa: F401
-
+        """Enter patches for Asana API clients shared by all tests in this class."""
         stack.enter_context(patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api))
         stack.enter_context(
             patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock())
@@ -271,47 +266,74 @@ class TestSyncProjectIncrementalRegression(unittest.TestCase):
         )
         stack.enter_context(patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()))
 
+    def _setup_ado_clients(self, app, wiql_ids=None):
+        """Configure mock ADO clients. wiql_ids sets query_by_wiql result IDs."""
+        app.ado_core_client = MagicMock()
+        app.ado_core_client.get_project.return_value.id = "proj-id"
+        app.ado_core_client.get_team.return_value.id = "team-id"
+        mock_work_client = MagicMock()
+        mock_work_client.get_backlog_level_work_items.return_value.work_items = []
+        app.ado_work_client = mock_work_client
+        mock_wit_client = MagicMock()
+        if wiql_ids is not None:
+            mock_wi_refs = [MagicMock(id=i) for i in wiql_ids]
+            mock_wit_client.query_by_wiql.return_value.work_items = mock_wi_refs
+        app.ado_wit_client = mock_wit_client
+        return mock_work_client, mock_wit_client
+
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_incremental_mode_uses_full_asana_task_fetch(self, mock_asana_client, mock_ado_connection, mock_dirname):
-        """Regression (Fix 1): sync_project always calls get_asana_project_tasks in incremental mode.
-
-        get_asana_tasks_modified_since must NOT be called from sync_project — it only returns
-        recently-modified tasks and breaks name-based lookups for Asana tasks whose ADO item
-        changed but whose Asana task was not recently modified.
-        """
+    def test_incremental_mode_calls_wiql_not_backlog(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """FR-002: In incremental mode, query_by_wiql is called instead of get_backlog_level_work_items."""
         from contextlib import ExitStack
 
         from tests.utils.test_helpers import AsanaApiMockHelper
 
         app = self._make_app_with_incremental_checkpoint(mock_dirname, mock_ado_connection, mock_asana_client)
         asana_helper = AsanaApiMockHelper()
-        mock_tasks_api = asana_helper.create_tasks_api_mock()
 
         try:
-            app.ado_core_client = MagicMock()
-            app.ado_core_client.get_project.return_value.id = "proj-id"
-            app.ado_core_client.get_team.return_value.id = "team-id"
-            app.ado_work_client = MagicMock()
-            app.ado_work_client.get_backlog_level_work_items.return_value.work_items = []
-            app.ado_wit_client = MagicMock()
+            mock_work_client, mock_wit_client = self._setup_ado_clients(app, wiql_ids=[])
+            project_config = {"adoProjectName": _PROJECT, "adoTeamName": _TEAM, "asanaProjectName": "AsanaProject"}
 
+            with ExitStack() as stack:
+                stack.enter_context(patch("ado_asana_sync.sync.sync.get_asana_project_tasks", return_value=[]))
+                self._common_patches(stack, asana_helper, asana_helper.create_tasks_api_mock())
+                from ado_asana_sync.sync.sync import sync_project
+
+                sync_project(app, project_config)
+
+            mock_wit_client.query_by_wiql.assert_called_once()
+            mock_work_client.get_backlog_level_work_items.assert_not_called()
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_incremental_mode_uses_full_asana_task_fetch(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """Asana task fetch is always full in incremental mode (name-based lookup requires it)."""
+        from contextlib import ExitStack
+
+        from tests.utils.test_helpers import AsanaApiMockHelper
+
+        app = self._make_app_with_incremental_checkpoint(mock_dirname, mock_ado_connection, mock_asana_client)
+        asana_helper = AsanaApiMockHelper()
+
+        try:
+            self._setup_ado_clients(app, wiql_ids=[])
             project_config = {"adoProjectName": _PROJECT, "adoTeamName": _TEAM, "asanaProjectName": "AsanaProject"}
 
             with ExitStack() as stack:
                 mock_full_fetch = stack.enter_context(
                     patch("ado_asana_sync.sync.sync.get_asana_project_tasks", return_value=[])
                 )
-                self._common_patches(stack, asana_helper, mock_tasks_api)
-
+                self._common_patches(stack, asana_helper, asana_helper.create_tasks_api_mock())
                 from ado_asana_sync.sync.sync import sync_project
 
                 sync_project(app, project_config)
 
-            # Full Asana fetch must always be called exactly once in incremental mode.
-            # get_asana_tasks_modified_since is not imported into sync.py at all (removed in fix),
-            # so it cannot accidentally be called instead.
             mock_full_fetch.assert_called_once()
         finally:
             app.close()
@@ -319,13 +341,12 @@ class TestSyncProjectIncrementalRegression(unittest.TestCase):
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_incremental_mode_always_fetches_and_processes_backlog(self, mock_asana_client, mock_ado_connection, mock_dirname):
-        """Regression (Fix 2): backlog fetch and processing always runs in incremental mode.
+    def test_incremental_mode_skips_process_closed_items(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """process_closed_items is NOT called in incremental mode.
 
-        Previously, get_ado_work_items_modified_since (WIQL) ran before the backlog fetch.
-        If it raised any exception, executor.map silently dropped it and process_backlog_items
-        never ran — so ADO updates were invisible to incremental syncs.
-        Verify get_backlog_level_work_items is always called in incremental mode.
+        In incremental mode, processed_item_ids contains only changed items.
+        Calling process_closed_items would incorrectly treat all unchanged mapped
+        items as closed. The daily full scan handles actual closures.
         """
         from contextlib import ExitStack
 
@@ -333,27 +354,116 @@ class TestSyncProjectIncrementalRegression(unittest.TestCase):
 
         app = self._make_app_with_incremental_checkpoint(mock_dirname, mock_ado_connection, mock_asana_client)
         asana_helper = AsanaApiMockHelper()
-        mock_tasks_api = asana_helper.create_tasks_api_mock()
 
         try:
-            app.ado_core_client = MagicMock()
-            app.ado_core_client.get_project.return_value.id = "proj-id"
-            app.ado_core_client.get_team.return_value.id = "team-id"
-            mock_work_client = MagicMock()
-            mock_work_client.get_backlog_level_work_items.return_value.work_items = []
-            app.ado_work_client = mock_work_client
-            app.ado_wit_client = MagicMock()
-
+            self._setup_ado_clients(app, wiql_ids=[])
             project_config = {"adoProjectName": _PROJECT, "adoTeamName": _TEAM, "asanaProjectName": "AsanaProject"}
 
             with ExitStack() as stack:
                 stack.enter_context(patch("ado_asana_sync.sync.sync.get_asana_project_tasks", return_value=[]))
-                self._common_patches(stack, asana_helper, mock_tasks_api)
-
+                mock_closed = stack.enter_context(patch("ado_asana_sync.sync.sync.process_closed_items"))
+                self._common_patches(stack, asana_helper, asana_helper.create_tasks_api_mock())
                 from ado_asana_sync.sync.sync import sync_project
 
                 sync_project(app, project_config)
 
+            mock_closed.assert_not_called()
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_incremental_checkpoint_recorded_with_full_scan_false(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """After a clean incremental run, last_full_sync_at is NOT updated."""
+        from contextlib import ExitStack
+
+        from tests.utils.test_helpers import AsanaApiMockHelper
+
+        app = self._make_app_with_incremental_checkpoint(mock_dirname, mock_ado_connection, mock_asana_client)
+        asana_helper = AsanaApiMockHelper()
+
+        # Record the existing full_sync_at before the incremental run
+        prior_checkpoint = app.db.get_sync_checkpoint(_PROJECT, _TEAM)
+        prior_full_sync_at = prior_checkpoint["last_full_sync_at"]
+
+        try:
+            self._setup_ado_clients(app, wiql_ids=[])
+            project_config = {"adoProjectName": _PROJECT, "adoTeamName": _TEAM, "asanaProjectName": "AsanaProject"}
+
+            with ExitStack() as stack:
+                stack.enter_context(patch("ado_asana_sync.sync.sync.get_asana_project_tasks", return_value=[]))
+                self._common_patches(stack, asana_helper, asana_helper.create_tasks_api_mock())
+                from ado_asana_sync.sync.sync import sync_project
+
+                sync_project(app, project_config)
+
+            after_checkpoint = app.db.get_sync_checkpoint(_PROJECT, _TEAM)
+            # last_sync_at updated
+            self.assertIsNotNone(after_checkpoint["last_sync_at"])
+            # last_full_sync_at must NOT change after an incremental run
+            self.assertEqual(after_checkpoint["last_full_sync_at"], prior_full_sync_at)
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_wiql_exception_falls_back_to_full_backlog(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """When query_by_wiql raises, fall back to get_backlog_level_work_items and log a warning."""
+        from contextlib import ExitStack
+
+        from tests.utils.test_helpers import AsanaApiMockHelper
+
+        app = self._make_app_with_incremental_checkpoint(mock_dirname, mock_ado_connection, mock_asana_client)
+        asana_helper = AsanaApiMockHelper()
+
+        try:
+            mock_work_client, mock_wit_client = self._setup_ado_clients(app, wiql_ids=[])
+            mock_wit_client.query_by_wiql.side_effect = Exception("WIQL unavailable")
+            project_config = {"adoProjectName": _PROJECT, "adoTeamName": _TEAM, "asanaProjectName": "AsanaProject"}
+
+            with ExitStack() as stack:
+                stack.enter_context(patch("ado_asana_sync.sync.sync.get_asana_project_tasks", return_value=[]))
+                self._common_patches(stack, asana_helper, asana_helper.create_tasks_api_mock())
+                with self.assertLogs("ado_asana_sync.sync.sync", level="WARNING") as log_ctx:
+                    from ado_asana_sync.sync.sync import sync_project
+
+                    sync_project(app, project_config)
+
             mock_work_client.get_backlog_level_work_items.assert_called_once()
+            self.assertTrue(any("falling back to full backlog scan" in m for m in log_ctx.output))
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_wiql_fallback_records_checkpoint_as_full_scan(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """After WIQL fallback to full backlog, checkpoint is recorded with full_scan=True."""
+        from contextlib import ExitStack
+
+        from tests.utils.test_helpers import AsanaApiMockHelper
+
+        app = self._make_app_with_incremental_checkpoint(mock_dirname, mock_ado_connection, mock_asana_client)
+        asana_helper = AsanaApiMockHelper()
+
+        prior_full_sync_at = app.db.get_sync_checkpoint(_PROJECT, _TEAM)["last_full_sync_at"]
+
+        try:
+            mock_work_client, mock_wit_client = self._setup_ado_clients(app, wiql_ids=[])
+            mock_wit_client.query_by_wiql.side_effect = Exception("WIQL unavailable")
+            project_config = {"adoProjectName": _PROJECT, "adoTeamName": _TEAM, "asanaProjectName": "AsanaProject"}
+
+            with ExitStack() as stack:
+                stack.enter_context(patch("ado_asana_sync.sync.sync.get_asana_project_tasks", return_value=[]))
+                self._common_patches(stack, asana_helper, asana_helper.create_tasks_api_mock())
+                from ado_asana_sync.sync.sync import sync_project
+
+                sync_project(app, project_config)
+
+            after_checkpoint = app.db.get_sync_checkpoint(_PROJECT, _TEAM)
+            # Fallback ran a full scan, so last_full_sync_at must be refreshed
+            self.assertNotEqual(after_checkpoint["last_full_sync_at"], prior_full_sync_at)
         finally:
             app.close()

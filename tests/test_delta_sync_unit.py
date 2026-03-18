@@ -1,11 +1,12 @@
-"""Unit tests for delta sync determine_sync_mode function."""
+"""Unit tests for delta sync: determine_sync_mode and get_ado_work_items_modified_since."""
 
 from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
-from ado_asana_sync.sync.sync import determine_sync_mode
+from ado_asana_sync.sync.sync import determine_sync_mode, get_ado_work_items_modified_since
 
 
 def _iso(dt: datetime) -> str:
@@ -69,3 +70,84 @@ class TestDetermineSyncMode(unittest.TestCase):
         expected_since = last_sync - timedelta(minutes=5)
         # Allow 1 second tolerance
         self.assertAlmostEqual(since.timestamp(), expected_since.timestamp(), delta=1.0)
+
+
+class TestGetAdoWorkItemsModifiedSince(unittest.TestCase):
+    """Unit tests for get_ado_work_items_modified_since() (FR-002 WIQL helper)."""
+
+    def _make_app(self, work_items):
+        """Return a mock App whose ado_wit_client.query_by_wiql returns work_items."""
+        app = MagicMock()
+        result = MagicMock()
+        result.work_items = work_items
+        app.ado_wit_client.query_by_wiql.return_value = result
+        return app
+
+    def test_returns_list_of_ids(self):
+        """Normal case: WIQL returns work item references; function returns their IDs."""
+        refs = [MagicMock(id=101), MagicMock(id=202), MagicMock(id=303)]
+        app = self._make_app(refs)
+        since = datetime(2026, 3, 18, 10, 0, 0, tzinfo=timezone.utc)
+
+        ids = get_ado_work_items_modified_since(app, "MyProject", since)
+
+        self.assertEqual(ids, [101, 202, 303])
+        app.ado_wit_client.query_by_wiql.assert_called_once()
+        call_args = app.ado_wit_client.query_by_wiql.call_args
+        # Verify the query contains the project name and the formatted date
+        wiql_obj = call_args[0][0]
+        self.assertIn("MyProject", wiql_obj.query)
+        self.assertIn("2026-03-18T10:00:00Z", wiql_obj.query)
+        # Verify top=20000 is passed
+        self.assertEqual(call_args[1].get("top") or call_args[0][1] if len(call_args[0]) > 1 else call_args[1]["top"], 20000)
+
+    def test_returns_empty_list_when_no_changes(self):
+        """Zero results: WIQL returns empty list; function returns empty list."""
+        app = self._make_app([])
+        since = datetime(2026, 3, 18, 10, 0, 0, tzinfo=timezone.utc)
+
+        ids = get_ado_work_items_modified_since(app, "MyProject", since)
+
+        self.assertEqual(ids, [])
+
+    def test_handles_none_work_items(self):
+        """WIQL result has work_items=None; function returns empty list (no crash)."""
+        app = self._make_app(None)
+        since = datetime(2026, 3, 18, 10, 0, 0, tzinfo=timezone.utc)
+
+        ids = get_ado_work_items_modified_since(app, "MyProject", since)
+
+        self.assertEqual(ids, [])
+
+    def test_raises_when_wit_client_is_none(self):
+        """Raises ValueError when ado_wit_client is not initialised."""
+        app = MagicMock()
+        app.ado_wit_client = None
+        since = datetime(2026, 3, 18, 10, 0, 0, tzinfo=timezone.utc)
+
+        with self.assertRaises(ValueError):
+            get_ado_work_items_modified_since(app, "MyProject", since)
+
+    def test_date_formatted_without_microseconds(self):
+        """Since datetime with microseconds is formatted as YYYY-MM-DDTHH:MM:SSZ."""
+        app = self._make_app([])
+        since = datetime(2026, 3, 18, 10, 5, 30, 123456, tzinfo=timezone.utc)
+
+        get_ado_work_items_modified_since(app, "Proj", since)
+
+        wiql_obj = app.ado_wit_client.query_by_wiql.call_args[0][0]
+        # Microseconds must not appear; Z suffix required
+        self.assertIn("2026-03-18T10:05:30Z", wiql_obj.query)
+        self.assertNotIn("123456", wiql_obj.query)
+
+    def test_project_name_apostrophe_is_escaped(self):
+        """Single quotes in project_name are doubled to prevent WIQL parse errors."""
+        app = self._make_app([])
+        since = datetime(2026, 3, 18, 10, 0, 0, tzinfo=timezone.utc)
+
+        get_ado_work_items_modified_since(app, "O'Brien Project", since)
+
+        wiql_obj = app.ado_wit_client.query_by_wiql.call_args[0][0]
+        self.assertIn("O''Brien Project", wiql_obj.query)
+        # Unescaped apostrophe must not appear in the project name position
+        self.assertNotIn("'O'Brien", wiql_obj.query)
