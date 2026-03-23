@@ -397,6 +397,11 @@ class Database:
 
     def _migrate_to_version_3(self, conn):
         """Migrate to version 3: add sync checkpoint columns to projects table."""
+        cursor = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")
+        if cursor.fetchone() is None:
+            # Projects table doesn't exist yet; _init_database will create it with
+            # these columns already defined, so no migration needed here.
+            return
         conn.execute("ALTER TABLE projects ADD COLUMN last_sync_at TEXT")
         conn.execute("ALTER TABLE projects ADD COLUMN last_full_sync_at TEXT")
         _LOGGER.info("Schema migration v3: added last_sync_at and last_full_sync_at columns to projects table")

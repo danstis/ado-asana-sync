@@ -388,10 +388,6 @@ def sync_project(app: App, project):
                 len(ado_ids),
                 len(asana_project_tasks),
             )
-            for ado_id in ado_ids:
-                sync_item_and_children(app, ado_id, processed_item_ids, asana_users, asana_project_tasks, asana_project)
-            _LOGGER.info("Completed incremental processing for project %s", project_name)
-            is_full = False
         except Exception as e:  # pylint: disable=broad-exception-caught
             _LOGGER.warning(
                 "Project %s: incremental ADO fetch failed (%s), falling back to full backlog scan",
@@ -399,6 +395,19 @@ def sync_project(app: App, project):
                 e,
             )
             sync_mode = "full"
+        else:
+            for ado_id in ado_ids:
+                try:
+                    sync_item_and_children(app, ado_id, processed_item_ids, asana_users, asana_project_tasks, asana_project)
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    _LOGGER.error(
+                        "Project %s: failed to sync item %d, skipping: %s",
+                        project_name,
+                        ado_id,
+                        e,
+                    )
+            _LOGGER.info("Completed incremental processing for project %s", project_name)
+            is_full = False
 
     if sync_mode == "full":
         # Full backlog fetch — used on first run, daily, forced, or after incremental failure.

@@ -10,14 +10,11 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from tests.utils.test_helpers import TestDataBuilder
+from tests.utils.test_helpers import iso as _iso
 
 # TestDataBuilder.create_real_app inserts this project via projects.json → _sync_projects_from_json
 _PROJECT = "TestProject"
 _TEAM = "TestTeam"
-
-
-def _iso(dt: datetime) -> str:
-    return dt.isoformat()
 
 
 class TestDeltaSyncDatabaseMethods(unittest.TestCase):

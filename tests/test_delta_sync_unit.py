@@ -7,10 +7,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from ado_asana_sync.sync.sync import determine_sync_mode, get_ado_work_items_modified_since
-
-
-def _iso(dt: datetime) -> str:
-    return dt.isoformat()
+from tests.utils.test_helpers import iso as _iso
 
 
 class TestDetermineSyncMode(unittest.TestCase):
