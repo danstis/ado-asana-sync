@@ -41,7 +41,7 @@ dev = [
 
 [[package]]
 name = "asana"
-version = "5.2.2"
+version = "5.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -49,9 +49,9 @@ dependencies = [
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/db/59/af14efdd03d332c33d4a77aed8f1f7151e3de5c2441e4bea3b1c6dbcc9d7/asana-5.2.2.tar.gz", hash = "sha256:d280ce2e8edf0355ccf21e548d887617ca8c926e1cb41309b8a173ca3181632c", size = 126424, upload-time = "2025-09-24T21:31:04.055Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/d6/245001acfa864624914502add84453b2cd530f015563ea53d0abbebcac2f/asana-5.2.3.tar.gz", hash = "sha256:a8d58efdd494e99996bc90fb1d2717e6b199f10e20a5aa2b6a8b1ddd4b83c6e7", size = 139488, upload-time = "2026-03-18T00:05:15.477Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/26/5e/337125441af40aba86b087dee3dbe829413b6e42eac74defae2076926dbe/asana-5.2.2-py3-none-any.whl", hash = "sha256:1c8d15949a6cb9aa12363a5b7cfc6c0544cb3ae77290dd2e3255c0ec70668458", size = 203161, upload-time = "2025-09-24T21:31:02.401Z" },
+    { url = "https://files.pythonhosted.org/packages/96/3a/2baa6a2a3319bfcc0bc490a26c9057eba2412502eb6ab16e55533dd511a7/asana-5.2.3-py3-none-any.whl", hash = "sha256:543e928aadf1a0f05769bfab14e1d9dbb7c6183ce75c451aea0fd2196e392e7e", size = 222917, upload-time = "2026-03-18T00:05:14.127Z" },
 ]
 
 [[package]]
