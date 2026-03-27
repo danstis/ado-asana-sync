@@ -6,8 +6,14 @@ specifically focused on reducing excessive external API mocking repetition
 while maintaining proper isolation of external dependencies.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
+
+
+def iso(dt: datetime) -> str:
+    """Format a datetime as an ISO 8601 string (shared test utility)."""
+    return dt.isoformat()
 
 
 class AsanaApiMockHelper:
