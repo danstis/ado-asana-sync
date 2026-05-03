@@ -93,7 +93,7 @@ jobs:
         with:
           name: test-output
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v7
+        uses: SonarSource/sonarqube-scan-action@v8
         with:
           args: >
             -Dsonar.projectVersion=${{ needs.version.outputs.FullSemVer }}
