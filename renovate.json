@@ -5,13 +5,5 @@
     "helpers:pinGitHubActionDigests"
   ],
   "separateMajorMinor": true,
-  "packageRules": [
-    {
-      "description": "Create one PR per skipped major version",
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "separateMultipleMajor": true
-    }
-  ]
+  "separateMultipleMajor": true
 }
