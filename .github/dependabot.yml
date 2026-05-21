@@ -12,7 +12,6 @@ updates:
       interval: "weekly"
     exclude-paths:
       - "requirements.txt"
-    open-pull-requests-limit: 0
     labels:
       - "dependencies ⬆️"
       - "python 🐍"
