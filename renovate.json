@@ -7,11 +7,11 @@
   "separateMajorMinor": true,
   "packageRules": [
     {
-      "description": "Limit major upgrades to 1 version at a time",
+      "description": "Create one PR per skipped major version",
       "matchUpdateTypes": [
         "major"
       ],
-      "maxMajorIncrement": 1
+      "separateMultipleMajor": true
     }
   ]
 }
