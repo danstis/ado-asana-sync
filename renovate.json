@@ -1,6 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "separateMajorMinor": true,
+  "packageRules": [
+    {
+      "description": "Limit major upgrades to 1 version at a time",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "maxMajorIncrement": 1
+    }
   ]
 }
