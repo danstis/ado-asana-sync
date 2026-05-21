@@ -12,6 +12,7 @@ updates:
       interval: "weekly"
     exclude-paths:
       - "requirements.txt"
+    open-pull-requests-limit: 0
     labels:
       - "dependencies ⬆️"
       - "python 🐍"
@@ -20,6 +21,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
     labels:
       - "dependencies ⬆️"
       - "github actions 🛠️"
@@ -28,6 +30,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
     labels:
       - "dependencies ⬆️"
       - "docker 🐋"
