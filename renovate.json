@@ -5,5 +5,8 @@
     "helpers:pinGitHubActionDigests"
   ],
   "separateMajorMinor": true,
-  "separateMultipleMajor": true
+  "separateMultipleMajor": true,
+  "uv": {
+    "enabled": true
+  }
 }
