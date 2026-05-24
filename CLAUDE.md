@@ -29,6 +29,10 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
 - Run tools using `uv run`.
 - Always update the readme and other documentation based on the changes made.
 
+### AI Agentic Coding Optimization
+
+- **Break code into smaller, focused files** containing only related functions. This ensures files are easily read into context by AI agents without over-stuffing their context window.
+
 ## Code Quality Requirements
 
 - **Python Code**: Use `ruff` for linting, formatting, and security checks
