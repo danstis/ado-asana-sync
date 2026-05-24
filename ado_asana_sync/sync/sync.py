@@ -845,6 +845,14 @@ class ADOAssignedUser:
     email: str
 
 
+@dataclass
+class ADOGroupReviewer:
+    """Sentinel dataclass for ADO group/container reviewers (e.g. [Project]\\Contributor)."""
+
+    display_name: str
+    identifier: str
+
+
 def get_task_user(task: WorkItem) -> ADOAssignedUser | None:
     """
     Return the email and display name of the user assigned to the Azure DevOps work item.
