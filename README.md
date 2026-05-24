@@ -35,12 +35,14 @@ cp .env.example .env
 ```
 
 **Required Variables:**
+
 - `ADO_PAT`: Your Personal Access Token for Azure DevOps.
 - `ADO_URL`: The full URL of your Azure DevOps instance (e.g., `https://dev.azure.com/your-org`).
 - `ASANA_TOKEN`: Your Personal Access Token for Asana.
 - `ASANA_WORKSPACE_NAME`: The exact name of your Asana workspace.
 
 **Optional Variables:**
+
 - `CLOSED_STATES`: Comma-separated ADO states considered closed (default: `Closed,Removed,Done`).
 - `THREAD_COUNT`: Number of projects to sync in parallel (default: `8`).
 - `SLEEP_TIME`: Seconds to sleep between sync runs (default: `300`).
@@ -58,6 +60,7 @@ cp data/projects.json.example data/projects.json
 ```
 
 **Mapping Structure:**
+
 ```json
 [
   {
@@ -67,6 +70,7 @@ cp data/projects.json.example data/projects.json
   }
 ]
 ```
+
 - `adoProjectName`: The name of your Azure DevOps project.
 - `adoTeamName`: The specific team within the ADO project whose backlog you want to sync.
 - `asanaProjectName`: The corresponding Asana project name.
@@ -81,7 +85,7 @@ You can run the sync tool either locally using `uv` or via Docker.
    ```bash
    uv sync
    ```
-2. **Run the application:**
+1. **Run the application:**
    ```bash
    uv run python -m ado_asana_sync.sync
    ```
@@ -100,10 +104,11 @@ To run in the background, append `-d` to the command. The container will automat
 ### Verifying the Setup
 
 Once running, the application will:
+
 1. Connect to Azure DevOps and Asana to validate credentials.
-2. Read the `data/projects.json` mapping.
-3. Begin synchronizing active work items and pull requests based on the mapping.
-4. Output logs indicating the sync progress.
+1. Read the `data/projects.json` mapping.
+1. Begin synchronizing active work items and pull requests based on the mapping.
+1. Output logs indicating the sync progress.
 
 You can verify the first sync by checking your mapped Asana project for newly created tasks with the configured synced tag.
 

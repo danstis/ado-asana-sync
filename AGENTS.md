@@ -35,6 +35,10 @@ Follow these steps to set up your development environment:
 - Ensure all code passes `ruff` checks for style, formatting, and security.
 - Always update the readme and other documentation based on the changes made.
 
+### AI Agentic Coding Optimization
+
+- **Break code into smaller, focused files** containing only related functions. This ensures files are easily read into context by AI agents without over-stuffing their context window.
+
 ## Testing
 
 - Place all tests in the `tests/` directory.
