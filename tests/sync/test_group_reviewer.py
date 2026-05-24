@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ado_asana_sync.sync.pull_request_item import PullRequestItem
 from ado_asana_sync.sync.pull_request_sync import (
@@ -316,6 +316,127 @@ class TestHandleGroupReviewer(unittest.TestCase):
     def test_individual_reviewer_is_not_a_group_reviewer(self):
         individual = RealObjectBuilder.create_real_ado_reviewer(display_name="Jane Doe", email="jane@example.com")
         self.assertFalse(is_group_reviewer(individual))
+
+    def test_existing_task_with_no_asana_gid_recovered_via_name_search(self):
+        """When existing_match.asana_gid is None and a task is found by name, it must be linked and updated."""
+        app = self._app(strategy="unassigned_task")
+        synthetic_gid = "group:[TestProject]\\Reviewers"
+        pr_url = f"https://dev.azure.com/testorg/Project-repo-123/_git/test-repo/pullrequest/{self.pr.pull_request_id}"
+
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title="Old PR Title",
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid=synthetic_gid,
+            reviewer_name="Group: [TestProject]\\Reviewers",
+            asana_gid=None,  # task creation previously failed
+        )
+        existing.save(app)
+
+        found_task = {"gid": "recovered-asana-gid", "modified_at": "2026-01-01T00:00:00Z"}
+        with (
+            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
+            patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name", return_value=found_task),
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
+            mock_create.assert_not_called()
+            mock_update.assert_called_once()
+            pr_item_arg = mock_update.call_args[0][1]
+            self.assertEqual(pr_item_arg.asana_gid, "recovered-asana-gid")
+
+    def test_existing_task_with_no_asana_gid_recreated_when_not_found_by_name(self):
+        """When existing_match.asana_gid is None and no task found by name, a new task must be created."""
+        app = self._app(strategy="unassigned_task")
+        synthetic_gid = "group:[TestProject]\\Reviewers"
+        pr_url = f"https://dev.azure.com/testorg/Project-repo-123/_git/test-repo/pullrequest/{self.pr.pull_request_id}"
+
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title="Old PR Title",
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid=synthetic_gid,
+            reviewer_name="Group: [TestProject]\\Reviewers",
+            asana_gid=None,
+        )
+        existing.save(app)
+
+        with (
+            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
+            patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name", return_value=None),
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
+            mock_update.assert_not_called()
+            mock_create.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 6. current_reviewer_gids: unresolvable default_user is excluded
+# ---------------------------------------------------------------------------
+
+
+class TestCurrentReviewerGidsDefaultUserFallback(unittest.TestCase):
+    """Regression: unresolvable default_user must not add a synthetic GID to current_reviewer_gids.
+
+    If the GID were added, handle_removed_reviewers would treat the group as still
+    active and never close stale tasks for it.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.pr = _make_pr(pr_id=55)
+        self.repo = _make_repo()
+        self.group_reviewer = RealObjectBuilder.create_real_ado_group_reviewer(display_name="[Proj]\\Team")
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _app(self, strategy="ignore", default_user=""):
+        return _make_app(self.tmp, strategy=strategy, default_user=default_user)
+
+    @patch("ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pull_request_sync._handle_group_reviewer")
+    def test_unresolvable_default_user_excluded_from_current_gids(self, mock_handle_group, mock_handle_removed):
+        """When default_user cannot be resolved, the group GID must NOT appear in current_reviewer_gids."""
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app(strategy="default_user", default_user="nobody@example.com")
+        app.group_reviewer_strategy = "default_user"
+        app.group_reviewer_default_user = "nobody@example.com"
+        app.ado_git_client = MagicMock()
+        app.ado_git_client.get_pull_request_reviewers.return_value = [self.group_reviewer]
+
+        process_pull_request(app, self.pr, self.repo, [], [], "proj-gid")
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertNotIn("group:[Proj]\\Team", current_gids)
+
+    @patch("ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pull_request_sync._handle_group_reviewer")
+    def test_resolvable_default_user_included_in_current_gids(self, mock_handle_group, mock_handle_removed):
+        """When default_user resolves successfully, the group GID must appear in current_reviewer_gids."""
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        asana_users = [{"gid": "gid-fallback", "name": "Fallback User", "email": "fallback@example.com"}]
+        app = self._app(strategy="default_user", default_user="fallback@example.com")
+        app.group_reviewer_strategy = "default_user"
+        app.group_reviewer_default_user = "fallback@example.com"
+        app.ado_git_client = MagicMock()
+        app.ado_git_client.get_pull_request_reviewers.return_value = [self.group_reviewer]
+
+        process_pull_request(app, self.pr, self.repo, asana_users, [], "proj-gid")
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("group:[Proj]\\Team", current_gids)
 
 
 # ---------------------------------------------------------------------------
