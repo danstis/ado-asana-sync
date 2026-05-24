@@ -1,9 +1,6 @@
-"""
-Database module for ADO-Asana sync application.
+"""Database module for ADO-Asana sync application."""
 
-This module provides native SQLite database functionality for thread-safe operations.
-"""
-
-from .database import CURRENT_SCHEMA_VERSION, Database, DatabaseTable
+from .connection import Database, DatabaseTable
+from .migrations import CURRENT_SCHEMA_VERSION
 
 __all__ = ["Database", "DatabaseTable", "CURRENT_SCHEMA_VERSION"]

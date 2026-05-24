@@ -10,7 +10,10 @@ import os
 import tempfile
 import unittest
 
+from ado_asana_sync.database.connection import Database as ConnectionDatabase
+from ado_asana_sync.database.connection import DatabaseTable
 from ado_asana_sync.database.database import Database
+from ado_asana_sync.database.migrations import CURRENT_SCHEMA_VERSION
 
 
 class TestDatabaseMigration(unittest.TestCase):
@@ -677,6 +680,15 @@ class TestDatabaseWrapper(unittest.TestCase):
         self.assertTrue(table.contains(query_exists))
         self.assertFalse(table.contains(query_not_exists))
 
+        db.close()
+
+    def test_database_module_re_exports_split_components(self):
+        """Test the compatibility layer keeps the split database modules aligned."""
+        self.assertIs(Database, ConnectionDatabase)
+
+        db = Database(self.db_path)
+        self.assertIsInstance(db.table("matches"), DatabaseTable)
+        self.assertEqual(CURRENT_SCHEMA_VERSION, 2)
         db.close()
 
 
