@@ -37,7 +37,9 @@ Follow these steps to set up your development environment:
 
 ### AI Agentic Coding Optimization
 
-- **Break code into smaller, focused files** containing only related functions. This ensures files are easily read into context by AI agents without over-stuffing their context window.
+- **Context-Optimized File Structure**: Break code into smaller, focused files containing only related functions. This ensures files are easily read into context by AI agents without over-stuffing the context window.
+- Each module should have a single, clear responsibility so agents can load only the relevant context for a given task.
+- Prefer many small, focused files over large files with mixed concerns.
 
 ## Testing
 
