@@ -695,7 +695,6 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
     link_custom_field = _get_cached_custom_field(app, asana_project_gid, "Link")
     link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
 
-    # Determine assignee: explicit assignee_gid takes priority; omit field for group tasks to preserve existing assignee
     update_body: dict[str, Any] = {
         "name": pr_item.asana_title,
         "html_notes": f"<body>{pr_item.asana_notes_link}</body>",
@@ -703,7 +702,10 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
     }
     if pr_item.assignee_gid is not None:
         update_body["assignee"] = pr_item.assignee_gid
-    elif not pr_item.reviewer_gid.startswith("group:"):
+    elif pr_item.reviewer_gid.startswith("group:"):
+        # Explicitly clear assignee so a strategy change from default_user to unassigned_task takes effect
+        update_body["assignee"] = None
+    else:
         update_body["assignee"] = pr_item.reviewer_gid
 
     body = {"data": update_body}
@@ -1109,7 +1111,10 @@ def _handle_group_reviewer(  # noqa: C901
                 update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
     else:
         title_changed = existing_match.title != pr.title
-        if not title_changed and existing_match.asana_gid:
+        status_changed = existing_match.status != pr.status
+        review_status_changed = existing_match.review_status != extract_reviewer_vote(reviewer)
+        assignee_changed = existing_match.assignee_gid != assignee_gid
+        if not any([title_changed, status_changed, review_status_changed, assignee_changed]) and existing_match.asana_gid:
             _LOGGER.debug("Group reviewer task is already up to date: %s", existing_match.asana_title)
             return
         existing_match.title = pr.title
