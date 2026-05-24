@@ -46,6 +46,20 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(self.pr_item.asana_gid, "asana-task-101")
         self.assertEqual(self.pr_item.review_status, "waiting_for_author")
 
+    def test_init_accepts_assignee_gid_keyword(self):
+        """Test group reviewer task assignee_gid remains supported via keyword arguments."""
+        pr_item = PullRequestItem(
+            ado_pr_id=123,
+            ado_repository_id="repo-456",
+            title="Update documentation",
+            status="active",
+            url="https://dev.azure.com/test/project/_git/repo/pullrequest/123",
+            reviewer_gid="group:[Project]\\Reviewers",
+            assignee_gid="asana-user-789",
+        )
+
+        self.assertEqual(pr_item.assignee_gid, "asana-user-789")
+
     def test_equality(self):
         """Test PullRequestItem equality comparison."""
         other_item = PullRequestItem(
@@ -151,6 +165,27 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertIsInstance(result, PullRequestItem)
         self.assertEqual(result.ado_pr_id, 123)
         self.assertEqual(result.reviewer_gid, "asana-user-789")
+
+    def test_search_preserves_assignee_gid_from_database(self):
+        """Test searching preserves assignee_gid for group reviewer tasks."""
+        self.mock_app.pr_matches.contains.return_value = True
+        self.mock_app.pr_matches.search.return_value = [
+            {
+                "ado_pr_id": 123,
+                "ado_repository_id": "repo-456",
+                "title": "Update documentation",
+                "status": "active",
+                "url": "https://dev.azure.com/test/project/_git/repo/pullrequest/123",
+                "reviewer_gid": "group:[Project]\\Reviewers",
+                "reviewer_name": "Group: [Project]\\Reviewers",
+                "assignee_gid": "asana-user-789",
+            }
+        ]
+
+        result = PullRequestItem.search(self.mock_app, ado_pr_id=123, reviewer_gid="group:[Project]\\Reviewers")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.assignee_gid, "asana-user-789")
 
     def test_search_not_found(self):
         """Test searching when no match is found."""

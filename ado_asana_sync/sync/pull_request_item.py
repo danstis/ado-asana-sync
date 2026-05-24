@@ -50,7 +50,7 @@ class PullRequestItem:
         updated_date: Optional[str] = None,
         review_status: Optional[str] = None,
         processing_state: Optional[str] = None,
-        assignee_gid: Optional[str] = None,
+        **extra_fields: Any,
     ) -> None:
         self.ado_pr_id = ado_pr_id
         self.ado_repository_id = ado_repository_id
@@ -65,7 +65,10 @@ class PullRequestItem:
         self.updated_date = updated_date
         self.review_status = review_status
         self.processing_state = processing_state or "open"  # Default to open for new items
-        self.assignee_gid = assignee_gid  # Explicit Asana assignee GID (used for group reviewer tasks)
+        self.assignee_gid = self._pop_assignee_gid(extra_fields)
+        if extra_fields:
+            unexpected_fields = ", ".join(sorted(extra_fields))
+            raise TypeError(f"Unexpected PullRequestItem fields: {unexpected_fields}")
 
         # Validate data consistency to catch potential corruption early
         if not self.validate_data_consistency():
@@ -78,6 +81,11 @@ class PullRequestItem:
                 self.url,
                 self.title,
             )
+
+    @staticmethod
+    def _pop_assignee_gid(extra_fields: dict[str, Any]) -> Optional[str]:
+        """Extract optional assignee state while keeping constructor compatibility for stored records."""
+        return extra_fields.pop("assignee_gid", None)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, PullRequestItem):
