@@ -50,6 +50,7 @@ class PullRequestItem:
         updated_date: Optional[str] = None,
         review_status: Optional[str] = None,
         processing_state: Optional[str] = None,
+        assignee_gid: Optional[str] = None,
     ) -> None:
         self.ado_pr_id = ado_pr_id
         self.ado_repository_id = ado_repository_id
@@ -64,6 +65,7 @@ class PullRequestItem:
         self.updated_date = updated_date
         self.review_status = review_status
         self.processing_state = processing_state or "open"  # Default to open for new items
+        self.assignee_gid = assignee_gid  # Explicit Asana assignee GID (used for group reviewer tasks)
 
         # Validate data consistency to catch potential corruption early
         if not self.validate_data_consistency():
@@ -94,6 +96,7 @@ class PullRequestItem:
             and self.updated_date == other.updated_date
             and self.review_status == other.review_status
             and self.processing_state == other.processing_state
+            and self.assignee_gid == other.assignee_gid
         )
 
     def __str__(self) -> str:
@@ -242,6 +245,7 @@ class PullRequestItem:
             "updated_date": self.updated_date,
             "review_status": self.review_status,
             "processing_state": self.processing_state,
+            "assignee_gid": self.assignee_gid,
         }
 
         # Query for unique combination of PR ID and reviewer
