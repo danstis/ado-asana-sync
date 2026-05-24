@@ -168,8 +168,19 @@ def _handle_group_reviewer(
         existing_match.updated_date = iso8601_utc(datetime.now())
         existing_match.review_status = extract_reviewer_vote(reviewer)
         existing_match.assignee_gid = assignee_gid
-        if app.asana_tag_gid is not None and existing_match.asana_gid:
-            update_asana_pr_task(app, existing_match, app.asana_tag_gid, asana_project)
+        if app.asana_tag_gid is not None:
+            if existing_match.asana_gid:
+                update_asana_pr_task(app, existing_match, app.asana_tag_gid, asana_project)
+            else:
+                asana_task = get_asana_task_by_name(asana_project_tasks, existing_match.asana_title)
+                if asana_task is not None:
+                    existing_match.asana_gid = asana_task["gid"]
+                    existing_match.asana_updated = asana_task.get("modified_at")
+                    update_asana_pr_task(app, existing_match, app.asana_tag_gid, asana_project)
+                else:
+                    create_asana_pr_task(app, asana_project, existing_match, app.asana_tag_gid)
+        else:
+            existing_match.save(app)
 
 
 def create_ado_user_from_reviewer(reviewer) -> Any:
@@ -271,8 +282,14 @@ def process_pull_request(
             processed_reviewers.add(reviewer_id)
 
         if is_group_reviewer(reviewer):
-            if getattr(app, "group_reviewer_strategy", "ignore") != "ignore":
-                current_reviewer_gids.add(f"group:{_get_reviewer_display_name(reviewer)}")
+            _gr_strategy = getattr(app, "group_reviewer_strategy", "ignore")
+            if _gr_strategy != "ignore":
+                if _gr_strategy == "default_user":
+                    _default_ref = getattr(app, "group_reviewer_default_user", "")
+                    if _resolve_group_reviewer_default_user(asana_users, _default_ref) is not None:
+                        current_reviewer_gids.add(f"group:{_get_reviewer_display_name(reviewer)}")
+                else:
+                    current_reviewer_gids.add(f"group:{_get_reviewer_display_name(reviewer)}")
         else:
             ado_reviewer = create_ado_user_from_reviewer(reviewer)
             if ado_reviewer:
