@@ -286,6 +286,110 @@ class TestHandleGroupReviewer(unittest.TestCase):
             mock_create.assert_not_called()
             mock_update.assert_called_once()
 
+    def test_existing_task_updated_when_status_changes_not_title(self):
+        """Regression: status change alone must trigger an update even if title is unchanged."""
+        app = self._app(strategy="unassigned_task")
+        synthetic_gid = "group:[TestProject]\\Reviewers"
+        pr_url = f"https://dev.azure.com/testorg/Project-repo-123/_git/test-repo/pullrequest/{self.pr.pull_request_id}"
+
+        # Store with same title as self.pr but different status
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status="completed",  # different from self.pr.status ("active")
+            url=pr_url,
+            reviewer_gid=synthetic_gid,
+            reviewer_name="Group: [TestProject]\\Reviewers",
+            asana_gid="existing-asana-gid",
+        )
+        existing.save(app)
+
+        with (
+            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
+            mock_create.assert_not_called()
+            mock_update.assert_called_once()
+
     def test_individual_reviewer_is_not_a_group_reviewer(self):
         individual = RealObjectBuilder.create_real_ado_reviewer(display_name="Jane Doe", email="jane@example.com")
         self.assertFalse(is_group_reviewer(individual))
+
+
+# ---------------------------------------------------------------------------
+# 5. update_asana_pr_task assignee clearing for group tasks
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateAsanaPrTaskGroupAssignee(unittest.TestCase):
+    """Regression tests for explicit null assignee on group reviewer tasks."""
+
+    def _make_mock_app(self):
+        from unittest.mock import MagicMock
+
+        import asana
+
+        mock_app = MagicMock()
+        mock_app.asana_client = MagicMock(spec=asana.ApiClient)
+        return mock_app
+
+    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pull_request_sync._get_cached_custom_field")
+    @patch("asana.TasksApi")
+    def test_group_task_with_no_assignee_sends_null(self, mock_tasks_api_class, mock_get_field, mock_add_tag):
+        """When assignee_gid is None on a group task, the update must send assignee=None to clear it."""
+        from unittest.mock import Mock
+
+        from ado_asana_sync.sync.pull_request_sync import update_asana_pr_task
+
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.update_task.return_value = {"modified_at": "2026-01-01T00:00:00Z"}
+        mock_get_field.return_value = None
+
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-gid-group"
+        mock_pr_item.asana_title = "PR 1: Group review"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 1</a>"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "noVote"
+        mock_pr_item.url = "http://test.com/pr/1"
+        mock_pr_item.reviewer_gid = "group:[Proj]\\Reviewers"
+        mock_pr_item.assignee_gid = None  # unassigned_task strategy
+
+        update_asana_pr_task(self._make_mock_app(), mock_pr_item, "tag-gid", {"gid": "proj-gid"})
+
+        update_call_args = mock_tasks_api.update_task.call_args[0]
+        self.assertIn("assignee", update_call_args[0]["data"])
+        self.assertIsNone(update_call_args[0]["data"]["assignee"])
+
+    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pull_request_sync._get_cached_custom_field")
+    @patch("asana.TasksApi")
+    def test_group_task_with_assignee_gid_sends_it(self, mock_tasks_api_class, mock_get_field, mock_add_tag):
+        """When assignee_gid is set on a group task, it must be forwarded in the update."""
+        from unittest.mock import Mock
+
+        from ado_asana_sync.sync.pull_request_sync import update_asana_pr_task
+
+        mock_tasks_api = Mock()
+        mock_tasks_api_class.return_value = mock_tasks_api
+        mock_tasks_api.update_task.return_value = {"modified_at": "2026-01-01T00:00:00Z"}
+        mock_get_field.return_value = None
+
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-gid-group"
+        mock_pr_item.asana_title = "PR 2: Group review"
+        mock_pr_item.asana_notes_link = "<a href='http://test.com'>PR 2</a>"
+        mock_pr_item.status = "active"
+        mock_pr_item.review_status = "noVote"
+        mock_pr_item.url = "http://test.com/pr/2"
+        mock_pr_item.reviewer_gid = "group:[Proj]\\Reviewers"
+        mock_pr_item.assignee_gid = "user-gid-fallback"  # default_user strategy
+
+        update_asana_pr_task(self._make_mock_app(), mock_pr_item, "tag-gid", {"gid": "proj-gid"})
+
+        update_call_args = mock_tasks_api.update_task.call_args[0]
+        self.assertEqual(update_call_args[0]["data"]["assignee"], "user-gid-fallback")

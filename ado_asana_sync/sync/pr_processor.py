@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, List
 
@@ -25,6 +26,150 @@ from .sync import (
 from .utils import extract_reviewer_vote
 
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
+
+_GROUP_REVIEWER_PATTERN = re.compile(r"^\[.+\]\\")
+
+
+def _get_reviewer_display_name(reviewer) -> str:
+    """Extract display name from an ADO reviewer object."""
+    return (
+        getattr(reviewer, "display_name", None)
+        or getattr(reviewer, "displayName", None)
+        or getattr(reviewer, "name", None)
+        or "Unknown Group"
+    )
+
+
+def is_group_reviewer(reviewer) -> bool:
+    """Return True when the ADO reviewer is a group/container (not an individual)."""
+    if getattr(reviewer, "is_container", False) is True:
+        return True
+
+    display_name = _get_reviewer_display_name(reviewer)
+
+    if _GROUP_REVIEWER_PATTERN.match(display_name):
+        return True
+
+    unique_name = getattr(reviewer, "unique_name", None) or getattr(reviewer, "uniqueName", None) or ""
+    if "\\" in display_name and (not unique_name or unique_name.startswith("vstfs:///")):
+        return True
+
+    return False
+
+
+def _resolve_group_reviewer_default_user(asana_users: List[dict], user_ref: str) -> dict | None:
+    """Resolve the configured default Asana user for group reviewers by email, GID, or display name."""
+    if not user_ref:
+        return None
+    ref_lower = user_ref.lower()
+    for user in asana_users:
+        if user.get("email", "").lower() == ref_lower:
+            return user
+        if user.get("gid", "") == user_ref:
+            return user
+        if user.get("name", "").lower() == ref_lower:
+            return user
+    return None
+
+
+def _handle_group_reviewer(
+    app: App,
+    pr,
+    repository,
+    reviewer,
+    asana_users: List[dict],
+    asana_project_tasks: List[dict],
+    asana_project: str,
+) -> None:
+    """Handle an ADO group/container reviewer according to the configured GROUP_REVIEWER_STRATEGY.
+
+    Strategies:
+    - ignore (default): log and skip, identical to previous behaviour.
+    - default_user: create/update a task assigned to GROUP_REVIEWER_DEFAULT_USER.
+    - unassigned_task: create/update an unassigned task with the group name in the title.
+    """
+    display_name = _get_reviewer_display_name(reviewer)
+    strategy = getattr(app, "group_reviewer_strategy", "ignore")
+
+    _LOGGER.info(
+        "PR %s: group reviewer '%s' — applying strategy '%s'",
+        pr.pull_request_id,
+        display_name,
+        strategy,
+    )
+
+    if strategy == "ignore":
+        return
+
+    assignee_gid: str | None = None
+    if strategy == "default_user":
+        default_user_ref = getattr(app, "group_reviewer_default_user", "")
+        resolved = _resolve_group_reviewer_default_user(asana_users, default_user_ref)
+        if resolved is None:
+            _LOGGER.warning(
+                "PR %s: cannot resolve GROUP_REVIEWER_DEFAULT_USER '%s' — skipping group reviewer '%s'",
+                pr.pull_request_id,
+                default_user_ref,
+                display_name,
+            )
+            return
+        assignee_gid = resolved["gid"]
+        _LOGGER.info(
+            "PR %s: group reviewer '%s' mapped to default user '%s'",
+            pr.pull_request_id,
+            display_name,
+            resolved["name"],
+        )
+
+    synthetic_gid = f"group:{display_name}"
+    pr_url = (
+        getattr(pr, "web_url", "")
+        or f"{app.ado_url}/{repository.project.name}/_git/{repository.name}/pullrequest/{pr.pull_request_id}"
+    )
+    current_utc_time = iso8601_utc(datetime.now(timezone.utc))
+
+    existing_match = PullRequestItem.search(app, ado_pr_id=pr.pull_request_id, reviewer_gid=synthetic_gid)
+
+    if existing_match is None:
+        pr_item = PullRequestItem(
+            ado_pr_id=pr.pull_request_id,
+            ado_repository_id=repository.id,
+            title=pr.title,
+            status=pr.status,
+            url=pr_url,
+            reviewer_gid=synthetic_gid,
+            reviewer_name=f"Group: {display_name}",
+            created_date=current_utc_time,
+            updated_date=current_utc_time,
+            review_status=extract_reviewer_vote(reviewer),
+            assignee_gid=assignee_gid,
+        )
+        asana_task = get_asana_task_by_name(asana_project_tasks, pr_item.asana_title)
+        if asana_task is None:
+            if app.asana_tag_gid is not None:
+                create_asana_pr_task(app, asana_project, pr_item, app.asana_tag_gid)
+        else:
+            pr_item.asana_gid = asana_task["gid"]
+            pr_item.asana_updated = asana_task.get("modified_at")
+            pr_item.updated_date = iso8601_utc(datetime.now())
+            pr_item.save(app)
+            if app.asana_tag_gid is not None:
+                update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
+    else:
+        title_changed = existing_match.title != pr.title
+        status_changed = existing_match.status != pr.status
+        review_status_changed = existing_match.review_status != extract_reviewer_vote(reviewer)
+        assignee_changed = existing_match.assignee_gid != assignee_gid
+        if not any([title_changed, status_changed, review_status_changed, assignee_changed]) and existing_match.asana_gid:
+            _LOGGER.debug("Group reviewer task is already up to date: %s", existing_match.asana_title)
+            return
+        existing_match.title = pr.title
+        existing_match.status = pr.status
+        existing_match.updated_date = iso8601_utc(datetime.now())
+        existing_match.review_status = extract_reviewer_vote(reviewer)
+        existing_match.assignee_gid = assignee_gid
+        if app.asana_tag_gid is not None and existing_match.asana_gid:
+            update_asana_pr_task(app, existing_match, app.asana_tag_gid, asana_project)
 
 
 def create_ado_user_from_reviewer(reviewer) -> Any:
@@ -125,11 +270,15 @@ def process_pull_request(
         if reviewer_id:
             processed_reviewers.add(reviewer_id)
 
-        ado_reviewer = create_ado_user_from_reviewer(reviewer)
-        if ado_reviewer:
-            asana_matched_user = _cache_reviewer_lookup(asana_users, ado_reviewer, user_lookup_cache)
-            if asana_matched_user:
-                current_reviewer_gids.add(asana_matched_user["gid"])
+        if is_group_reviewer(reviewer):
+            if getattr(app, "group_reviewer_strategy", "ignore") != "ignore":
+                current_reviewer_gids.add(f"group:{_get_reviewer_display_name(reviewer)}")
+        else:
+            ado_reviewer = create_ado_user_from_reviewer(reviewer)
+            if ado_reviewer:
+                asana_matched_user = _cache_reviewer_lookup(asana_users, ado_reviewer, user_lookup_cache)
+                if asana_matched_user:
+                    current_reviewer_gids.add(asana_matched_user["gid"])
 
         process_pr_reviewer(
             app,
@@ -219,6 +368,10 @@ def process_pr_reviewer(
     user_lookup_cache: dict | None = None,
 ) -> None:
     """Process a single reviewer for a pull request."""
+    if is_group_reviewer(reviewer):
+        _handle_group_reviewer(app, pr, repository, reviewer, asana_users, asana_project_tasks, asana_project)
+        return
+
     ado_reviewer = create_ado_user_from_reviewer(reviewer)
     if not ado_reviewer:
         _LOGGER.debug("Could not extract user info from reviewer for PR %s", pr.pull_request_id)
