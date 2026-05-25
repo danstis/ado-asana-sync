@@ -3,15 +3,27 @@
 import json
 import logging
 import os
-from typing import Any, Dict
+import sqlite3
+from contextlib import AbstractContextManager
+from typing import Any, Dict, Protocol
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class _ConnectionProvider(Protocol):
+    """Protocol for database classes that expose a connection context manager."""
+
+    def get_connection(self) -> AbstractContextManager[sqlite3.Connection]:
+        """Return a managed SQLite connection."""
+
+    def _migrate_table_data(self, conn, tinydb_data: Dict[str, Any], table_name: str) -> None:
+        """Migrate a single TinyDB table into SQLite."""
 
 
 class TinyDBMigrationMixin:
     """TinyDB import helpers for Database."""
 
-    def migrate_from_tinydb(self, appdata_path: str) -> bool:
+    def migrate_from_tinydb(self: _ConnectionProvider, appdata_path: str) -> bool:
         """Migrate data from TinyDB JSON file to SQLite."""
         if not os.path.exists(appdata_path):
             _LOGGER.info("No appdata.json file found, skipping migration")
@@ -30,8 +42,8 @@ class TinyDBMigrationMixin:
 
             _LOGGER.info("Migration completed successfully")
             return True
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            _LOGGER.error("Migration failed: %s", exc)
+        except Exception:  # pylint: disable=broad-exception-caught
+            _LOGGER.exception("Migration failed")
             return False
 
     def _migrate_table_data(self, conn, tinydb_data: Dict[str, Any], table_name: str):

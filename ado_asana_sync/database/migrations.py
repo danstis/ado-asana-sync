@@ -2,10 +2,22 @@
 
 import logging
 import sqlite3
+from contextlib import AbstractContextManager
+from typing import Protocol
 
 _LOGGER = logging.getLogger(__name__)
 
 CURRENT_SCHEMA_VERSION = 2
+
+
+class _ConnectionProvider(Protocol):
+    """Protocol for database classes that expose a connection context manager."""
+
+    def get_connection(self) -> AbstractContextManager[sqlite3.Connection]:
+        """Return a managed SQLite connection."""
+
+    def get_schema_version(self, conn) -> int:
+        """Return the current schema version for the given connection."""
 
 
 class DatabaseMigrationsMixin:
@@ -63,7 +75,7 @@ class DatabaseMigrationsMixin:
             self._migrate_to_version_2(conn)
             self._record_migration(conn, 2, "Add composite unique constraint for projects table")
 
-    def get_current_schema_version(self) -> int:
+    def get_current_schema_version(self: _ConnectionProvider) -> int:
         """Get the current schema version from the database."""
         with self.get_connection() as conn:
             return self.get_schema_version(conn)
