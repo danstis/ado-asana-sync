@@ -121,7 +121,7 @@ class TestPullRequestIntegration(unittest.TestCase):
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection") 
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    @patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task")
+    @patch("ado_asana_sync.sync.pr_processor.create_new_pr_reviewer_task")
     def test_pr_reviewer_real_integration(self, mock_create_task, mock_asana_client, mock_ado_connection, mock_dirname):
         """
         Real Integration: Tests internal utilities working together.

@@ -125,9 +125,9 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         self.assertEqual(problematic_title, "Pull Request 123: test PR (Test Reviewer)")
         self.assertIn("pullrequest/100", corrupted_pr_item.url)  # URL doesn't match ID
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.iso8601_utc")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_processor.iso8601_utc")
     def test_title_update_doesnt_corrupt_other_items(self, mock_iso8601, mock_update_task, mock_get_task):
         """Test that updating one PR's title doesn't affect other PR items."""
         mock_iso8601.return_value = "2023-12-01T10:00:00Z"

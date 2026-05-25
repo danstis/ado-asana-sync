@@ -26,7 +26,13 @@ Key files:
 
 - `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
 
-- `ado_asana_sync/sync/pull_request_sync.py`: Pull request sync logic.
+- `ado_asana_sync/sync/pr_sync_core.py`: PR sync orchestration (top-level sync functions).
+
+- `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers.
+
+- `ado_asana_sync/sync/pr_asana_helpers.py`: Asana API helpers specific to PRs.
+
+- `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
 
 - `data/projects.json.example`: Example project configuration.
 
