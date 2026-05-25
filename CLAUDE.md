@@ -20,7 +20,10 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
   - `ado_asana_sync/sync/asana.py`: Handles Asana API.
   - `ado_asana_sync/sync/task_item.py`: Task data structure with due_date field support.
   - `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
-  - `ado_asana_sync/sync/pull_request_sync.py`: Pull request sync logic.
+  - `ado_asana_sync/sync/pr_sync_core.py`: PR sync orchestration (top-level sync functions).
+  - `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers.
+  - `ado_asana_sync/sync/pr_asana_helpers.py`: Asana API helpers specific to PRs.
+  - `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
   - `data/projects.json.example`: Example project configuration.
 - Write all code in Python.
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).

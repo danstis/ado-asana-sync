@@ -54,9 +54,9 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_reviewer.unique_name = "john.doe@example.com"
         self.mock_reviewer.vote = "waiting_for_author"
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_users")
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_project_tasks")
-    @patch("ado_asana_sync.sync.pull_request_sync.process_closed_pull_requests")
+    @patch("ado_asana_sync.sync.pr_sync_core.get_asana_users")
+    @patch("ado_asana_sync.sync.pr_sync_core.get_asana_project_tasks")
+    @patch("ado_asana_sync.sync.pr_sync_core.process_closed_pull_requests")
     def test_sync_pull_requests(self, mock_process_closed, mock_get_tasks, mock_get_users):
         """Test the main sync_pull_requests function."""
         # Setup mocks
@@ -64,7 +64,7 @@ class TestPullRequestSync(unittest.TestCase):
         mock_get_tasks.return_value = []
         self.mock_app.ado_git_client.get_repositories.return_value = [self.mock_repository]
 
-        with patch("ado_asana_sync.sync.pull_request_sync.process_repository_pull_requests") as mock_process_repo:
+        with patch("ado_asana_sync.sync.pr_sync_core.process_repository_pull_requests") as mock_process_repo:
             sync_pull_requests(self.mock_app, self.mock_ado_project, "workspace-123", "project-456")
 
             # Verify calls
@@ -74,7 +74,7 @@ class TestPullRequestSync(unittest.TestCase):
             mock_process_repo.assert_called_once()
             mock_process_closed.assert_called_once()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.process_pull_request")
+    @patch("ado_asana_sync.sync.pr_sync_core.process_pull_request")
     def test_process_repository_pull_requests(self, mock_process_pr):
         """Test processing pull requests for a repository."""
         # Setup mocks
@@ -89,8 +89,8 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertEqual(args[:6], (self.mock_app, self.mock_pr, self.mock_repository, [], [], "project-456"))
         self.assertIsInstance(args[6], dict)  # user_lookup_cache should be a dict
 
-    @patch("ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers")
-    @patch("ado_asana_sync.sync.pull_request_sync.process_pr_reviewer")
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor.process_pr_reviewer")
     def test_process_pull_request(self, mock_process_reviewer, mock_handle_removed):
         """Test processing a single pull request."""
         # Setup mocks
@@ -103,13 +103,13 @@ class TestPullRequestSync(unittest.TestCase):
         mock_process_reviewer.assert_called_once()
         mock_handle_removed.assert_called_once()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
     def test_process_pull_request_no_reviewers(self, mock_handle_removed):
         """Test processing a pull request with no reviewers."""
         # Setup mocks
         self.mock_app.ado_git_client.get_pull_request_reviewers.return_value = []
 
-        with patch("ado_asana_sync.sync.pull_request_sync.process_pr_reviewer") as mock_process_reviewer:
+        with patch("ado_asana_sync.sync.pr_processor.process_pr_reviewer") as mock_process_reviewer:
             process_pull_request(self.mock_app, self.mock_pr, self.mock_repository, [], [], "project-456")
 
             # Verify no reviewer processing but removed reviewers are handled
@@ -119,7 +119,7 @@ class TestPullRequestSync(unittest.TestCase):
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    @patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task")
+    @patch("ado_asana_sync.sync.pr_processor.create_new_pr_reviewer_task")
     def test_process_pr_reviewer_new_task_real_integration(
         self, mock_create_task, mock_asana_client, mock_ado_connection, mock_dirname
     ):
@@ -187,7 +187,7 @@ class TestPullRequestSync(unittest.TestCase):
             finally:
                 app.close()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.update_existing_pr_reviewer_task")
+    @patch("ado_asana_sync.sync.pr_processor.update_existing_pr_reviewer_task")
     def test_process_pr_reviewer_existing_task(self, mock_update_task):
         """Test processing a reviewer when an existing task exists.
 
@@ -221,7 +221,7 @@ class TestPullRequestSync(unittest.TestCase):
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    @patch("ado_asana_sync.sync.pull_request_sync.create_new_pr_reviewer_task")
+    @patch("ado_asana_sync.sync.pr_processor.create_new_pr_reviewer_task")
     def test_process_pr_reviewer_no_user_match_real_integration(
         self, mock_create_task, mock_asana_client, mock_ado_connection, mock_dirname
     ):
@@ -270,9 +270,9 @@ class TestPullRequestSync(unittest.TestCase):
             finally:
                 app.close()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name")
-    @patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.iso8601_utc")
+    @patch("ado_asana_sync.sync.pr_processor.get_asana_task_by_name")
+    @patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_processor.iso8601_utc")
     def test_create_new_pr_reviewer_task(self, mock_iso8601, mock_create_task, mock_get_task_by_name):
         """Test creating a new PR reviewer task."""
         # Setup mocks
@@ -287,9 +287,9 @@ class TestPullRequestSync(unittest.TestCase):
         # Verify task creation
         mock_create_task.assert_called_once()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.iso8601_utc")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_processor.iso8601_utc")
     def test_update_existing_pr_reviewer_task(self, mock_iso8601, mock_update_task, mock_get_task):
         """Test updating an existing PR reviewer task."""
         # Setup mocks
@@ -323,7 +323,7 @@ class TestPullRequestSync(unittest.TestCase):
         mock_pr_item.is_current.return_value = True  # Already current
         mock_pr_item.reviewer_name = "John Doe"
 
-        with patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update_task:
+        with patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update_task:
             update_existing_pr_reviewer_task(
                 self.mock_app,
                 self.mock_pr,
@@ -337,9 +337,9 @@ class TestPullRequestSync(unittest.TestCase):
             # Verify no update
             mock_update_task.assert_not_called()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.iso8601_utc")
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_processor.iso8601_utc")
     def test_update_existing_pr_reviewer_task_approval_reset(self, mock_iso8601, mock_get_task, mock_update_task):
         """Test updating a PR reviewer task when approval is reset."""
         # Setup mocks
@@ -414,7 +414,7 @@ class TestPullRequestSync(unittest.TestCase):
         result = create_ado_user_from_reviewer(mock_reviewer)
         self.assertIsNone(result)
 
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
     def test_handle_removed_reviewers(self, mock_update_task):
         """Test handling removed reviewers."""
         from ado_asana_sync.sync.pull_request_sync import handle_removed_reviewers
@@ -521,8 +521,8 @@ class TestPullRequestSync(unittest.TestCase):
         self.mock_app.ado_git_client.reset_mock()
         self.mock_app.ado_git_client.get_repositories.side_effect = Exception("permission denied")
 
-        with patch("ado_asana_sync.sync.pull_request_sync.get_asana_users") as mock_get_users:
-            with patch("ado_asana_sync.sync.pull_request_sync.get_asana_project_tasks") as mock_get_tasks:
+        with patch("ado_asana_sync.sync.pr_sync_core.get_asana_users") as mock_get_users:
+            with patch("ado_asana_sync.sync.pr_sync_core.get_asana_project_tasks") as mock_get_tasks:
                 mock_get_users.return_value = []
                 mock_get_tasks.return_value = []
 
@@ -580,7 +580,7 @@ class TestPullRequestSync(unittest.TestCase):
                 # Verify it tried to get PRs but handled the error
                 self.mock_app.ado_git_client.get_pull_requests.assert_called_once()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.find_custom_field_by_name")
     @patch("asana.TasksApi")
     def test_create_asana_pr_task_success(self, mock_tasks_api_class, mock_find_custom_field):
         """Test successful creation of Asana PR task."""
@@ -614,7 +614,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertEqual(create_call_args["data"]["projects"], [{"gid": "project-456"}])
         self.assertFalse(create_call_args["data"]["completed"])  # Should not be completed for active PR
 
-    @patch("ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.find_custom_field_by_name")
     @patch("asana.TasksApi")
     def test_create_asana_pr_task_completed_pr(self, mock_tasks_api_class, mock_find_custom_field):
         """Test creation of Asana PR task for completed PR."""
@@ -643,8 +643,8 @@ class TestPullRequestSync(unittest.TestCase):
         create_call_args = mock_tasks_api.create_task.call_args[0][0]
         self.assertTrue(create_call_args["data"]["completed"])  # Should be completed
 
-    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.find_custom_field_by_name")
     @patch("asana.TasksApi")
     def test_update_asana_pr_task_success(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag):
         """Test successful update of Asana PR task."""
@@ -676,8 +676,8 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertEqual(update_call_args[0]["data"]["name"], "PR 789: Updated Title")
         self.assertTrue(update_call_args[0]["data"]["completed"])  # Should be completed for approved
 
-    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.find_custom_field_by_name")
     @patch("asana.TasksApi")
     def test_update_asana_pr_task_no_custom_field(self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag):
         """Test update of Asana PR task when custom field is not found."""
@@ -797,8 +797,8 @@ class TestPullRequestSync(unittest.TestCase):
 
         self.assertTrue(success, "PullRequestItem creation should not fail due to doc_id")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.add_closure_comment_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_closure_comment_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.find_custom_field_by_name")
     @patch("asana.TasksApi")
     def test_create_asana_pr_task_draft_pr(self, mock_tasks_api_class, mock_find_custom_field, mock_add_comment):
         """Test creation of Asana PR task for draft PR."""
@@ -827,9 +827,9 @@ class TestPullRequestSync(unittest.TestCase):
         create_call_args = mock_tasks_api.create_task.call_args[0][0]
         self.assertTrue(create_call_args["data"]["completed"])  # Should be completed for draft PR
 
-    @patch("ado_asana_sync.sync.pull_request_sync.add_closure_comment_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.find_custom_field_by_name")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_closure_comment_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.find_custom_field_by_name")
     @patch("asana.TasksApi")
     def test_update_asana_pr_task_draft_transition(
         self, mock_tasks_api_class, mock_find_custom_field, mock_add_tag, mock_add_comment
@@ -919,7 +919,7 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertIn("completed", _PR_CLOSED_STATES)
         self.assertIn("abandoned", _PR_CLOSED_STATES)
 
-    @patch("ado_asana_sync.sync.pull_request_sync.process_pull_request")
+    @patch("ado_asana_sync.sync.pr_sync_core.process_pull_request")
     def test_process_repository_pull_requests_returns_processed_ids(self, mock_process_pr):
         """Test that process_repository_pull_requests returns processed PR IDs."""
         from ado_asana_sync.sync.pull_request_sync import process_repository_pull_requests
@@ -952,8 +952,8 @@ class TestPullRequestSync(unittest.TestCase):
         # Verify empty set is returned
         self.assertEqual(result, set())
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.update_asana_pr_task")
     def test_process_closed_pull_requests_skips_processed_prs(self, mock_update_task, mock_get_task):
         """Test that process_closed_pull_requests skips PRs already processed in first pass."""
         from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
@@ -1049,8 +1049,8 @@ class TestPullRequestSync(unittest.TestCase):
 
         self.assertTrue(success, "Function should handle None processed_pr_ids gracefully")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.update_asana_pr_task")
     def test_process_closed_pull_requests_filters_by_repository(self, mock_update_task, mock_get_task):
         """Test that process_closed_pull_requests filters PR tasks by repository ID."""
         from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
@@ -1108,8 +1108,8 @@ class TestPullRequestSync(unittest.TestCase):
         # Verify update was called for the correct PR
         mock_update_task.assert_called_once()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.update_asana_pr_task")
     def test_process_closed_pull_requests_api_failure_with_string_repository_id(self, mock_update_task, mock_get_task):
         """Test that API failures occur when repository ID string is passed instead of repository object."""
         from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
@@ -1154,8 +1154,8 @@ class TestPullRequestSync(unittest.TestCase):
         # Verify no update was called due to API failure
         mock_update_task.assert_not_called()
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.update_asana_pr_task")
     def test_process_closed_pull_requests_successful_abandoned_pr_processing(self, mock_update_task, mock_get_task):
         """Test that abandoned PRs are processed correctly when API succeeds."""
         from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
@@ -1206,8 +1206,8 @@ class TestPullRequestSync(unittest.TestCase):
         # Verify Asana task was checked
         mock_get_task.assert_called_once_with(mock_app, "task-5")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.update_asana_pr_task")
     def test_process_closed_pull_requests_draft_pr_processing(self, mock_update_task, mock_get_task):
         """Test that draft PRs are processed correctly."""
         from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
@@ -1275,11 +1275,11 @@ class TestPullRequestSync(unittest.TestCase):
 
         self.assertTrue(success, "Function should handle None repository gracefully")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.matching_user")
-    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
-    @patch("ado_asana_sync.sync.pull_request_sync.extract_reviewer_vote")
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
-    @patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.matching_user")
+    @patch("ado_asana_sync.sync.pr_sync_core.create_ado_user_from_reviewer")
+    @patch("ado_asana_sync.sync.pr_sync_core.extract_reviewer_vote")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.update_asana_pr_task")
     def test_process_closed_pull_requests_fetches_reviewers_and_updates_vote(
         self, mock_update_task, mock_get_task, mock_extract_vote, mock_create_ado_user, mock_matching_user
     ):
@@ -1357,9 +1357,9 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertEqual(pr_item_arg.review_status, "approved", "Review status should be updated to 'approved'")
         self.assertEqual(pr_item_arg.status, "completed", "PR status should be 'completed'")
 
-    @patch("ado_asana_sync.sync.pull_request_sync.matching_user")
-    @patch("ado_asana_sync.sync.pull_request_sync.create_ado_user_from_reviewer")
-    @patch("ado_asana_sync.sync.pull_request_sync.get_asana_task")
+    @patch("ado_asana_sync.sync.pr_sync_core.matching_user")
+    @patch("ado_asana_sync.sync.pr_sync_core.create_ado_user_from_reviewer")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
     def test_process_closed_pull_requests_saves_db_when_task_already_completed(
         self, mock_get_task, mock_create_ado_user, mock_matching_user
     ):
