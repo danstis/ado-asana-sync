@@ -47,6 +47,8 @@ cp .env.example .env
 - `THREAD_COUNT`: Number of projects to sync in parallel (default: `8`).
 - `SLEEP_TIME`: Seconds to sleep between sync runs (default: `300`).
 - `SYNC_THRESHOLD`: Days to continue syncing closed tasks before unmapping (default: `30`).
+- `SYNC_OVERLAP_MINUTES`: Overlap window in minutes when computing the incremental sync boundary to avoid missing items modified during the previous run (default: `5`). Requires a process restart to take effect.
+- `FORCE_FULL_SYNC`: Set to `true`, `1`, or `yes` to force a full sync on every run, regardless of the stored checkpoint (default: `false`). Requires a process restart to take effect.
 - `SYNCED_TAG_NAME`: Asana tag appended to all synced items (default: `synced`).
 - `LOGLEVEL`: Console log level (default: `INFO`).
 - *See `.env.example` for additional Application Insights telemetry configurations.*
