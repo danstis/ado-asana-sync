@@ -275,7 +275,10 @@ class Database(DatabaseMigrationsMixin, TinyDBMigrationMixin):
 
         if duplicates:
             error_msg = f"Duplicate project configuration found in projects.json for: {', '.join(duplicates)}"
-            _LOGGER.error(error_msg)
+            _LOGGER.error(
+                "Duplicate project configuration found in projects.json for: %s",
+                ", ".join(d.replace("\n", "\\n").replace("\r", "\\r") for d in duplicates),
+            )
             raise ValueError(error_msg)
 
         with self.get_connection() as conn:
