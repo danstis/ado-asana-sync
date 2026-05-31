@@ -11,6 +11,9 @@ on:
     - cron: "20 7 * * 6"
   workflow_dispatch:
 
+env:
+  UV_DEFAULT_INDEX: https://pypi.org/simple
+
 jobs:
   version:
     name: Generate version

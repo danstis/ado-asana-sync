@@ -336,11 +336,13 @@ class Database(DatabaseMigrationsMixin, TinyDBMigrationMixin):
 
             projects = []
             for row in cursor:
-                projects.append({
-                    "adoProjectName": row[0],
-                    "adoTeamName": row[1],
-                    "asanaProjectName": row[2],
-                })
+                projects.append(
+                    {
+                        "adoProjectName": row[0],
+                        "adoTeamName": row[1],
+                        "asanaProjectName": row[2],
+                    }
+                )
 
             return projects
 
