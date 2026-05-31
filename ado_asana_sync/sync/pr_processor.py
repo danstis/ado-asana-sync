@@ -64,7 +64,25 @@ def create_ado_user_from_reviewer(reviewer) -> Any:
         return None
 
 
-def process_pull_request(  # noqa: C901
+def _get_reviewer_id(reviewer) -> str | None:
+    """Extract the unique identifier for a reviewer."""
+    if hasattr(reviewer, "user") and reviewer.user:
+        return getattr(reviewer.user, "unique_name", None) or getattr(reviewer.user, "uniqueName", None)
+    return getattr(reviewer, "unique_name", None) or getattr(reviewer, "uniqueName", None)
+
+
+def _cache_reviewer_lookup(asana_users: List[dict], ado_reviewer, user_lookup_cache: dict | None) -> dict | None:
+    """Look up the Asana user for a reviewer, using and updating the cache when available."""
+    reviewer_key = f"{ado_reviewer.display_name}:{ado_reviewer.email}"
+    if user_lookup_cache is not None and reviewer_key in user_lookup_cache:
+        return user_lookup_cache[reviewer_key]
+    asana_matched_user = matching_user(asana_users, ado_reviewer)
+    if user_lookup_cache is not None:
+        user_lookup_cache[reviewer_key] = asana_matched_user
+    return asana_matched_user
+
+
+def process_pull_request(
     app: App,
     pr,
     repository,
@@ -73,11 +91,7 @@ def process_pull_request(  # noqa: C901
     asana_project: str,
     user_lookup_cache: dict | None = None,
 ) -> None:
-    """
-    Process a single pull request, creating reviewer tasks.
-
-    Note: Complexity justified by necessary error handling and business logic.
-    """
+    """Process a single pull request, creating reviewer tasks."""
     _LOGGER.debug("Processing PR %s: %s", pr.pull_request_id, pr.title)
 
     if app.ado_git_client is None:
@@ -93,15 +107,11 @@ def process_pull_request(  # noqa: C901
         handle_removed_reviewers(app, pr, set(), asana_project)
         return
 
-    processed_reviewers = set()
-    current_reviewer_gids = set()
+    processed_reviewers: set[str] = set()
+    current_reviewer_gids: set[str] = set()
 
     for reviewer in reviewers:
-        reviewer_id = None
-        if hasattr(reviewer, "user") and reviewer.user:
-            reviewer_id = getattr(reviewer.user, "unique_name", None) or getattr(reviewer.user, "uniqueName", None)
-        else:
-            reviewer_id = getattr(reviewer, "unique_name", None) or getattr(reviewer, "uniqueName", None)
+        reviewer_id = _get_reviewer_id(reviewer)
 
         if reviewer_id and reviewer_id in processed_reviewers:
             _LOGGER.debug(
@@ -116,14 +126,7 @@ def process_pull_request(  # noqa: C901
 
         ado_reviewer = create_ado_user_from_reviewer(reviewer)
         if ado_reviewer:
-            reviewer_key = f"{ado_reviewer.display_name}:{ado_reviewer.email}"
-            if user_lookup_cache is not None and reviewer_key in user_lookup_cache:
-                asana_matched_user = user_lookup_cache[reviewer_key]
-            else:
-                asana_matched_user = matching_user(asana_users, ado_reviewer)
-                if user_lookup_cache is not None:
-                    user_lookup_cache[reviewer_key] = asana_matched_user
-
+            asana_matched_user = _cache_reviewer_lookup(asana_users, ado_reviewer, user_lookup_cache)
             if asana_matched_user:
                 current_reviewer_gids.add(asana_matched_user["gid"])
 
@@ -141,9 +144,31 @@ def process_pull_request(  # noqa: C901
     handle_removed_reviewers(app, pr, current_reviewer_gids, asana_project)
 
 
-def handle_removed_reviewers(  # noqa: C901
-    app: App, pr, current_reviewer_gids: set, asana_project: str
-) -> None:
+def _close_removed_reviewer_task(app: App, pr_item: PullRequestItem, asana_project: str) -> None:
+    """Close the Asana task for a reviewer that was removed from a PR."""
+    pr_item.status = "reviewer_removed"
+    pr_item.review_status = "removed"
+    pr_item.updated_date = iso8601_utc(datetime.now())
+
+    if pr_item.asana_gid and app.asana_tag_gid is not None:
+        try:
+            update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
+            _LOGGER.info(
+                "Closed Asana task for removed reviewer: %s",
+                pr_item.asana_title,
+            )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            _LOGGER.error(
+                "Failed to close Asana task for removed reviewer %s: %s",
+                pr_item.asana_title,
+                e,
+            )
+    else:
+        pr_item.processing_state = "closed"
+        pr_item.save(app)
+
+
+def handle_removed_reviewers(app: App, pr, current_reviewer_gids: set, asana_project: str) -> None:
     """Handle reviewers that have been removed from the PR by closing their Asana tasks."""
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
@@ -176,27 +201,7 @@ def handle_removed_reviewers(  # noqa: C901
                 pr.pull_request_id,
                 pr_item.asana_title,
             )
-
-            pr_item.status = "reviewer_removed"
-            pr_item.review_status = "removed"
-            pr_item.updated_date = iso8601_utc(datetime.now())
-
-            if pr_item.asana_gid and app.asana_tag_gid is not None:
-                try:
-                    update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
-                    _LOGGER.info(
-                        "Closed Asana task for removed reviewer: %s",
-                        pr_item.asana_title,
-                    )
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    _LOGGER.error(
-                        "Failed to close Asana task for removed reviewer %s: %s",
-                        pr_item.asana_title,
-                        e,
-                    )
-            else:
-                pr_item.processing_state = "closed"
-                pr_item.save(app)
+            _close_removed_reviewer_task(app, pr_item, asana_project)
 
 
 def process_pr_reviewer(
@@ -215,13 +220,7 @@ def process_pr_reviewer(
         _LOGGER.debug("Could not extract user info from reviewer for PR %s", pr.pull_request_id)
         return
 
-    reviewer_key = f"{ado_reviewer.display_name}:{ado_reviewer.email}"
-    if user_lookup_cache is not None and reviewer_key in user_lookup_cache:
-        asana_matched_user = user_lookup_cache[reviewer_key]
-    else:
-        asana_matched_user = matching_user(asana_users, ado_reviewer)
-        if user_lookup_cache is not None:
-            user_lookup_cache[reviewer_key] = asana_matched_user
+    asana_matched_user = _cache_reviewer_lookup(asana_users, ado_reviewer, user_lookup_cache)
     if not asana_matched_user:
         _LOGGER.info(
             "PR %s: reviewer %s <%s> not found in Asana",
@@ -321,6 +320,48 @@ def create_new_pr_reviewer_task(
             update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
 
 
+def _check_title_change(pr, existing_match: PullRequestItem) -> bool:
+    """Check for a PR title change and validate data integrity. Returns False if corruption detected."""
+    if existing_match.title != pr.title:
+        _LOGGER.info("PR title changed from '%s' to '%s'", existing_match.title, pr.title)
+        if existing_match.ado_pr_id != pr.pull_request_id:
+            _LOGGER.error(
+                "Critical data corruption detected: PR item has ID %s but PR object has ID %s. "
+                "This would create a title/ID mismatch. Skipping update to prevent corruption.",
+                existing_match.ado_pr_id,
+                pr.pull_request_id,
+            )
+            return False
+    return True
+
+
+def _log_review_status_change(pr, existing_match: PullRequestItem, reviewer) -> None:
+    """Log changes to a reviewer's vote status."""
+    new_status = extract_reviewer_vote(reviewer)
+    if existing_match.review_status == new_status:
+        return
+    old_status = existing_match.review_status or "noVote"
+    _LOGGER.info(
+        "PR %s reviewer %s vote changed from '%s' to '%s'",
+        pr.pull_request_id,
+        existing_match.reviewer_name or existing_match.reviewer_gid,
+        old_status,
+        new_status,
+    )
+    if new_status in _REVIEWER_APPROVED_STATES:
+        _LOGGER.info(
+            "Reviewer %s approved PR %s, task will be closed",
+            existing_match.reviewer_name or existing_match.reviewer_gid,
+            pr.pull_request_id,
+        )
+    elif old_status in _REVIEWER_APPROVED_STATES and new_status not in _REVIEWER_APPROVED_STATES:
+        _LOGGER.info(
+            "Reviewer %s approval reset on PR %s, task will be reopened",
+            existing_match.reviewer_name or existing_match.reviewer_gid,
+            pr.pull_request_id,
+        )
+
+
 def update_existing_pr_reviewer_task(
     app: App,
     pr,
@@ -349,44 +390,9 @@ def update_existing_pr_reviewer_task(
         _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
         return
 
-    title_changed = existing_match.title != pr.title
-    review_status_changed = existing_match.review_status != extract_reviewer_vote(reviewer)
-
-    if title_changed:
-        _LOGGER.info("PR title changed from '%s' to '%s'", existing_match.title, pr.title)
-
-        if existing_match.ado_pr_id != pr.pull_request_id:
-            _LOGGER.error(
-                "Critical data corruption detected: PR item has ID %s but PR object has ID %s. "
-                "This would create a title/ID mismatch. Skipping update to prevent corruption.",
-                existing_match.ado_pr_id,
-                pr.pull_request_id,
-            )
-            return
-
-    if review_status_changed:
-        old_status = existing_match.review_status or "noVote"
-        new_status = extract_reviewer_vote(reviewer)
-        _LOGGER.info(
-            "PR %s reviewer %s vote changed from '%s' to '%s'",
-            pr.pull_request_id,
-            existing_match.reviewer_name or existing_match.reviewer_gid,
-            old_status,
-            new_status,
-        )
-
-        if new_status in _REVIEWER_APPROVED_STATES:
-            _LOGGER.info(
-                "Reviewer %s approved PR %s, task will be closed",
-                existing_match.reviewer_name or existing_match.reviewer_gid,
-                pr.pull_request_id,
-            )
-        elif old_status in _REVIEWER_APPROVED_STATES and new_status not in _REVIEWER_APPROVED_STATES:
-            _LOGGER.info(
-                "Reviewer %s approval reset on PR %s, task will be reopened",
-                existing_match.reviewer_name or existing_match.reviewer_gid,
-                pr.pull_request_id,
-            )
+    if not _check_title_change(pr, existing_match):
+        return
+    _log_review_status_change(pr, existing_match, reviewer)
 
     existing_match.title = pr.title
     existing_match.status = pr.status
