@@ -1415,5 +1415,39 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertTrue(mock_app.ado_git_client.get_pull_request_by_id.called, "PR should be fetched")
 
 
+class TestPullRequestSyncFacadeCompatibility(unittest.TestCase):
+    """Verify the pull_request_sync facade exports the expected public surface."""
+
+    def test_exports_pull_request_item(self):
+        import ado_asana_sync.sync.pull_request_sync as facade
+
+        self.assertTrue(hasattr(facade, "PullRequestItem"), "facade must export PullRequestItem")
+        from ado_asana_sync.sync.pull_request_item import PullRequestItem
+
+        self.assertIs(facade.PullRequestItem, PullRequestItem)
+
+    def test_exports_ado_assigned_user(self):
+        import ado_asana_sync.sync.pull_request_sync as facade
+
+        self.assertTrue(hasattr(facade, "ADOAssignedUser"), "facade must export ADOAssignedUser")
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        self.assertIs(facade.ADOAssignedUser, ADOAssignedUser)
+
+    def test_exports_git_pull_request_search_criteria(self):
+        import ado_asana_sync.sync.pull_request_sync as facade
+
+        self.assertTrue(hasattr(facade, "GitPullRequestSearchCriteria"), "facade must export GitPullRequestSearchCriteria")
+
+    def test_all_list_matches_exported_names(self):
+        import ado_asana_sync.sync.pull_request_sync as facade
+
+        for name in facade.__all__:
+            self.assertTrue(
+                hasattr(facade, name),
+                f"pull_request_sync.__all__ lists '{name}' but the attribute is not present",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

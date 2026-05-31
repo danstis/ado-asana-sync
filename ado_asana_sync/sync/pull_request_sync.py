@@ -1,4 +1,14 @@
-"""Pull request sync - re-exports from modular sub-modules for backward compatibility."""
+"""Pull request sync - re-exports from modular sub-modules for backward-compatible import surface.
+
+Note: this facade preserves import-name compatibility only. Monkeypatching functions through
+this module will not intercept calls made within the sub-modules (pr_sync_core, pr_processor);
+patch at the originating module level instead.
+"""
+
+try:
+    from azure.devops.v7_0.git.models import GitPullRequestSearchCriteria
+except ImportError:
+    GitPullRequestSearchCriteria = None  # type: ignore[assignment,misc]
 
 from ado_asana_sync.utils.date import iso8601_utc
 
@@ -26,7 +36,9 @@ from .pr_sync_core import (
     process_repository_pull_requests,
     sync_pull_requests,
 )
+from .pull_request_item import PullRequestItem
 from .sync import (
+    ADOAssignedUser,
     find_custom_field_by_name,
     get_asana_project_tasks,
     get_asana_task_by_name,
@@ -36,6 +48,9 @@ from .sync import (
 from .utils import encode_url_for_asana, extract_reviewer_vote
 
 __all__ = [
+    "ADOAssignedUser",
+    "GitPullRequestSearchCriteria",
+    "PullRequestItem",
     "_PR_CLOSED_STATES",
     "_REVIEWER_APPROVED_STATES",
     "_get_cached_asana_task",
