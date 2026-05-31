@@ -106,6 +106,21 @@ class App:
         # Trace sampling configuration for Application Insights
         self.trace_sampling_percentage = float(os.environ.get("OTEL_TRACES_SAMPLER_ARG", "0.05"))  # Default 5%
 
+        # Group/container reviewer fallback strategy
+        _valid_strategies = {"ignore", "default_user", "unassigned_task"}
+        _raw_strategy = os.environ.get("GROUP_REVIEWER_STRATEGY", "ignore").strip().lower()
+        if _raw_strategy not in _valid_strategies:
+            _LOGGER.warning("Invalid GROUP_REVIEWER_STRATEGY '%s', using 'ignore'", _raw_strategy)
+            self.group_reviewer_strategy = "ignore"
+        else:
+            self.group_reviewer_strategy = _raw_strategy
+        self.group_reviewer_default_user = os.environ.get("GROUP_REVIEWER_DEFAULT_USER", "").strip()
+        if self.group_reviewer_strategy == "default_user" and not self.group_reviewer_default_user:
+            _LOGGER.warning(
+                "GROUP_REVIEWER_STRATEGY=default_user requires GROUP_REVIEWER_DEFAULT_USER to be set; falling back to 'ignore'"
+            )
+            self.group_reviewer_strategy = "ignore"
+
         if not self.ado_pat:
             _LOGGER.fatal("ADO_PAT must be provided")
             raise ValueError("ADO_PAT must be provided")

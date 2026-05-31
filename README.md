@@ -51,6 +51,8 @@ cp .env.example .env
 - `SYNC_THRESHOLD`: Days to continue syncing closed tasks before unmapping (default: `30`).
 - `SYNCED_TAG_NAME`: Asana tag appended to all synced items (default: `synced`).
 - `LOGLEVEL`: Console log level (default: `INFO`).
+- `GROUP_REVIEWER_STRATEGY`: How to handle ADO group/container reviewers (e.g. `[Project]\Contributor`). Options: `ignore` (default, skips them), `default_user` (assigns tasks to `GROUP_REVIEWER_DEFAULT_USER`), `unassigned_task` (creates an unassigned task with the group name).
+- `GROUP_REVIEWER_DEFAULT_USER`: Asana user email, GID, or display name to assign group reviewer tasks to when `GROUP_REVIEWER_STRATEGY=default_user`.
 - *See `.env.example` for additional Application Insights telemetry configurations.*
 
 #### 2. Project Mapping

@@ -257,6 +257,24 @@ class RealObjectBuilder:
 
         return ADOPullRequest(pr_id, title, status)
 
+    @staticmethod
+    def create_real_ado_group_reviewer(
+        display_name: str = "[MyProject]\\Contributors",
+        unique_name: str = "vstfs:///Classification/TeamProject/abc123",
+        is_container: bool = True,
+        vote: int = 0,
+    ):
+        """Create a real-ish ADO group/container reviewer object (not a mock)."""
+
+        class ADOGroupReviewerObj:
+            def __init__(self, display_name, unique_name, is_container, vote):
+                self.display_name = display_name
+                self.unique_name = unique_name
+                self.is_container = is_container
+                self.vote = vote
+
+        return ADOGroupReviewerObj(display_name, unique_name, is_container, vote)
+
 
 def create_minimal_external_api_patches():
     """

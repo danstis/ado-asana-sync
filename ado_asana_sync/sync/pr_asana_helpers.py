@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import asana
 from asana.rest import ApiException
@@ -52,15 +52,16 @@ def _record_pr_action(app: App, action: str, pr_item: PullRequestItem) -> None:
 
 def _get_cached_custom_field(app: App, asana_project, field_name: str):
     """Get custom field with caching to avoid repeated API calls."""
-    if hasattr(app, "_spec_class"):
-        return find_custom_field_by_name(app, asana_project, field_name)
-
     project_str = asana_project if isinstance(asana_project, str) else str(asana_project.get("gid", asana_project))
+
+    if hasattr(app, "_spec_class"):
+        return find_custom_field_by_name(app, project_str, field_name)
+
     cache_key = f"{project_str}:{field_name}"
     if hasattr(app, "pr_sync_cache") and cache_key in app.pr_sync_cache["custom_fields"]:  # type: ignore[attr-defined]
         return app.pr_sync_cache["custom_fields"][cache_key]  # type: ignore[attr-defined]
 
-    field = find_custom_field_by_name(app, asana_project, field_name)
+    field = find_custom_field_by_name(app, project_str, field_name)
     if hasattr(app, "pr_sync_cache"):
         app.pr_sync_cache["custom_fields"][cache_key] = field  # type: ignore[attr-defined]
     return field
@@ -112,12 +113,19 @@ def create_asana_pr_task(app: App, asana_project: str, pr_item: PullRequestItem,
     link_custom_field = _get_cached_custom_field(app, asana_project, "Link")
     link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
 
-    body = {
+    if pr_item.assignee_gid is not None:
+        asana_assignee = pr_item.assignee_gid
+    elif pr_item.reviewer_gid.startswith("group:"):
+        asana_assignee = None
+    else:
+        asana_assignee = pr_item.reviewer_gid
+
+    body: dict[str, Any] = {
         "data": {
             "name": pr_item.asana_title,
             "html_notes": f"<body>{pr_item.asana_notes_link}</body>",
             "projects": [asana_project],
-            "assignee": pr_item.reviewer_gid,
+            "assignee": asana_assignee,
             "tags": [tag],
             "completed": is_completed,
         },
@@ -172,14 +180,19 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
     link_custom_field = _get_cached_custom_field(app, asana_project_gid, "Link")
     link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
 
-    body = {
-        "data": {
-            "name": pr_item.asana_title,
-            "html_notes": f"<body>{pr_item.asana_notes_link}</body>",
-            "assignee": pr_item.reviewer_gid,
-            "completed": is_completed,
-        }
+    update_body: dict = {
+        "name": pr_item.asana_title,
+        "html_notes": f"<body>{pr_item.asana_notes_link}</body>",
+        "completed": is_completed,
     }
+    if pr_item.assignee_gid is not None:
+        update_body["assignee"] = pr_item.assignee_gid
+    elif pr_item.reviewer_gid.startswith("group:"):
+        update_body["assignee"] = None
+    else:
+        update_body["assignee"] = pr_item.reviewer_gid
+
+    body = {"data": update_body}
 
     if link_custom_field_id:
         body["data"]["custom_fields"] = {link_custom_field_id: encode_url_for_asana(pr_item.url)}
