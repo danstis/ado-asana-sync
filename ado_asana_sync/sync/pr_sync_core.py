@@ -27,6 +27,7 @@ from .utils import extract_reviewer_vote
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 _ADO_GIT_CLIENT_NONE_MSG = "app.ado_git_client is None"
+_ADO_PR_MATCHES_NONE_MSG = "app.pr_matches is None"
 _ADO_DOES_NOT_EXIST = "does not exist"
 
 
@@ -37,7 +38,8 @@ def _should_skip_closed_pr(pr_item: PullRequestItem) -> bool:
 
 def _get_open_pr_tasks(app: App, repository) -> list:
     """Query database for open PR tasks, optionally filtered by repository."""
-    assert app.pr_matches is not None
+    if app.pr_matches is None:
+        raise ValueError(_ADO_PR_MATCHES_NONE_MSG)
     if repository:
         repository_id = repository.id
 
@@ -66,7 +68,8 @@ def _get_open_pr_tasks(app: App, repository) -> list:
 
 def _update_pr_reviewer_status(app: App, pr_item: PullRequestItem, asana_users: List[dict], repository) -> Any:
     """Fetch PR from ADO and update reviewer status. Returns the PR object."""
-    assert app.ado_git_client is not None
+    if app.ado_git_client is None:
+        raise ValueError(_ADO_GIT_CLIENT_NONE_MSG)
     pr = app.ado_git_client.get_pull_request_by_id(pr_item.ado_pr_id)
     _LOGGER.debug("Second pass: Successfully retrieved PR %d with status '%s'", pr_item.ado_pr_id, pr.status)
 
