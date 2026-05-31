@@ -69,6 +69,8 @@ CUSTOM_FIELDS_AVAILABLE = True
 LAST_CACHE_REFRESH: datetime = datetime.now(timezone.utc)
 CACHE_VALIDITY_DURATION = timedelta(hours=24)
 
+_CONFIG_IS_NONE_MSG = "app.config is None"
+
 
 def _parse_sync_threshold(value: str | None) -> int:
     """Parse the sync threshold environment variable into a non-negative integer."""
@@ -219,56 +221,60 @@ def read_projects(app: App) -> list:
         return projects
 
 
+def _get_tag_gid_from_config(app: App) -> str | None:
+    """Retrieve the cached tag GID from app config, or None if config is absent."""
+    if app.config is None:
+        return None
+    tag_config_result = app.config.get(doc_id=1)
+    if isinstance(tag_config_result, list):
+        tag_config = tag_config_result[0] if tag_config_result else None
+    else:
+        tag_config = tag_config_result
+    return tag_config.get("tag_gid") if tag_config else None
+
+
+def _upsert_tag_gid(app: App, tag_gid: str) -> None:
+    """Persist a tag GID into the app config database."""
+    if app.config is None:
+        raise ValueError(_CONFIG_IS_NONE_MSG)
+    with app.db_lock:
+        app.config.upsert({"tag_gid": tag_gid}, lambda r: r.get("doc_id") == 1)
+
+
+def _handle_existing_tag(app: App, existing_tag: dict) -> str:
+    """Return or persist the GID for an existing Asana tag."""
+    if _is_dry_run(app):
+        _LOGGER.info("Dry-run mode: using existing tag %s without updating local config", existing_tag["gid"])
+        return existing_tag["gid"]
+    _upsert_tag_gid(app, existing_tag["gid"])
+    return existing_tag["gid"]
+
+
 def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None:
     """Create a tag for a given workspace if it does not already exist."""
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
-        tag_gid = None
-        if app.config is not None:
-            tag_config_result = app.config.get(doc_id=1)
-            tag_config = (
-                tag_config_result
-                if not isinstance(tag_config_result, list)
-                else (tag_config_result[0] if tag_config_result else None)
-            )
-            tag_gid = tag_config.get("tag_gid") if tag_config else None
-        elif not _is_dry_run(app):
-            raise ValueError("app.config is None")
+        tag_gid = _get_tag_gid_from_config(app)
+        if app.config is None and not _is_dry_run(app):
+            raise ValueError(_CONFIG_IS_NONE_MSG)
 
         if tag_gid:
             _LOGGER.info("tag_gid found in database for '%s'", tag)
             return tag_gid
 
-        # If tag_gid does not exist in the config, proceed to get or create the tag
         existing_tag = get_tag_by_name(app, workspace, tag)
         if existing_tag is not None:
-            if _is_dry_run(app):
-                _LOGGER.info("Dry-run mode: using existing tag %s without updating local config", existing_tag["gid"])
-                return existing_tag["gid"]
-            if app.config is None:
-                raise ValueError("app.config is None")
-            with app.db_lock:
+            return _handle_existing_tag(app, existing_tag)
 
-                def config_query_func(record):
-                    return record.get("doc_id") == 1
-
-                app.config.upsert({"tag_gid": existing_tag["gid"]}, config_query_func)
-            return existing_tag["gid"]
         if _is_dry_run(app):
             _LOGGER.info("Dry-run mode: tag '%s' would be created in workspace %s", tag, workspace)
             return "dry-run-tag"
+
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
         try:
             _LOGGER.info("tag '%s' not found, creating it", tag)
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
-            if app.config is None:
-                raise ValueError("app.config is None")
-            with app.db_lock:
-
-                def new_config_query_func(record):
-                    return record.get("doc_id") == 1
-
-                app.config.upsert({"tag_gid": api_response["gid"]}, new_config_query_func)
+            _upsert_tag_gid(app, api_response["gid"])
             return api_response["gid"]
         except ApiException as exception:
             _LOGGER.error(
