@@ -84,9 +84,7 @@ def _collect_group_reviewer_gid(app: App, reviewer, asana_users: List[dict]) -> 
     return f"group:{_get_reviewer_display_name(reviewer)}"
 
 
-def _collect_reviewer_gid(
-    app: App, reviewer, asana_users: List[dict], user_lookup_cache: dict | None
-) -> str | None:
+def _collect_reviewer_gid(app: App, reviewer, asana_users: List[dict], user_lookup_cache: dict | None) -> str | None:
     """Determine the reviewer GID to add to current_reviewer_gids, or None if not applicable."""
     if is_group_reviewer(reviewer):
         return _collect_group_reviewer_gid(app, reviewer, asana_users)
@@ -157,9 +155,7 @@ def _update_existing_group_reviewer_match(
         create_asana_pr_task(app, asana_project, existing_match, app.asana_tag_gid)
 
 
-def _resolve_group_reviewer_assignee(
-    app: App, pr, asana_users: List[dict], display_name: str, strategy: str
-) -> str | None:
+def _resolve_group_reviewer_assignee(app: App, pr, asana_users: List[dict], display_name: str, strategy: str) -> str | None:
     """Resolve the Asana assignee GID for a group reviewer based on the configured strategy.
 
     Returns None for unassigned_task strategy or when the default user cannot be resolved.

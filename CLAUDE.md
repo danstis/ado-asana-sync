@@ -221,6 +221,40 @@ This project uses **uv** for dependency management with `pyproject.toml` and `uv
 - **Why**: Mend Bolt and similar security scanning tools don't yet support `uv.lock` files, but do support `requirements.txt`
 - **Manual generation**: You can also generate it manually with `uv export --format requirements-txt --no-hashes > requirements.txt`
 
+## End-to-End Tests
+
+The `tests/e2e/` directory contains a comprehensive E2E test suite that validates the complete sync workflow using isolated temporary databases and mocked API endpoints. No real ADO or Asana credentials are required.
+
+### Running E2E Tests
+
+```bash
+uv run pytest tests/e2e/ -v
+```
+
+The E2E tests are included automatically in `uv run test` (the standard CI test command).
+
+### E2E Test Coverage
+
+| Sync Scenario                                   | Test Method                                             |
+| ----------------------------------------------- | ------------------------------------------------------- |
+| New ADO item → Asana task created               | `test_new_work_item_creates_asana_task`                 |
+| ADO item update → Asana task updated            | `test_work_item_update_syncs_title_change`              |
+| ADO item closed → Asana task completed          | `test_work_item_close_completes_asana_task`             |
+| ADO item reopened → Asana task uncompleted      | `test_work_item_reopen_uncompletes_asana_task`          |
+| Parent-child → Asana subtask hierarchy          | `test_subtask_hierarchy_parent_child_linked`            |
+| Existing Asana task → matched without duplicate | `test_preexisting_asana_task_matched_without_duplicate` |
+| PR opened → reviewer task created               | `test_pr_open_creates_reviewer_task`                    |
+| PR closed → reviewer task completed             | `test_pr_close_completes_reviewer_task`                 |
+| PR reactivated → reviewer task uncompleted      | `test_pr_reopen_uncompletes_reviewer_task`              |
+| PR reviewer vote changed → Asana task updated   | `test_pr_reviewer_status_update_syncs_vote_change`      |
+
+### E2E Test Architecture
+
+- **Real App + real SQLite**: `TestDataBuilder.create_real_app(temp_dir)` + `app.connect()` with external connections mocked.
+- **Mocked boundaries**: ADO clients (`app.ado_wit_client`, etc.) and Asana SDK classes (`asana.TasksApi`, etc.) are replaced with `MagicMock` via `unittest.mock.patch`.
+- **Pre-seeded DB**: Update/close/reopen scenarios insert a record into `app.matches` or `app.pr_matches` before running `sync_project` or `sync_pull_requests`.
+- **Assertions**: Verify Asana API call arguments (`tasks_api.create_task.call_args`) and real database state (`app.matches.all()`).
+
 ## Current Features
 
 ### Due Date Synchronization (Feature 001)
