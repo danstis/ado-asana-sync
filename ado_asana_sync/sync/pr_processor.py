@@ -72,6 +72,31 @@ def _resolve_group_reviewer_default_user(asana_users: List[dict], user_ref: str)
     return None
 
 
+def _collect_group_reviewer_gid(app: App, reviewer, asana_users: List[dict]) -> str | None:
+    """Return the synthetic GID to track for a group reviewer, or None to skip."""
+    strategy = getattr(app, "group_reviewer_strategy", "ignore")
+    if strategy == "ignore":
+        return None
+    if strategy == "default_user":
+        default_ref = getattr(app, "group_reviewer_default_user", "")
+        if _resolve_group_reviewer_default_user(asana_users, default_ref) is None:
+            return None
+    return f"group:{_get_reviewer_display_name(reviewer)}"
+
+
+def _collect_reviewer_gid(
+    app: App, reviewer, asana_users: List[dict], user_lookup_cache: dict | None
+) -> str | None:
+    """Determine the reviewer GID to add to current_reviewer_gids, or None if not applicable."""
+    if is_group_reviewer(reviewer):
+        return _collect_group_reviewer_gid(app, reviewer, asana_users)
+    ado_reviewer = create_ado_user_from_reviewer(reviewer)
+    if not ado_reviewer:
+        return None
+    asana_matched_user = _cache_reviewer_lookup(asana_users, ado_reviewer, user_lookup_cache)
+    return asana_matched_user["gid"] if asana_matched_user else None
+
+
 def _create_new_group_reviewer_task(
     app: App,
     pr_item: PullRequestItem,
@@ -321,21 +346,9 @@ def process_pull_request(
         if reviewer_id:
             processed_reviewers.add(reviewer_id)
 
-        if is_group_reviewer(reviewer):
-            _gr_strategy = getattr(app, "group_reviewer_strategy", "ignore")
-            if _gr_strategy != "ignore":
-                if _gr_strategy == "default_user":
-                    _default_ref = getattr(app, "group_reviewer_default_user", "")
-                    if _resolve_group_reviewer_default_user(asana_users, _default_ref) is not None:
-                        current_reviewer_gids.add(f"group:{_get_reviewer_display_name(reviewer)}")
-                else:
-                    current_reviewer_gids.add(f"group:{_get_reviewer_display_name(reviewer)}")
-        else:
-            ado_reviewer = create_ado_user_from_reviewer(reviewer)
-            if ado_reviewer:
-                asana_matched_user = _cache_reviewer_lookup(asana_users, ado_reviewer, user_lookup_cache)
-                if asana_matched_user:
-                    current_reviewer_gids.add(asana_matched_user["gid"])
+        gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
+        if gid:
+            current_reviewer_gids.add(gid)
 
         process_pr_reviewer(
             app,
