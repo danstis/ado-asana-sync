@@ -145,6 +145,9 @@ def start_sync(app: App) -> None:
     while True:
         with _TRACER.start_as_current_span("start_sync") as span:
             span.add_event("Start sync run")
+            if _is_dry_run(app):
+                app.dry_run_report = DryRunReport()
+
             # Check if the cache is valid
             now = datetime.now(timezone.utc)
             if CUSTOM_FIELDS_AVAILABLE and now - LAST_CACHE_REFRESH >= CACHE_VALIDITY_DURATION:
@@ -219,16 +222,17 @@ def read_projects(app: App) -> list:
 def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None:
     """Create a tag for a given workspace if it does not already exist."""
     with _TRACER.start_as_current_span("create_tag_if_not_existing"):
-        # Check if the tag_gid is stored in the config table
-        if app.config is None:
+        tag_gid = None
+        if app.config is not None:
+            tag_config_result = app.config.get(doc_id=1)
+            tag_config = (
+                tag_config_result
+                if not isinstance(tag_config_result, list)
+                else (tag_config_result[0] if tag_config_result else None)
+            )
+            tag_gid = tag_config.get("tag_gid") if tag_config else None
+        elif not _is_dry_run(app):
             raise ValueError("app.config is None")
-        tag_config_result = app.config.get(doc_id=1)
-        tag_config = (
-            tag_config_result
-            if not isinstance(tag_config_result, list)
-            else (tag_config_result[0] if tag_config_result else None)
-        )
-        tag_gid = tag_config.get("tag_gid") if tag_config else None
 
         if tag_gid:
             _LOGGER.info("tag_gid found in database for '%s'", tag)
@@ -257,6 +261,8 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         try:
             _LOGGER.info("tag '%s' not found, creating it", tag)
             api_response = api_instance.create_tag_for_workspace(body, workspace, {})
+            if app.config is None:
+                raise ValueError("app.config is None")
             with app.db_lock:
 
                 def new_config_query_func(record):

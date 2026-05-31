@@ -4,7 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from ado_asana_sync.sync.dry_run import DryRunReport
-from ado_asana_sync.sync.sync import create_asana_task, remove_mapping, start_sync, update_asana_task
+from ado_asana_sync.sync.sync import (
+    create_asana_task,
+    create_tag_if_not_existing,
+    remove_mapping,
+    start_sync,
+    update_asana_task,
+)
 
 
 class _ExecutorStub:
@@ -20,6 +26,16 @@ class _ExecutorStub:
 
 
 class TestRuntimeModes(unittest.TestCase):
+    @patch("ado_asana_sync.sync.sync.get_tag_by_name", return_value={"gid": "existing-tag"})
+    def test_create_tag_if_not_existing_dry_run_without_config_uses_existing_tag(self, _mock_get_tag):
+        app = MagicMock()
+        app.config = None
+        app.dry_run = True
+
+        tag_gid = create_tag_if_not_existing(app, "workspace-gid", "synced")
+
+        self.assertEqual(tag_gid, "existing-tag")
+
     @patch("ado_asana_sync.sync.sync.sleep")
     @patch("ado_asana_sync.sync.sync.sync_project")
     @patch("ado_asana_sync.sync.sync.read_projects", return_value=[{"adoProjectName": "A", "adoTeamName": "B"}])
@@ -47,6 +63,45 @@ class TestRuntimeModes(unittest.TestCase):
         mock_read_projects.assert_called_once_with(app)
         mock_sync_project.assert_called_once()
         mock_sleep.assert_not_called()
+
+    @patch("ado_asana_sync.sync.sync.sleep", side_effect=[None, RuntimeError("stop after second cycle")])
+    @patch("ado_asana_sync.sync.sync.read_projects", return_value=[{"adoProjectName": "A", "adoTeamName": "B"}])
+    @patch("ado_asana_sync.sync.sync.create_tag_if_not_existing", return_value="tag-gid")
+    @patch("ado_asana_sync.sync.sync.get_asana_workspace", return_value="workspace-gid")
+    @patch("ado_asana_sync.sync.sync.concurrent.futures.ThreadPoolExecutor", return_value=_ExecutorStub())
+    def test_start_sync_resets_dry_run_report_each_cycle(
+        self,
+        _mock_executor,
+        _mock_workspace,
+        _mock_tag,
+        _mock_read_projects,
+        mock_sleep,
+    ):
+        app = MagicMock()
+        app.asana_workspace_name = "workspace"
+        app.asana_tag_name = "synced"
+        app.run_once = False
+        app.dry_run = True
+        app.dry_run_report = DryRunReport()
+        app.sleep_time = 30
+
+        call_count = 0
+
+        def sync_project_side_effect(sync_app, _project):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                self.assertEqual(sync_app.dry_run_report.task_create_ids, [])
+            sync_app.dry_run_report.record_task_create(call_count, f"Task {call_count}")
+
+        with (
+            patch("ado_asana_sync.sync.sync.sync_project", side_effect=sync_project_side_effect),
+            self.assertRaisesRegex(RuntimeError, "stop after second cycle"),
+        ):
+            start_sync(app)
+
+        self.assertEqual(call_count, 2)
+        self.assertEqual(mock_sleep.call_count, 2)
 
     def test_dry_run_report_logs_summary(self):
         report = DryRunReport()

@@ -27,7 +27,7 @@ logging.basicConfig(level=log_level)
 
 _LOGGER.debug("Configuring app")
 app = App()
-app.connect()
+app.connect(enable_local_db=not app.dry_run)
 
 if app.run_once:
     _LOGGER.info("Running in one-shot mode (RUN_ONCE=true)")

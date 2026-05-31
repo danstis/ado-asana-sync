@@ -1,7 +1,10 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from ado_asana_sync.sync.dry_run import DryRunReport
+from ado_asana_sync.sync.pr_processor import create_new_pr_reviewer_task, update_existing_pr_reviewer_task
+from ado_asana_sync.sync.pull_request_item import PullRequestItem
 from ado_asana_sync.sync.pull_request_sync import create_asana_pr_task, update_asana_pr_task
 
 
@@ -60,3 +63,92 @@ class TestPullRequestDryRun(unittest.TestCase):
         mock_tasks_api_class.return_value.update_task.assert_not_called()
         pr_item.save.assert_not_called()
         self.assertEqual(app.dry_run_report.pr_close_ids, [902])
+
+    @patch("ado_asana_sync.sync.pr_processor.extract_reviewer_vote", return_value="waitingForAuthor")
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_processor.PullRequestItem.save")
+    @patch(
+        "ado_asana_sync.sync.pr_processor.get_asana_task_by_name",
+        return_value={"gid": "asana-pr-903", "modified_at": "2026-05-31T04:00:00Z"},
+    )
+    def test_create_new_pr_reviewer_task_dry_run_skips_local_save_for_existing_task(
+        self,
+        _mock_get_task,
+        mock_save,
+        mock_update_task,
+        _mock_vote,
+    ):
+        app = MagicMock()
+        app.dry_run = True
+        app.ado_url = "https://dev.azure.com/example"
+        app.asana_tag_gid = "tag-gid"
+        pr = SimpleNamespace(
+            pull_request_id=903,
+            title="Existing PR",
+            status="active",
+            web_url="https://example.com/pr/903",
+        )
+        repository = SimpleNamespace(
+            id="repo-1",
+            name="repo",
+            project=SimpleNamespace(name="project"),
+        )
+
+        create_new_pr_reviewer_task(
+            app,
+            pr,
+            repository,
+            reviewer=MagicMock(),
+            asana_matched_user={"gid": "user-3", "name": "Reviewer"},
+            asana_project_tasks=[],
+            asana_project="project-gid",
+        )
+
+        mock_save.assert_not_called()
+        mock_update_task.assert_called_once()
+
+    @patch("ado_asana_sync.sync.pr_processor.extract_reviewer_vote", return_value="waitingForAuthor")
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value={"modified_at": "2026-05-31T04:00:00Z"})
+    @patch("ado_asana_sync.sync.pr_processor.PullRequestItem.save")
+    def test_update_existing_pr_reviewer_task_dry_run_skips_reviewer_name_save(
+        self,
+        mock_save,
+        _mock_cached_task,
+        mock_update_task,
+        _mock_vote,
+    ):
+        app = MagicMock()
+        app.dry_run = True
+        app.asana_tag_gid = "tag-gid"
+        pr = SimpleNamespace(
+            pull_request_id=904,
+            title="PR needing reviewer backfill",
+            status="active",
+        )
+        existing_match = PullRequestItem(
+            ado_pr_id=904,
+            ado_repository_id="repo-1",
+            title="PR needing reviewer backfill",
+            status="active",
+            url="https://example.com/pr/904",
+            reviewer_gid="user-4",
+            reviewer_name=None,
+            asana_gid="asana-pr-904",
+            asana_updated="2026-05-31T04:00:00Z",
+            review_status="waitingForAuthor",
+        )
+
+        update_existing_pr_reviewer_task(
+            app,
+            pr,
+            _repository=MagicMock(),
+            reviewer=MagicMock(),
+            existing_match=existing_match,
+            asana_matched_user={"gid": "user-4", "name": "Reviewer Four"},
+            asana_project="project-gid",
+        )
+
+        self.assertEqual(existing_match.reviewer_name, "Reviewer Four")
+        mock_save.assert_not_called()
+        mock_update_task.assert_called_once()

@@ -100,6 +100,50 @@ class TestAppDatabase(unittest.TestCase):
             "ADO_URL": "https://dev.azure.com/test",
             "ASANA_TOKEN": "test_token",
             "ASANA_WORKSPACE_NAME": "test_workspace",
+            "DRY_RUN": "true",
+        },
+    )
+    @patch("ado_asana_sync.sync.app.configure_azure_monitor")
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_connect_can_skip_local_database_in_dry_run(
+        self,
+        mock_asana_client,
+        mock_ado_connection,
+        mock_dirname,
+        mock_configure,
+    ):
+        """Test that dry-run startup can skip local database initialization entirely."""
+        mock_dirname.return_value = self.test_dir
+        mock_configure.return_value = None
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
+
+        data_dir = os.path.join(self.test_dir, "data")
+        os.makedirs(data_dir, exist_ok=True)
+
+        appdata_path = os.path.join(data_dir, "appdata.json")
+        with open(appdata_path, "w", encoding="utf-8") as f:
+            json.dump({"matches": {"1": {"ado_id": 123}}}, f)
+
+        app = App()
+        app.connect(enable_local_db=False)
+
+        self.assertIsNone(app.db)
+        self.assertIsNone(app.matches)
+        self.assertIsNone(app.pr_matches)
+        self.assertIsNone(app.config)
+        self.assertTrue(os.path.exists(appdata_path))
+        self.assertFalse(os.path.exists(os.path.join(data_dir, "appdata.db")))
+
+    @patch.dict(
+        os.environ,
+        {
+            "ADO_PAT": "test_pat",
+            "ADO_URL": "https://dev.azure.com/test",
+            "ASANA_TOKEN": "test_token",
+            "ASANA_WORKSPACE_NAME": "test_workspace",
         },
     )
     @patch("ado_asana_sync.sync.app.os.path.dirname")

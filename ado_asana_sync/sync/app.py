@@ -124,9 +124,9 @@ class App:
 
         _LOGGER.debug("Created new App instance")
 
-    def connect(self) -> None:
+    def connect(self, enable_local_db: bool = True) -> None:
         """
-        Connects to ADO and Asana, and sets up the TinyDB database.
+        Connect to ADO and Asana, optionally setting up the local SQLite database.
         """
         # Connect ADO.
         _LOGGER.debug("Connecting to Azure DevOps")
@@ -163,6 +163,11 @@ class App:
         )
         _LOGGER.info("Azure Monitor configured with %.1f%% trace sampling", self.trace_sampling_percentage * 100)
         attach_filter_to_telemetry_handlers()
+
+        if not enable_local_db:
+            _LOGGER.info("Skipping local database initialization")
+            return
+
         # Setup SQLite database.
         _LOGGER.debug("Opening local database")
         data_dir = os.path.join(os.path.dirname(__package__), "data")

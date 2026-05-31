@@ -91,6 +91,10 @@ You can run the sync tool either locally using `uv` or via Docker.
    ```bash
    uv run python -m ado_asana_sync.sync
    ```
+1. **Run a single dry-run or one-shot sync with inline variables:**
+   ```bash
+   DRY_RUN=true RUN_ONCE=true uv run python -m ado_asana_sync.sync
+   ```
 
 #### Option B: Running via Docker
 
