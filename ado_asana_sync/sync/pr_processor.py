@@ -181,10 +181,9 @@ def handle_removed_reviewers(  # noqa: C901
             pr_item.review_status = "removed"
             pr_item.updated_date = iso8601_utc(datetime.now())
 
-            if pr_item.asana_gid:
+            if pr_item.asana_gid and app.asana_tag_gid is not None:
                 try:
-                    if app.asana_tag_gid is not None:
-                        update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
+                    update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
                     _LOGGER.info(
                         "Closed Asana task for removed reviewer: %s",
                         pr_item.asana_title,
@@ -195,6 +194,9 @@ def handle_removed_reviewers(  # noqa: C901
                         pr_item.asana_title,
                         e,
                     )
+            else:
+                pr_item.processing_state = "closed"
+                pr_item.save(app)
 
 
 def process_pr_reviewer(

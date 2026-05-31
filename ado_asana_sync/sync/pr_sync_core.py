@@ -270,13 +270,17 @@ def process_closed_pull_requests(  # noqa: C901
                 )
                 if pr_item.asana_gid:
                     asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
-                    if asana_task and not asana_task.get("completed", False):
-                        pr_item.status = "abandoned"
-                        pr_item.updated_date = iso8601_utc(datetime.now())
-                        if app.asana_tag_gid is not None:
-                            update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
-                        processed_count += 1
-                        _LOGGER.info("Closed Asana task for inaccessible PR %d", pr_item.ado_pr_id)
+                    pr_item.status = "abandoned"
+                    pr_item.updated_date = iso8601_utc(datetime.now())
+
+                    if asana_task and not asana_task.get("completed", False) and app.asana_tag_gid is not None:
+                        update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
+                    else:
+                        pr_item.processing_state = "closed"
+                        pr_item.save(app)
+
+                    processed_count += 1
+                    _LOGGER.info("Closed Asana task for inaccessible PR %d", pr_item.ado_pr_id)
                 continue
             _LOGGER.warning("Failed to process closed PR %s: %s", pr_item.ado_pr_id, e)
     if repository:

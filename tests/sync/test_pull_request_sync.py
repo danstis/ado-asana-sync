@@ -1,7 +1,7 @@
 """Tests for the pull request sync functionality."""
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from ado_asana_sync.sync.app import App
 from ado_asana_sync.sync.pull_request_item import PullRequestItem
@@ -718,8 +718,8 @@ class TestPullRequestSync(unittest.TestCase):
         mock_pr.pull_request_id = 123
 
         # Mock app with pr_matches that returns results with doc_id
-        mock_app = Mock()
-        mock_pr_matches = Mock()
+        mock_app = MagicMock()
+        mock_pr_matches = MagicMock()
         mock_app.pr_matches = mock_pr_matches
 
         # Mock database results that include doc_id field
@@ -741,7 +741,7 @@ class TestPullRequestSync(unittest.TestCase):
         current_reviewer_gids = ["active-reviewer-456"]  # removed-reviewer-123 is not in this list
 
         # Mock additional requirements for the function
-        mock_app.asana_tag_gid = None  # This will prevent the update call but allow the test to run
+        mock_app.asana_tag_gid = None  # No tag gid; falls through to save path
         asana_project = {"gid": "project-123"}  # Required parameter
 
         # This should not raise an error about unexpected doc_id argument
@@ -1115,7 +1115,7 @@ class TestPullRequestSync(unittest.TestCase):
         from ado_asana_sync.sync.pull_request_sync import process_closed_pull_requests
 
         # Mock database PR tasks
-        mock_app = Mock()
+        mock_app = MagicMock()
         pr_tasks = [
             {
                 "ado_pr_id": 5,
