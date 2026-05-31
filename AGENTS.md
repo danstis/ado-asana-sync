@@ -23,7 +23,10 @@ Follow these steps to set up your development environment:
 - `ado_asana_sync/sync/asana.py`: Manages all interactions with the Asana API.
 - `ado_asana_sync/sync/task_item.py`: Defines the `TaskItem` data structure for task representation.
 - `ado_asana_sync/sync/pull_request_item.py`: Defines the `PullRequestItem` data structure for PR-reviewer relationships.
-- `ado_asana_sync/sync/pull_request_sync.py`: Contains the pull request synchronization logic.
+- `ado_asana_sync/sync/pr_sync_core.py`: PR sync orchestration (`sync_pull_requests`, `process_repository_pull_requests`, `process_closed_pull_requests`).
+- `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers (`process_pull_request`, `handle_removed_reviewers`, `process_pr_reviewer`).
+- `ado_asana_sync/sync/pr_asana_helpers.py`: Asana helpers specific to PRs (`create_asana_pr_task`, `update_asana_pr_task`, `add_tag_to_pr_task`, `add_closure_comment_to_pr_task`).
+- `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
 - `data/projects.json.example`: Provides an example of the project data structure required for configuration.
 
 ### Coding Conventions
@@ -78,7 +81,10 @@ Follow these steps to set up your development environment:
   - `sync/sync.py`: ADO ↔ Asana sync core
   - `sync/asana.py`: Asana API helpers
   - `sync/task_item.py`, `sync/pull_request_item.py`: data models
-  - `sync/pull_request_sync.py`: PR reviewer task sync
+  - `sync/pr_sync_core.py`: PR sync orchestration
+  - `sync/pr_processor.py`: individual PR and reviewer processing
+  - `sync/pr_asana_helpers.py`: Asana helpers specific to PRs
+  - `sync/pull_request_sync.py`: re-export facade for backward compatibility
   - `utils/`: logging/tracing, time helpers
   - `database/`: SQLite persistence
 - Config example: `data/projects.json.example`
