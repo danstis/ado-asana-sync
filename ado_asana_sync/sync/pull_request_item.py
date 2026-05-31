@@ -3,6 +3,7 @@ Azure DevOps (ADO) and Asana."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from html import escape
 from typing import Any, Callable, Optional
 
@@ -12,6 +13,7 @@ from .asana import get_asana_task
 from .utils import extract_reviewer_vote
 
 
+@dataclass
 class PullRequestItem:
     """
     Represents a pull request item in the synchronization process between Azure DevOps (ADO) and Asana.
@@ -33,43 +35,27 @@ class PullRequestItem:
         asana_updated (str): The last updated time of the Asana task in ISO 8601 format.
         review_status (str): The review status for this reviewer (approved, waiting_for_author, etc.).
         processing_state (str): The processing state (open, closed) to avoid redundant processing.
+        assignee_gid (str): The explicit Asana assignee GID (used for group reviewer tasks).
     """
 
-    def __init__(
-        self,
-        ado_pr_id: int,
-        ado_repository_id: str,
-        title: str,
-        status: str,
-        url: str,
-        reviewer_gid: str,
-        reviewer_name: Optional[str] = None,
-        asana_gid: Optional[str] = None,
-        asana_updated: Optional[str] = None,
-        created_date: Optional[str] = None,
-        updated_date: Optional[str] = None,
-        review_status: Optional[str] = None,
-        processing_state: Optional[str] = None,
-        assignee_gid: Optional[str] = None,
-    ) -> None:
-        self.ado_pr_id = ado_pr_id
-        self.ado_repository_id = ado_repository_id
-        self.title = title
-        self.status = status
-        self.url = url
-        self.reviewer_gid = reviewer_gid
-        self.reviewer_name = reviewer_name
-        self.asana_gid = asana_gid
-        self.asana_updated = asana_updated
-        self.created_date = created_date
-        self.updated_date = updated_date
-        self.review_status = review_status
-        self.processing_state = processing_state or "open"  # Default to open for new items
-        self.assignee_gid = assignee_gid  # Explicit Asana assignee GID (used for group reviewer tasks)
+    ado_pr_id: int
+    ado_repository_id: str
+    title: str
+    status: str
+    url: str
+    reviewer_gid: str
+    reviewer_name: Optional[str] = None
+    asana_gid: Optional[str] = None
+    asana_updated: Optional[str] = None
+    created_date: Optional[str] = None
+    updated_date: Optional[str] = None
+    review_status: Optional[str] = None
+    processing_state: Optional[str] = field(default=None)
+    assignee_gid: Optional[str] = None
 
-        # Validate data consistency to catch potential corruption early
+    def __post_init__(self) -> None:
+        self.processing_state = self.processing_state or "open"
         if not self.validate_data_consistency():
-            # This is a critical error that indicates data corruption
             logger, _ = setup_logging_and_tracing(__name__)
             logger.error(
                 "Data consistency validation failed for PR item: ado_pr_id=%s, url=%s, title='%s'. "
