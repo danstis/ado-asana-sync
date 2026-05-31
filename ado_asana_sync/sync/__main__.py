@@ -29,6 +29,11 @@ _LOGGER.debug("Configuring app")
 app = App()
 app.connect()
 
+if app.run_once:
+    _LOGGER.info("Running in one-shot mode (RUN_ONCE=true)")
+if app.dry_run:
+    _LOGGER.info("Running in dry-run mode (DRY_RUN=true); no writes will be made")
+
 
 def cleanup_handler(_signum=None, _frame=None):
     """Handle cleanup on shutdown."""

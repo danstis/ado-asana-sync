@@ -46,6 +46,8 @@ cp .env.example .env
 - `CLOSED_STATES`: Comma-separated ADO states considered closed (default: `Closed,Removed,Done`).
 - `THREAD_COUNT`: Number of projects to sync in parallel (default: `8`).
 - `SLEEP_TIME`: Seconds to sleep between sync runs (default: `300`).
+- `RUN_ONCE`: Run a single sync cycle and exit with a normal process status (default: `false`).
+- `DRY_RUN`: Compute and log planned create/update/close actions without writing to Asana or the local sync database (default: `false`).
 - `SYNC_THRESHOLD`: Days to continue syncing closed tasks before unmapping (default: `30`).
 - `SYNCED_TAG_NAME`: Asana tag appended to all synced items (default: `synced`).
 - `LOGLEVEL`: Console log level (default: `INFO`).

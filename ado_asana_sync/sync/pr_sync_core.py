@@ -14,7 +14,7 @@ from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 
 from .app import App
-from .pr_asana_helpers import _PR_CLOSED_STATES, _get_cached_asana_task, update_asana_pr_task
+from .pr_asana_helpers import _PR_CLOSED_STATES, _get_cached_asana_task, _record_pr_action, update_asana_pr_task
 from .pr_processor import create_ado_user_from_reviewer, process_pull_request
 from .pull_request_item import PullRequestItem
 from .sync import (
@@ -112,6 +112,9 @@ def _finalize_closed_pr_task(app: App, pr_item: PullRequestItem, pr: Any, asana_
         if app.asana_tag_gid is not None:
             update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
     else:
+        if getattr(app, "dry_run", False) is True:
+            _record_pr_action(app, "close", pr_item)
+            return
         pr_item.save(app)
         _LOGGER.debug(
             "Second pass: PR %d task already completed, updated database record with final review_status='%s'",
@@ -132,6 +135,9 @@ def _handle_inaccessible_pr(app: App, pr_item: PullRequestItem, asana_project: s
         update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
     else:
         pr_item.processing_state = "closed"
+        if getattr(app, "dry_run", False) is True:
+            _record_pr_action(app, "close", pr_item)
+            return
         pr_item.save(app)
     _LOGGER.info("Closed Asana task for inaccessible PR %d", pr_item.ado_pr_id)
 

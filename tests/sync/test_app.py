@@ -73,6 +73,25 @@ class TestApp(unittest.TestCase):
         app.asana_page_size = 50
         self.assertEqual(app.asana_page_size, 50)
 
+    @patch.dict(
+        os.environ,
+        {
+            "ADO_PAT": "env_pat",
+            "ADO_URL": "https://dev.azure.com/env",
+            "ASANA_TOKEN": "env_token",
+            "ASANA_WORKSPACE_NAME": "env_workspace",
+            "RUN_ONCE": "true",
+            "DRY_RUN": "1",
+        },
+    )
+    def test_app_runtime_modes_created_from_environment(self):
+        """Test runtime flags are parsed from environment variables."""
+        app = App()
+
+        self.assertTrue(app.run_once)
+        self.assertTrue(app.dry_run)
+        self.assertIsNotNone(app.dry_run_report)
+
     def test_app_close_cleans_up_database(self):
         """Test that close() method cleans up resources."""
         app = App(

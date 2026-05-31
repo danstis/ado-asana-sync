@@ -12,6 +12,7 @@ from .app import App
 from .pr_asana_helpers import (
     _REVIEWER_APPROVED_STATES,
     _get_cached_asana_task,
+    _record_pr_action,
     create_asana_pr_task,
     update_asana_pr_task,
 )
@@ -165,6 +166,9 @@ def _close_removed_reviewer_task(app: App, pr_item: PullRequestItem, asana_proje
             )
     else:
         pr_item.processing_state = "closed"
+        if getattr(app, "dry_run", False) is True:
+            _record_pr_action(app, "close", pr_item)
+            return
         pr_item.save(app)
 
 

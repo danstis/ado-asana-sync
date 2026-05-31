@@ -30,6 +30,7 @@ from .asana_client import (
     get_asana_workspace,
     get_tag_by_name,
 )
+from .dry_run import DryRunReport
 from .matching import matching_user
 from .task_factory import (
     _build_asana_task_body,
@@ -98,6 +99,28 @@ def _parse_sync_threshold(value: str | None) -> int:
 _SYNC_THRESHOLD = _parse_sync_threshold(os.environ.get("SYNC_THRESHOLD"))
 
 
+def _is_dry_run(app: App) -> bool:
+    return getattr(app, "dry_run", False) is True
+
+
+def _get_dry_run_report(app: App) -> DryRunReport:
+    report = getattr(app, "dry_run_report", None)
+    if report is None:
+        report = DryRunReport()
+        app.dry_run_report = report
+    return report
+
+
+def _record_task_action(app: App, action: str, ado_id: int, title: str) -> None:
+    report = _get_dry_run_report(app)
+    if action == "create":
+        report.record_task_create(ado_id=ado_id, title=title)
+    elif action == "update":
+        report.record_task_update(ado_id=ado_id, title=title)
+    elif action == "close":
+        report.record_task_close(ado_id=ado_id, title=title)
+
+
 def start_sync(app: App) -> None:
     """Start the synchronization process between Azure DevOps and Asana.
 
@@ -142,6 +165,13 @@ def start_sync(app: App) -> None:
                     executor.map(sync_project, [app] * len(projects), projects)
                 except Exception as exception:  # pylint: disable=broad-exception-caught
                     _LOGGER.error("Error in sync_project thread: %s", exception)
+
+            if _is_dry_run(app):
+                _get_dry_run_report(app).log_summary()
+
+            if getattr(app, "run_once", False):
+                _LOGGER.info("Run-once mode enabled, exiting after a single sync cycle")
+                break
 
             _LOGGER.info("Sync process complete, sleeping for %s seconds", app.sleep_time)
 
@@ -207,6 +237,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
         # If tag_gid does not exist in the config, proceed to get or create the tag
         existing_tag = get_tag_by_name(app, workspace, tag)
         if existing_tag is not None:
+            if _is_dry_run(app):
+                _LOGGER.info("Dry-run mode: using existing tag %s without updating local config", existing_tag["gid"])
+                return existing_tag["gid"]
             if app.config is None:
                 raise ValueError("app.config is None")
             with app.db_lock:
@@ -216,6 +249,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
 
                 app.config.upsert({"tag_gid": existing_tag["gid"]}, config_query_func)
             return existing_tag["gid"]
+        if _is_dry_run(app):
+            _LOGGER.info("Dry-run mode: tag '%s' would be created in workspace %s", tag, workspace)
+            return "dry-run-tag"
         api_instance = asana.TagsApi(app.asana_client)
         body = {"data": {"name": tag}}
         try:
@@ -238,6 +274,9 @@ def create_tag_if_not_existing(app: App, workspace: str, tag: str) -> str | None
 
 def tag_asana_item(app: App, task: TaskItem, tag: str) -> None:
     """Adds a tag to a given item if it is not already assigned."""
+    if _is_dry_run(app):
+        _LOGGER.info("Dry-run mode: would tag task %s with %s", task.asana_title, tag)
+        return None
     api_instance = asana.TasksApi(app.asana_client)
     task_tags = get_asana_task_tags(app, task)
     task_tags_gids = [t["gid"] for t in task_tags]
@@ -529,10 +568,11 @@ def sync_item_and_children(
 
         if existing_match is None:
             _LOGGER.debug("Work item %d: No existing match found, creating new mapping", ado_task.id)
-            create_new_task_mapping(
+            existing_match = create_new_task_mapping(
                 app, ado_task, asana_matched_user, asana_project_tasks, asana_project, parent_gid=parent_asana_gid
             )
-            existing_match = TaskItem.search(app, ado_id=ado_task.id)
+            if existing_match is None or existing_match.asana_gid is None:
+                existing_match = TaskItem.search(app, ado_id=ado_task.id)
         else:
             _LOGGER.debug("Work item %d: Existing match found, updating", ado_task.id)
             update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=parent_asana_gid)
@@ -578,16 +618,18 @@ def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tas
             app.asana_tag_gid,
             parent_gid=parent_gid,
         )
-    else:
-        _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
-        existing_match.asana_gid = asana_task["gid"]
-        update_asana_task(
-            app,
-            existing_match,
-            app.asana_tag_gid,
-            asana_project,
-            parent_gid=parent_gid,
-        )
+        return existing_match
+
+    _LOGGER.info("%s:dating task", ado_task.fields[ADO_TITLE])
+    existing_match.asana_gid = asana_task["gid"]
+    update_asana_task(
+        app,
+        existing_match,
+        app.asana_tag_gid,
+        asana_project,
+        parent_gid=parent_gid,
+    )
+    return existing_match
 
 
 def update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=None):
@@ -679,6 +721,9 @@ def remove_mapping(app, wi):
         wi["title"],
         _SYNC_THRESHOLD,
     )
+    if _is_dry_run(app):
+        _record_task_action(app, "close", int(wi["ado_id"]), wi["title"])
+        return
     with app.db_lock:
         app.matches.remove(doc_ids=[wi["doc_id"]])
 
@@ -719,6 +764,12 @@ def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_proj
 
 
 def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str, parent_gid: str | None = None) -> None:
+    if _is_dry_run(app):
+        _record_task_action(app, "create", int(task.ado_id), str(task.title))
+        task.asana_gid = task.asana_gid or f"dry-run-task-{task.ado_id}"
+        _LOGGER.info("Dry-run mode: would create Asana task for ADO item %s", task.ado_id)
+        return
+
     tasks_api_instance = asana.TasksApi(app.asana_client)
     link_custom_field = find_custom_field_by_name(app, asana_project, "Link")
     link_custom_field_id = link_custom_field.get("custom_field", {}).get("gid") if link_custom_field else None
@@ -736,6 +787,12 @@ def create_asana_task(app: App, asana_project: str, task: TaskItem, tag: str, pa
 
 
 def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str, parent_gid: str | None = None) -> None:
+    if _is_dry_run(app):
+        action = "close" if task.state in _CLOSED_STATES else "update"
+        _record_task_action(app, action, int(task.ado_id), str(task.title))
+        _LOGGER.info("Dry-run mode: would %s Asana task for ADO item %s", action, task.ado_id)
+        return
+
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     link_custom_field = find_custom_field_by_name(app, asana_project_gid, "Link")
@@ -826,6 +883,9 @@ def cleanup_invalid_work_items(app: App) -> None:
             _LOGGER.info("Removing invalid work item entry with ID: %s", task["ado_id"])
 
     if invalid_items:
+        if _is_dry_run(app):
+            _LOGGER.info("Dry-run mode: would remove %d invalid work item entries", len(invalid_items))
+            return
         with app.db_lock:
             app.matches.remove(doc_ids=invalid_items)
         _LOGGER.info("Cleaned up %d invalid work item entries", len(invalid_items))
