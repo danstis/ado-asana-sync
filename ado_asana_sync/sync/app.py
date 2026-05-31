@@ -20,6 +20,8 @@ from msrest.authentication import BasicAuthentication
 from ado_asana_sync.database import Database, DatabaseTable
 from ado_asana_sync.utils.logging_tracing import attach_filter_to_telemetry_handlers
 
+from .dry_run import DryRunReport
+
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
 # ASANA_PAGE_SIZE contains the default value for the page size to send to the Asana API.
@@ -28,6 +30,10 @@ ASANA_PAGE_SIZE = 100
 ASANA_TAG_NAME = os.environ.get("SYNCED_TAG_NAME", "synced")
 # SLEEP_TIME defines the sleep time between sync tasks in seconds.
 SLEEP_TIME = max(30, int(os.environ.get("SLEEP_TIME", 300)))
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class App:
@@ -94,6 +100,9 @@ class App:
         self.pr_matches: Optional[DatabaseTable] = None
         self.config: Optional[DatabaseTable] = None
         self.sleep_time = SLEEP_TIME
+        self.run_once = _env_flag("RUN_ONCE")
+        self.dry_run = _env_flag("DRY_RUN")
+        self.dry_run_report = DryRunReport() if self.dry_run else None
         # Trace sampling configuration for Application Insights
         self.trace_sampling_percentage = float(os.environ.get("OTEL_TRACES_SAMPLER_ARG", "0.05"))  # Default 5%
 
@@ -115,9 +124,9 @@ class App:
 
         _LOGGER.debug("Created new App instance")
 
-    def connect(self) -> None:
+    def connect(self, enable_local_db: bool = True) -> None:
         """
-        Connects to ADO and Asana, and sets up the TinyDB database.
+        Connect to ADO and Asana, optionally setting up the local SQLite database.
         """
         # Connect ADO.
         _LOGGER.debug("Connecting to Azure DevOps")
@@ -154,6 +163,11 @@ class App:
         )
         _LOGGER.info("Azure Monitor configured with %.1f%% trace sampling", self.trace_sampling_percentage * 100)
         attach_filter_to_telemetry_handlers()
+
+        if not enable_local_db:
+            _LOGGER.info("Skipping local database initialization")
+            return
+
         # Setup SQLite database.
         _LOGGER.debug("Opening local database")
         data_dir = os.path.join(os.path.dirname(__package__), "data")

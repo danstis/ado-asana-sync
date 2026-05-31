@@ -12,6 +12,7 @@ from .app import App
 from .pr_asana_helpers import (
     _REVIEWER_APPROVED_STATES,
     _get_cached_asana_task,
+    _record_pr_action,
     create_asana_pr_task,
     update_asana_pr_task,
 )
@@ -165,6 +166,9 @@ def _close_removed_reviewer_task(app: App, pr_item: PullRequestItem, asana_proje
             )
     else:
         pr_item.processing_state = "closed"
+        if getattr(app, "dry_run", False) is True:
+            _record_pr_action(app, "close", pr_item)
+            return
         pr_item.save(app)
 
 
@@ -315,7 +319,8 @@ def create_new_pr_reviewer_task(
         pr_item.asana_gid = asana_task["gid"]
         pr_item.asana_updated = asana_task.get("modified_at")
         pr_item.updated_date = iso8601_utc(datetime.now())
-        pr_item.save(app)
+        if getattr(app, "dry_run", False) is not True:
+            pr_item.save(app)
         if app.asana_tag_gid is not None:
             update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
 
@@ -375,7 +380,8 @@ def update_existing_pr_reviewer_task(
     reviewer_name_updated = False
     if not existing_match.reviewer_name:
         existing_match.reviewer_name = asana_matched_user["name"]
-        existing_match.save(app)
+        if getattr(app, "dry_run", False) is not True:
+            existing_match.save(app)
         reviewer_name_updated = True
         _LOGGER.info("Updated reviewer name for PR task: %s", existing_match.asana_title)
 

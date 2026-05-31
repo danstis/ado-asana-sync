@@ -12,6 +12,7 @@ from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 
 from .asana import get_asana_task
+from .dry_run import DryRunReport
 from .pull_request_item import PullRequestItem
 from .sync import find_custom_field_by_name
 from .utils import encode_url_for_asana
@@ -23,6 +24,30 @@ _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 _PR_CLOSED_STATES = {"completed", "abandoned", "draft"}
 _REVIEWER_APPROVED_STATES = {"approved", "approvedWithSuggestions"}
+
+
+def _is_dry_run(app: App) -> bool:
+    return getattr(app, "dry_run", False) is True
+
+
+def _get_dry_run_report(app: App) -> DryRunReport:
+    report = getattr(app, "dry_run_report", None)
+    if report is None:
+        report = DryRunReport()
+        app.dry_run_report = report
+    return report
+
+
+def _record_pr_action(app: App, action: str, pr_item: PullRequestItem) -> None:
+    report = _get_dry_run_report(app)
+    pr_id = int(pr_item.ado_pr_id)
+    title = str(pr_item.title)
+    if action == "create":
+        report.record_pr_create(ado_pr_id=pr_id, title=title)
+    elif action == "update":
+        report.record_pr_update(ado_pr_id=pr_id, title=title)
+    elif action == "close":
+        report.record_pr_close(ado_pr_id=pr_id, title=title)
 
 
 def _get_cached_custom_field(app: App, asana_project, field_name: str):
@@ -74,6 +99,13 @@ def create_asana_pr_task(app: App, asana_project: str, pr_item: PullRequestItem,
         pr_item.review_status or "none",
         pr_item.status or "none",
     )
+
+    if _is_dry_run(app):
+        _record_pr_action(app, "create", pr_item)
+        pr_item.asana_gid = pr_item.asana_gid or f"dry-run-pr-{pr_item.ado_pr_id}"
+        pr_item.processing_state = "closed" if is_completed else "open"
+        _LOGGER.info("Dry-run mode: would create PR task for PR %s", pr_item.ado_pr_id)
+        return
 
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
@@ -129,6 +161,12 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
         pr_item.status or "none",
     )
 
+    if _is_dry_run(app):
+        action = "close" if is_completed else "update"
+        _record_pr_action(app, action, pr_item)
+        _LOGGER.info("Dry-run mode: would %s PR task for PR %s", action, pr_item.ado_pr_id)
+        return
+
     tasks_api_instance = asana.TasksApi(app.asana_client)
 
     link_custom_field = _get_cached_custom_field(app, asana_project_gid, "Link")
@@ -170,6 +208,9 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
 
 def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
     """Adds a tag to a pull request task if it is not already assigned."""
+    if _is_dry_run(app):
+        _LOGGER.info("Dry-run mode: would tag PR task %s with %s", pr_item.asana_title, tag)
+        return
     api_instance = asana.TagsApi(app.asana_client)
     try:
         api_response = api_instance.get_tags_for_task(pr_item.asana_gid, opts={})
@@ -186,6 +227,9 @@ def add_tag_to_pr_task(app: App, pr_item: PullRequestItem, tag: str) -> None:
 
 def add_closure_comment_to_pr_task(app: App, pr_item: PullRequestItem) -> None:
     """Add a comment to a pull request task explaining why it was closed."""
+    if _is_dry_run(app):
+        _LOGGER.info("Dry-run mode: would add closure comment to PR task %s", pr_item.asana_title)
+        return
     if not pr_item.asana_gid:
         return
 
