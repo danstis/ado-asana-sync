@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import asana
 from asana.rest import ApiException
@@ -52,15 +52,16 @@ def _record_pr_action(app: App, action: str, pr_item: PullRequestItem) -> None:
 
 def _get_cached_custom_field(app: App, asana_project, field_name: str):
     """Get custom field with caching to avoid repeated API calls."""
-    if hasattr(app, "_spec_class"):
-        return find_custom_field_by_name(app, asana_project, field_name)
-
     project_str = asana_project if isinstance(asana_project, str) else str(asana_project.get("gid", asana_project))
+
+    if hasattr(app, "_spec_class"):
+        return find_custom_field_by_name(app, project_str, field_name)
+
     cache_key = f"{project_str}:{field_name}"
     if hasattr(app, "pr_sync_cache") and cache_key in app.pr_sync_cache["custom_fields"]:  # type: ignore[attr-defined]
         return app.pr_sync_cache["custom_fields"][cache_key]  # type: ignore[attr-defined]
 
-    field = find_custom_field_by_name(app, asana_project, field_name)
+    field = find_custom_field_by_name(app, project_str, field_name)
     if hasattr(app, "pr_sync_cache"):
         app.pr_sync_cache["custom_fields"][cache_key] = field  # type: ignore[attr-defined]
     return field
@@ -119,7 +120,7 @@ def create_asana_pr_task(app: App, asana_project: str, pr_item: PullRequestItem,
     else:
         asana_assignee = pr_item.reviewer_gid
 
-    body = {
+    body: dict[str, Any] = {
         "data": {
             "name": pr_item.asana_title,
             "html_notes": f"<body>{pr_item.asana_notes_link}</body>",

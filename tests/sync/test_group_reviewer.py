@@ -221,13 +221,13 @@ class TestHandleGroupReviewer(unittest.TestCase):
 
     def test_ignore_strategy_creates_no_task(self):
         app = self._app(strategy="ignore")
-        with patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create:
+        with patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create:
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_not_called()
 
     def test_unassigned_task_strategy_creates_task(self):
         app = self._app(strategy="unassigned_task")
-        with patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create:
+        with patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create:
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_called_once()
             pr_item_arg = mock_create.call_args[0][2]
@@ -236,7 +236,7 @@ class TestHandleGroupReviewer(unittest.TestCase):
 
     def test_default_user_strategy_creates_task_with_assignee(self):
         app = self._app(strategy="default_user", default_user="fallback@example.com")
-        with patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create:
+        with patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create:
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_called_once()
             pr_item_arg = mock_create.call_args[0][2]
@@ -247,13 +247,13 @@ class TestHandleGroupReviewer(unittest.TestCase):
         # Override fallback so the strategy is actually active for this edge case
         app.group_reviewer_strategy = "default_user"
         app.group_reviewer_default_user = "nobody@example.com"
-        with patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create:
+        with patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create:
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_not_called()
 
     def test_synthetic_gid_starts_with_group_prefix(self):
         app = self._app(strategy="unassigned_task")
-        with patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create:
+        with patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create:
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_called_once()
             pr_item_arg = mock_create.call_args[0][2]
@@ -279,8 +279,8 @@ class TestHandleGroupReviewer(unittest.TestCase):
         existing.save(app)
 
         with (
-            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
-            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
         ):
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_not_called()
@@ -306,8 +306,8 @@ class TestHandleGroupReviewer(unittest.TestCase):
         existing.save(app)
 
         with (
-            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
-            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
         ):
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_not_called()
@@ -337,9 +337,9 @@ class TestHandleGroupReviewer(unittest.TestCase):
 
         found_task = {"gid": "recovered-asana-gid", "modified_at": "2026-01-01T00:00:00Z"}
         with (
-            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
-            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
-            patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name", return_value=found_task),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
+            patch("ado_asana_sync.sync.pr_processor.get_asana_task_by_name", return_value=found_task),
         ):
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_create.assert_not_called()
@@ -366,9 +366,9 @@ class TestHandleGroupReviewer(unittest.TestCase):
         existing.save(app)
 
         with (
-            patch("ado_asana_sync.sync.pull_request_sync.create_asana_pr_task") as mock_create,
-            patch("ado_asana_sync.sync.pull_request_sync.update_asana_pr_task") as mock_update,
-            patch("ado_asana_sync.sync.pull_request_sync.get_asana_task_by_name", return_value=None),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
+            patch("ado_asana_sync.sync.pr_processor.get_asana_task_by_name", return_value=None),
         ):
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, ASANA_USERS, [], "proj-gid")
             mock_update.assert_not_called()
@@ -401,8 +401,8 @@ class TestCurrentReviewerGidsDefaultUserFallback(unittest.TestCase):
     def _app(self, strategy="ignore", default_user=""):
         return _make_app(self.tmp, strategy=strategy, default_user=default_user)
 
-    @patch("ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers")
-    @patch("ado_asana_sync.sync.pull_request_sync._handle_group_reviewer")
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
     def test_unresolvable_default_user_excluded_from_current_gids(self, mock_handle_group, mock_handle_removed):
         """When default_user cannot be resolved, the group GID must NOT appear in current_reviewer_gids."""
         from ado_asana_sync.sync.pull_request_sync import process_pull_request
@@ -419,8 +419,8 @@ class TestCurrentReviewerGidsDefaultUserFallback(unittest.TestCase):
         _, _, current_gids, _ = mock_handle_removed.call_args[0]
         self.assertNotIn("group:[Proj]\\Team", current_gids)
 
-    @patch("ado_asana_sync.sync.pull_request_sync.handle_removed_reviewers")
-    @patch("ado_asana_sync.sync.pull_request_sync._handle_group_reviewer")
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
     def test_resolvable_default_user_included_in_current_gids(self, mock_handle_group, mock_handle_removed):
         """When default_user resolves successfully, the group GID must appear in current_reviewer_gids."""
         from ado_asana_sync.sync.pull_request_sync import process_pull_request
@@ -456,8 +456,8 @@ class TestUpdateAsanaPrTaskGroupAssignee(unittest.TestCase):
         mock_app.asana_client = MagicMock(spec=asana.ApiClient)
         return mock_app
 
-    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync._get_cached_custom_field")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers._get_cached_custom_field")
     @patch("asana.TasksApi")
     def test_group_task_with_no_assignee_sends_null(self, mock_tasks_api_class, mock_get_field, mock_add_tag):
         """When assignee_gid is None on a group task, the update must send assignee=None to clear it."""
@@ -486,8 +486,8 @@ class TestUpdateAsanaPrTaskGroupAssignee(unittest.TestCase):
         self.assertIn("assignee", update_call_args[0]["data"])
         self.assertIsNone(update_call_args[0]["data"]["assignee"])
 
-    @patch("ado_asana_sync.sync.pull_request_sync.add_tag_to_pr_task")
-    @patch("ado_asana_sync.sync.pull_request_sync._get_cached_custom_field")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.add_tag_to_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers._get_cached_custom_field")
     @patch("asana.TasksApi")
     def test_group_task_with_assignee_gid_sends_it(self, mock_tasks_api_class, mock_get_field, mock_add_tag):
         """When assignee_gid is set on a group task, it must be forwarded in the update."""
