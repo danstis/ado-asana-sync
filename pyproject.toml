@@ -52,6 +52,8 @@ ignore = [
 "tests/**/*.py" = ["S106"]
 # Database tests need to catch generic exceptions for constraint violations
 "tests/database/test_database.py" = ["B017"]
+# test_sync.py imports process_backlog_item for API-surface verification without calling it directly
+"tests/sync/test_sync.py" = ["F401"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
