@@ -113,18 +113,27 @@ class TestGroupReviewerConfig(unittest.TestCase):
         env.pop("GROUP_REVIEWER_STRATEGY", None)
         with tempfile.TemporaryDirectory() as tmp:
             app = _make_app(tmp)
-        self.assertEqual(app.group_reviewer_strategy, "ignore")
+            try:
+                self.assertEqual(app.group_reviewer_strategy, "ignore")
+            finally:
+                app.db.close()
 
     def test_valid_strategy_unassigned_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = _make_app(tmp, strategy="unassigned_task")
-        self.assertEqual(app.group_reviewer_strategy, "unassigned_task")
+            try:
+                self.assertEqual(app.group_reviewer_strategy, "unassigned_task")
+            finally:
+                app.db.close()
 
     def test_valid_strategy_default_user_with_user_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = _make_app(tmp, strategy="default_user", default_user="fallback@example.com")
-        self.assertEqual(app.group_reviewer_strategy, "default_user")
-        self.assertEqual(app.group_reviewer_default_user, "fallback@example.com")
+            try:
+                self.assertEqual(app.group_reviewer_strategy, "default_user")
+                self.assertEqual(app.group_reviewer_default_user, "fallback@example.com")
+            finally:
+                app.db.close()
 
     def test_invalid_strategy_falls_back_to_ignore(self):
         with patch.dict(os.environ, {"GROUP_REVIEWER_STRATEGY": "nonsense"}, clear=False):
@@ -217,7 +226,9 @@ class TestHandleGroupReviewer(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _app(self, strategy="ignore", default_user=""):
-        return _make_app(self.tmp, strategy=strategy, default_user=default_user)
+        app = _make_app(self.tmp, strategy=strategy, default_user=default_user)
+        self.addCleanup(app.db.close)
+        return app
 
     def test_ignore_strategy_creates_no_task(self):
         app = self._app(strategy="ignore")
@@ -399,7 +410,9 @@ class TestCurrentReviewerGidsDefaultUserFallback(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _app(self, strategy="ignore", default_user=""):
-        return _make_app(self.tmp, strategy=strategy, default_user=default_user)
+        app = _make_app(self.tmp, strategy=strategy, default_user=default_user)
+        self.addCleanup(app.db.close)
+        return app
 
     @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
     @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
