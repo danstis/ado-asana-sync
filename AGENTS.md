@@ -48,9 +48,34 @@ Follow these steps to set up your development environment:
 
 - Place all tests in the `tests/` directory.
 - Use `pytest` as the testing framework.
-- Run the test suite with the `tox` command, as configured in `tox.ini`.
+- Run the full test suite (including E2E) with `uv run test`.
 - Ensure that test coverage remains above 60% for all changes. Add or update tests as necessary to maintain this threshold.
 - Check coverage with `pytest-cov`.
+
+### End-to-End Tests
+
+The E2E test suite lives in `tests/e2e/` and validates the complete sync workflow without requiring real ADO or Asana credentials.
+
+**Running E2E tests:**
+
+```bash
+uv run pytest tests/e2e/ -v
+```
+
+**Key principles for E2E tests:**
+
+- Use real `App` instances with real SQLite databases in temporary directories.
+- Mock only ADO and Asana API boundaries (never internal business logic).
+- Pre-seed `app.matches` / `app.pr_matches` to set up the initial database state.
+- Assert on actual database state and Asana API call arguments.
+- All tests are non-destructive: temporary directories are cleaned up in `tearDown`.
+
+**Adding a new E2E scenario:**
+
+1. Add a test method to `TestE2ESyncWorkItems` (for work items) or `TestE2ESyncPullRequests` (for PRs) in `tests/e2e/test_e2e_sync.py`.
+1. Pre-seed DB if testing an update/close/reopen scenario using `app.matches.insert(...)`.
+1. Set up ADO mock responses via `mock_wit.get_work_item.return_value = ...`.
+1. Assert on `tasks_api.create_task` / `tasks_api.update_task` call arguments and on `app.matches.all()` / `app.pr_matches.all()` database state.
 
 ## CI/CD
 

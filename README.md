@@ -169,6 +169,33 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes and new featu
 
 This repo uses [Conventional Commits](https://www.conventionalcommits.org/) to ensure the build numbering is generated correctly
 
+### End-to-End Tests
+
+The project includes a comprehensive end-to-end (E2E) test suite under `tests/e2e/` that validates the complete sync workflow using mocked API endpoints and a real temporary SQLite database. These tests run automatically as part of the standard test suite.
+
+**Running E2E tests:**
+
+```bash
+uv run pytest tests/e2e/ -v
+```
+
+**What is tested:**
+
+| Scenario          | Description                                                 |
+| ----------------- | ----------------------------------------------------------- |
+| New work item     | ADO item not in Asana → task created                        |
+| Work item update  | ADO item changed → Asana task updated                       |
+| Work item close   | ADO item removed from backlog → Asana task completed        |
+| Work item reopen  | Closed ADO item returns to backlog → Asana task uncompleted |
+| Subtask hierarchy | Parent-child ADO relations → Asana subtask hierarchy        |
+| Preexisting match | ADO item matches existing Asana task by name → no duplicate |
+| PR open           | New PR with reviewer → reviewer task created                |
+| PR close          | PR completed/abandoned → reviewer task completed            |
+| PR reopen         | Reactivated PR → reviewer task uncompleted                  |
+| PR status update  | Reviewer vote changed → Asana task updated                  |
+
+These tests are non-destructive: they use isolated temporary directories and mocked external APIs, so they never impact real databases or Asana/ADO workspaces.
+
 ### Manual testing
 
 To test the application manually, you can use the following steps:
