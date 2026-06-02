@@ -158,6 +158,20 @@ def _get_existing_pr_item_gids(app: App, pr) -> set[str]:
     return {str(task["reviewer_gid"]) for task in app.pr_matches.search(query_fn) if task.get("reviewer_gid")}
 
 
+def _collect_gids_for_reviewer(app: App, reviewer, pr, asana_users: List[dict], user_lookup_cache: dict | None) -> set[str]:
+    """Return the GIDs to add to current_reviewer_gids for a single reviewer.
+
+    For expand_group_members strategy with a group reviewer, returns member GIDs
+    (or all existing PR GIDs on expansion failure to preserve tasks).
+    For all other cases, returns a singleton set or empty set.
+    """
+    if is_group_reviewer(reviewer) and getattr(app, "group_reviewer_strategy", "ignore") == "expand_group_members":
+        expanded = _collect_expanded_member_gids(app, reviewer, asana_users, user_lookup_cache)
+        return _get_existing_pr_item_gids(app, pr) if expanded is None else expanded
+    gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
+    return {gid} if gid else set()
+
+
 def _collect_group_reviewer_gid(app: App, reviewer, asana_users: List[dict]) -> str | None:
     """Return the synthetic GID to track for a group reviewer, or None to skip."""
     strategy = getattr(app, "group_reviewer_strategy", "ignore")
@@ -482,18 +496,7 @@ def process_pull_request(
         if reviewer_id:
             processed_reviewers.add(reviewer_id)
 
-        if is_group_reviewer(reviewer) and getattr(app, "group_reviewer_strategy", "ignore") == "expand_group_members":
-            expanded = _collect_expanded_member_gids(app, reviewer, asana_users, user_lookup_cache)
-            if expanded is None:
-                # Transient API failure: preserve all existing tasks for this PR so nothing
-                # is incorrectly closed. Cleanup will happen on the next successful sync.
-                current_reviewer_gids.update(_get_existing_pr_item_gids(app, pr))
-            else:
-                current_reviewer_gids.update(expanded)
-        else:
-            gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
-            if gid:
-                current_reviewer_gids.add(gid)
+        current_reviewer_gids.update(_collect_gids_for_reviewer(app, reviewer, pr, asana_users, user_lookup_cache))
 
         process_pr_reviewer(
             app,
