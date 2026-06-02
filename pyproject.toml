@@ -58,6 +58,11 @@ ignore = [
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error::ResourceWarning",
+]
+
 [tool.coverage.run]
 relative_files = true
 omit = ["tests/*"]

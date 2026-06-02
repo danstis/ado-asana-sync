@@ -355,6 +355,9 @@ class Database(DatabaseMigrationsMixin, TinyDBMigrationMixin):
         for conn in connections_to_close:
             try:
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                _LOGGER.warning("Error checkpointing database connection: %s", exc)
+            try:
                 conn.close()
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Error closing database connection: %s", exc)
