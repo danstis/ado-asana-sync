@@ -53,7 +53,10 @@ cp .env.example .env
 - `LOGLEVEL`: Console log level (default: `INFO`).
 - `GROUP_REVIEWER_STRATEGY`: How to handle ADO group/container reviewers (e.g. `[Project]\Contributor`). Options: `ignore` (default, skips them), `default_user` (assigns tasks to `GROUP_REVIEWER_DEFAULT_USER`), `unassigned_task` (creates an unassigned task with the group name).
 - `GROUP_REVIEWER_DEFAULT_USER`: Asana user email, GID, or display name to assign group reviewer tasks to when `GROUP_REVIEWER_STRATEGY=default_user`.
-- *See `.env.example` for additional Application Insights telemetry configurations.*
+- `OTEL_TRACES_SAMPLER_ARG`: Trace sampling percentage for Application Insights (e.g. `0.05` = 5%, `1.0` = 100%; default: `0.05`).
+- `APPINSIGHTS_LOGLEVEL`: Minimum log level forwarded to Application Insights telemetry (default: `WARNING`).
+- `APPINSIGHTS_SAMPLE_DEBUG` / `APPINSIGHTS_SAMPLE_INFO`: Sampling rate for DEBUG/INFO logs sent to Application Insights (default: `0.05`).
+- `APPINSIGHTS_SAMPLE_WARNING` / `APPINSIGHTS_SAMPLE_ERROR` / `APPINSIGHTS_SAMPLE_CRITICAL`: Sampling rate for WARNING/ERROR/CRITICAL logs (default: `1.0`). These default to 100% to preserve incident visibility.
 
 #### 2. Project Mapping
 
@@ -78,6 +81,18 @@ cp data/projects.json.example data/projects.json
 - `adoProjectName`: The name of your Azure DevOps project.
 - `adoTeamName`: The specific team within the ADO project whose backlog you want to sync.
 - `asanaProjectName`: The corresponding Asana project name.
+
+#### 3. Persistence (Data Directory)
+
+The application stores its sync state in a SQLite database at `data/appdata.db`. This file tracks which ADO items have been synced to Asana so that subsequent runs perform incremental updates rather than recreating everything from scratch.
+
+**Important for Docker users:** Mount the `data/` directory as a volume to persist the database across container restarts. Without this, the sync database is lost on every restart and all Asana tasks will be recreated.
+
+```yaml
+# compose.yml — ensure the data directory is mounted
+volumes:
+  - ./data:/app/data
+```
 
 ### Running the Application
 

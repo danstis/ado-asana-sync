@@ -20,13 +20,19 @@ Follow these steps to set up your development environment:
 
 - `ado_asana_sync/sync/app.py`: Serves as the main application entry point.
 - `ado_asana_sync/sync/sync.py`: Contains the core synchronization logic between ADO and Asana.
-- `ado_asana_sync/sync/asana.py`: Manages all interactions with the Asana API.
+- `ado_asana_sync/sync/asana.py`: Manages all interactions with the Asana API (tags, task lookups).
+- `ado_asana_sync/sync/asana_client.py`: Asana API helpers for workspaces, projects, tasks, and user membership queries.
+- `ado_asana_sync/sync/ado_parser.py`: ADO-specific item parsing utilities (extracts assigned user details from work items).
+- `ado_asana_sync/sync/matching.py`: User and task matching logic between ADO and Asana (email/display-name lookup).
+- `ado_asana_sync/sync/dry_run.py`: Dry-run tracking helpers; records planned create/update/close actions without writing to Asana.
 - `ado_asana_sync/sync/task_item.py`: Defines the `TaskItem` data structure for task representation.
+- `ado_asana_sync/sync/task_factory.py`: Logic for building Asana task request bodies and saving newly created tasks.
 - `ado_asana_sync/sync/pull_request_item.py`: Defines the `PullRequestItem` data structure for PR-reviewer relationships.
 - `ado_asana_sync/sync/pr_sync_core.py`: PR sync orchestration (`sync_pull_requests`, `process_repository_pull_requests`, `process_closed_pull_requests`).
 - `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers (`process_pull_request`, `handle_removed_reviewers`, `process_pr_reviewer`).
 - `ado_asana_sync/sync/pr_asana_helpers.py`: Asana helpers specific to PRs (`create_asana_pr_task`, `update_asana_pr_task`, `add_tag_to_pr_task`, `add_closure_comment_to_pr_task`).
 - `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
+- `ado_asana_sync/sync/utils.py`: Shared utility functions (reviewer vote extraction, date conversion, URL encoding).
 - `data/projects.json.example`: Provides an example of the project data structure required for configuration.
 
 ### Coding Conventions
@@ -104,12 +110,18 @@ uv run pytest tests/e2e/ -v
 - Source: `ado_asana_sync/`
   - `sync/app.py`: entry point
   - `sync/sync.py`: ADO ↔ Asana sync core
-  - `sync/asana.py`: Asana API helpers
+  - `sync/asana.py`: Asana API helpers (tags, task lookups)
+  - `sync/asana_client.py`: workspace/project/task/membership queries
+  - `sync/ado_parser.py`: ADO work item parsing (assigned user extraction)
+  - `sync/matching.py`: ADO ↔ Asana user matching by email/display name
+  - `sync/dry_run.py`: dry-run report tracking (no writes to Asana)
   - `sync/task_item.py`, `sync/pull_request_item.py`: data models
+  - `sync/task_factory.py`: Asana task body construction and save helpers
   - `sync/pr_sync_core.py`: PR sync orchestration
   - `sync/pr_processor.py`: individual PR and reviewer processing
   - `sync/pr_asana_helpers.py`: Asana helpers specific to PRs
   - `sync/pull_request_sync.py`: re-export facade for backward compatibility
+  - `sync/utils.py`: shared utilities (vote extraction, date conversion, URL encoding)
   - `utils/`: logging/tracing, time helpers
   - `database/`: SQLite persistence
 - Config example: `data/projects.json.example`
