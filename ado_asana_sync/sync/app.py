@@ -90,6 +90,7 @@ class App:
         self.ado_wit_client = None
         self.ado_work_client = None
         self.ado_git_client = None
+        self.ado_graph_client = None
         self.asana_client = None
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid: Optional[str] = None
@@ -107,7 +108,7 @@ class App:
         self.trace_sampling_percentage = float(os.environ.get("OTEL_TRACES_SAMPLER_ARG", "0.05"))  # Default 5%
 
         # Group/container reviewer fallback strategy
-        _valid_strategies = {"ignore", "default_user", "unassigned_task"}
+        _valid_strategies = {"ignore", "default_user", "unassigned_task", "expand_group_members"}
         _raw_strategy = os.environ.get("GROUP_REVIEWER_STRATEGY", "ignore").strip().lower()
         if _raw_strategy not in _valid_strategies:
             _LOGGER.warning("Invalid GROUP_REVIEWER_STRATEGY '%s', using 'ignore'", _raw_strategy)
@@ -151,6 +152,11 @@ class App:
         self.ado_work_client = ado_connection.clients.get_work_client()
         self.ado_wit_client = ado_connection.clients.get_work_item_tracking_client()
         self.ado_git_client = ado_connection.clients.get_git_client()
+        try:
+            self.ado_graph_client = ado_connection.get_client("azure.devops.v7_0.graph.GraphClient")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            _LOGGER.warning("Could not initialise ADO Graph client (group member expansion unavailable): %s", e)
+            self.ado_graph_client = None
         # Connect Asana.
         _LOGGER.debug("Connecting to Asana")
         asana_config = asana.Configuration()

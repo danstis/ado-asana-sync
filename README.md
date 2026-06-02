@@ -51,7 +51,7 @@ cp .env.example .env
 - `SYNC_THRESHOLD`: Days to continue syncing closed tasks before unmapping (default: `30`).
 - `SYNCED_TAG_NAME`: Asana tag appended to all synced items (default: `synced`).
 - `LOGLEVEL`: Console log level (default: `INFO`).
-- `GROUP_REVIEWER_STRATEGY`: How to handle ADO group/container reviewers (e.g. `[Project]\Contributor`). Options: `ignore` (default, skips them), `default_user` (assigns tasks to `GROUP_REVIEWER_DEFAULT_USER`), `unassigned_task` (creates an unassigned task with the group name).
+- `GROUP_REVIEWER_STRATEGY`: How to handle ADO group/container reviewers (e.g. `[Project]\Contributor`). Options: `ignore` (default, skips them), `default_user` (assigns tasks to `GROUP_REVIEWER_DEFAULT_USER`), `unassigned_task` (creates an unassigned task with the group name), `expand_group_members` (resolves the group to individual members via the ADO Graph API and creates a task per member — requires `vso.graph` PAT scope).
 - `GROUP_REVIEWER_DEFAULT_USER`: Asana user email, GID, or display name to assign group reviewer tasks to when `GROUP_REVIEWER_STRATEGY=default_user`.
 - `OTEL_TRACES_SAMPLER_ARG`: Trace sampling percentage for Application Insights (e.g. `0.05` = 5%, `1.0` = 100%; default: `0.05`).
 - `APPINSIGHTS_LOGLEVEL`: Minimum log level forwarded to Application Insights telemetry (default: `WARNING`).

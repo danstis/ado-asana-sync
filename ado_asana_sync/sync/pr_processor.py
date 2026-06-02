@@ -72,11 +72,55 @@ def _resolve_group_reviewer_default_user(asana_users: List[dict], user_ref: str)
     return None
 
 
+def _resolve_group_members_from_ado(app: App, reviewer) -> List[ADOAssignedUser]:
+    """Resolve a group reviewer to its individual member users via the ADO Graph API."""
+    graph_client = getattr(app, "ado_graph_client", None)
+    if graph_client is None:
+        _LOGGER.warning("ado_graph_client not initialised; cannot expand group '%s'", _get_reviewer_display_name(reviewer))
+        return []
+    reviewer_id = getattr(reviewer, "id", None)
+    if not reviewer_id:
+        _LOGGER.warning("Group reviewer has no 'id' attribute; cannot resolve members")
+        return []
+    try:
+        descriptor_result = graph_client.get_descriptor(reviewer_id)
+        group_descriptor = descriptor_result.value
+        memberships = graph_client.list_memberships(group_descriptor, direction="Down")
+        members: List[ADOAssignedUser] = []
+        for membership in memberships:
+            member_descriptor = membership.member_descriptor
+            try:
+                user = graph_client.get_user(member_descriptor)
+                email = user.mail_address or getattr(user, "principal_name", None)
+                display_name = user.display_name
+                if email and display_name:
+                    members.append(ADOAssignedUser(display_name, email))
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                _LOGGER.debug("Skipping member descriptor '%s' (may be a nested group): %s", member_descriptor, e)
+        return members
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        _LOGGER.warning("Failed to resolve members of group '%s': %s", _get_reviewer_display_name(reviewer), e)
+        return []
+
+
+def _collect_expanded_member_gids(app: App, reviewer, asana_users: List[dict], user_lookup_cache: dict | None) -> set[str]:
+    """Resolve group reviewer members and return the set of their Asana GIDs."""
+    members = _resolve_group_members_from_ado(app, reviewer)
+    gids: set[str] = set()
+    for member in members:
+        asana_user = _cache_reviewer_lookup(asana_users, member, user_lookup_cache)
+        if asana_user:
+            gids.add(asana_user["gid"])
+    return gids
+
+
 def _collect_group_reviewer_gid(app: App, reviewer, asana_users: List[dict]) -> str | None:
     """Return the synthetic GID to track for a group reviewer, or None to skip."""
     strategy = getattr(app, "group_reviewer_strategy", "ignore")
     if strategy == "ignore":
         return None
+    if strategy == "expand_group_members":
+        return None  # individual GIDs collected via _collect_expanded_member_gids
     if strategy == "default_user":
         default_ref = getattr(app, "group_reviewer_default_user", "")
         if _resolve_group_reviewer_default_user(asana_users, default_ref) is None:
@@ -208,6 +252,32 @@ def _handle_group_reviewer(
     )
 
     if strategy == "ignore":
+        return
+
+    if strategy == "expand_group_members":
+        members = _resolve_group_members_from_ado(app, reviewer)
+        if not members:
+            _LOGGER.info("PR %s: group '%s' resolved to no members, skipping", pr.pull_request_id, display_name)
+            return
+        for member in members:
+            asana_matched_user = matching_user(asana_users, member)
+            if not asana_matched_user:
+                _LOGGER.debug(
+                    "PR %s: group member %s <%s> not found in Asana",
+                    pr.pull_request_id,
+                    member.display_name,
+                    member.email,
+                )
+                continue
+            existing_match = PullRequestItem.search(app, ado_pr_id=pr.pull_request_id, reviewer_gid=asana_matched_user["gid"])
+            if existing_match is None:
+                create_new_pr_reviewer_task(
+                    app, pr, repository, reviewer, asana_matched_user, asana_project_tasks, asana_project
+                )
+            else:
+                update_existing_pr_reviewer_task(
+                    app, pr, repository, reviewer, existing_match, asana_matched_user, asana_project
+                )
         return
 
     assignee_gid = _resolve_group_reviewer_assignee(app, pr, asana_users, display_name, strategy)
@@ -342,9 +412,12 @@ def process_pull_request(
         if reviewer_id:
             processed_reviewers.add(reviewer_id)
 
-        gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
-        if gid:
-            current_reviewer_gids.add(gid)
+        if is_group_reviewer(reviewer) and getattr(app, "group_reviewer_strategy", "ignore") == "expand_group_members":
+            current_reviewer_gids.update(_collect_expanded_member_gids(app, reviewer, asana_users, user_lookup_cache))
+        else:
+            gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
+            if gid:
+                current_reviewer_gids.add(gid)
 
         process_pr_reviewer(
             app,
