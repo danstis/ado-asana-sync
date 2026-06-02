@@ -103,16 +103,17 @@ def _resolve_group_members_from_ado(app: App, reviewer) -> List[ADOAssignedUser]
 
     Returns:
         List[ADOAssignedUser]: successfully resolved members (may be empty if group has no users).
-        None: transient API failure — callers should preserve existing tasks rather than closing them.
+        None: expansion could not be performed (unavailable client, missing id, or API error) —
+              callers should preserve existing tasks rather than closing them.
     """
     graph_client = getattr(app, "ado_graph_client", None)
     if graph_client is None:
         _LOGGER.warning("ado_graph_client not initialised; cannot expand group '%s'", _get_reviewer_display_name(reviewer))
-        return []
+        return None
     reviewer_id = getattr(reviewer, "id", None)
     if not reviewer_id:
         _LOGGER.warning("Group reviewer has no 'id' attribute; cannot resolve members")
-        return []
+        return None
     try:
         descriptor_result = graph_client.get_descriptor(reviewer_id)
         memberships = graph_client.list_memberships(descriptor_result.value, direction="Down")
@@ -282,9 +283,9 @@ def _handle_expand_group_reviewer(
     asana_users: List[dict],
     asana_project_tasks: List[dict],
     asana_project: str,
-    display_name: str,
 ) -> None:
     """Handle expand_group_members strategy: create/update individual member tasks."""
+    display_name = _get_reviewer_display_name(reviewer)
     members = _resolve_group_members_from_ado(app, reviewer)
     if members is None:
         _LOGGER.warning("PR %s: group '%s' expansion failed; existing tasks preserved", pr.pull_request_id, display_name)
@@ -346,9 +347,7 @@ def _handle_group_reviewer(
         return
 
     if strategy == "expand_group_members":
-        _handle_expand_group_reviewer(
-            app, pr, repository, reviewer, asana_users, asana_project_tasks, asana_project, display_name
-        )
+        _handle_expand_group_reviewer(app, pr, repository, reviewer, asana_users, asana_project_tasks, asana_project)
         return
 
     assignee_gid = _resolve_group_reviewer_assignee(app, pr, asana_users, display_name, strategy)
