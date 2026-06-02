@@ -598,11 +598,23 @@ class TestResolveGroupMembersFromAdo(unittest.TestCase):
         self.assertEqual(result[0].email, "alice@corp.com")
         self.assertEqual(result[0].display_name, "Alice")
 
-    def test_returns_empty_list_when_graph_client_is_none(self):
+    def test_returns_none_when_graph_client_is_none(self):
         app = self._make_app_with_graph_client(None)
         reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
         result = _resolve_group_members_from_ado(app, reviewer)
-        self.assertEqual(result, [])
+        self.assertIsNone(result)
+
+    def test_returns_none_when_reviewer_has_no_id(self):
+        mock_graph = MagicMock()
+        app = self._make_app_with_graph_client(mock_graph)
+
+        class ReviewerNoId:
+            display_name = "[Corp]\\Dev"
+            unique_name = "vstfs:///abc"
+            is_container = True
+
+        result = _resolve_group_members_from_ado(app, ReviewerNoId())
+        self.assertIsNone(result)
 
     def test_returns_none_on_api_exception(self):
         mock_graph = MagicMock()
@@ -872,6 +884,70 @@ class TestExpandFailureSafety(unittest.TestCase):
         mock_handle_removed.assert_called_once()
         _, _, current_gids, _ = mock_handle_removed.call_args[0]
         self.assertIn("gid-existing-member", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_graph_client_none_preserves_existing_tasks(self, mock_handle_group, mock_handle_removed):
+        """When ado_graph_client is None, existing member tasks are not closed."""
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        app.ado_graph_client = None
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-member-from-prior-sync",
+            reviewer_name="Prior Member",
+            asana_gid="prior-task-gid",
+        )
+        existing.save(app)
+
+        process_pull_request(app, self.pr, self.repo, [], [], "proj-gid")
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("gid-member-from-prior-sync", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_missing_reviewer_id_preserves_existing_tasks(self, mock_handle_group, mock_handle_removed):
+        """When reviewer has no id attribute, existing member tasks are not closed."""
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        class ReviewerNoId:
+            display_name = "[Corp]\\Dev"
+            unique_name = "vstfs:///abc"
+            is_container = True
+            vote = 0
+
+        app = _make_app(self.tmp, strategy="expand_group_members")
+        app.ado_git_client = MagicMock()
+        app.ado_git_client.get_pull_request_reviewers.return_value = [ReviewerNoId()]
+        app.ado_graph_client = MagicMock()
+        self.addCleanup(app.db.close)
+
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-member-no-id",
+            reviewer_name="Member No Id",
+            asana_gid="task-no-id",
+        )
+        existing.save(app)
+
+        process_pull_request(app, self.pr, self.repo, [], [], "proj-gid")
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("gid-member-no-id", current_gids)
 
 
 # ---------------------------------------------------------------------------
