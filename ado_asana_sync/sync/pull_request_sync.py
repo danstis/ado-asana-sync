@@ -25,6 +25,7 @@ from .pr_asana_helpers import (
 )
 from .pr_processor import (
     _collect_expanded_member_gids,
+    _handle_expand_group_reviewer,
     _handle_group_reviewer,
     _resolve_group_members_from_ado,
     _resolve_group_reviewer_default_user,
@@ -65,6 +66,7 @@ __all__ = [
     "create_asana_pr_task",
     "update_asana_pr_task",
     "_collect_expanded_member_gids",
+    "_handle_expand_group_reviewer",
     "_handle_group_reviewer",
     "_resolve_group_members_from_ado",
     "_resolve_group_reviewer_default_user",
