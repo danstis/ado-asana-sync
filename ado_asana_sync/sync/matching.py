@@ -10,6 +10,10 @@ def matching_user(user_list: list[dict], ado_user: ADOAssignedUser | None) -> di
     if ado_user is None:
         return None
     for user in user_list:
-        if user["email"].lower() == ado_user.email.lower() or user["name"].lower() == ado_user.display_name.lower():
+        email = user.get("email")
+        name = user.get("name")
+        if isinstance(email, str) and email.lower() == ado_user.email.lower():
+            return user
+        if isinstance(name, str) and name.lower() == ado_user.display_name.lower():
             return user
     return None
