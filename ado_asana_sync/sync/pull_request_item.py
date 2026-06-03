@@ -52,6 +52,7 @@ class PullRequestItem:
     review_status: Optional[str] = None
     processing_state: Optional[str] = field(default=None)
     assignee_gid: Optional[str] = None
+    source_group_reviewer_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         self.title = self.title.strip() if isinstance(self.title, str) else self.title
@@ -241,6 +242,7 @@ class PullRequestItem:
             "review_status": self.review_status,
             "processing_state": self.processing_state,
             "assignee_gid": self.assignee_gid,
+            "source_group_reviewer_id": self.source_group_reviewer_id,
         }
 
         if app.pr_matches is None:
