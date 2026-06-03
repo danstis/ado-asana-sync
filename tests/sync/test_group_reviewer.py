@@ -978,6 +978,105 @@ class TestExpandFailureSafety(unittest.TestCase):
         _, _, current_gids, _ = mock_handle_removed.call_args[0]
         self.assertEqual(current_gids, set())
 
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_cold_cache_db_fallback_preserves_group_member_tasks(self, mock_handle_group, mock_handle_removed):
+        """Key regression: when cache is cold/expired but the DB has tasks from a prior
+        successful group expansion (tagged with source_group_reviewer_id), those tasks
+        must be preserved during a transient expansion failure.
+
+        Scenario:
+        1. Prior sync: group expanded successfully, task saved with source_group_reviewer_id.
+        2. Cache expires (or cache file deleted).
+        3. Current sync: Graph API fails → expansion returns None.
+        4. Expected: task is preserved via DB fallback, NOT closed.
+        """
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_item import PullRequestItem
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+
+        # Pre-create a task tagged as coming from this group (as if a prior run created it)
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-group-member",
+            reviewer_name="Group Member",
+            asana_gid="asana-group-member-task",
+            source_group_reviewer_id="group-guid-99",  # tagged with the group's reviewer ID
+        )
+        existing.save(app)
+
+        # Cache is cold (no entry for this group)
+        empty_cache = GroupMemberCache()
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=empty_cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        # DB fallback recovered the group member's GID → task is NOT closed
+        self.assertIn("gid-group-member", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_cold_cache_db_fallback_does_not_mask_unrelated_direct_reviewer_removal(
+        self, mock_handle_group, mock_handle_removed
+    ):
+        """DB fallback preserves only this group's tasks: unrelated removed direct reviewers
+        are still closed even when the group expansion fails and cache is cold."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_item import PullRequestItem
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+
+        # Group member task — tagged, should be preserved
+        group_member_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-group-member",
+            reviewer_name="Group Member",
+            asana_gid="task-group-member",
+            source_group_reviewer_id="group-guid-99",
+        )
+        group_member_task.save(app)
+
+        # Direct reviewer task — NOT tagged with any group, should NOT be preserved by the fallback
+        direct_reviewer_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-bob-direct",
+            reviewer_name="Bob (direct reviewer, now removed)",
+            asana_gid="task-bob",
+            source_group_reviewer_id=None,  # direct reviewer, no group association
+        )
+        direct_reviewer_task.save(app)
+
+        empty_cache = GroupMemberCache()
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=empty_cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        # Group member preserved via DB fallback
+        self.assertIn("gid-group-member", current_gids)
+        # Bob's stale direct-reviewer task is NOT preserved — he was legitimately removed
+        self.assertNotIn("gid-bob-direct", current_gids)
+
 
 # ---------------------------------------------------------------------------
 # 12. Vote preservation: group vote must not overwrite direct reviewer vote
