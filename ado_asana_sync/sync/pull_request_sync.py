@@ -13,6 +13,7 @@ except ImportError:
 from ado_asana_sync.utils.date import iso8601_utc
 
 from .asana import get_asana_task
+from .group_member_cache import GroupMemberCache
 from .pr_asana_helpers import (
     _PR_CLOSED_STATES,
     _REVIEWER_APPROVED_STATES,
@@ -56,6 +57,7 @@ from .utils import encode_url_for_asana, extract_reviewer_vote
 __all__ = [
     "ADOAssignedUser",
     "GitPullRequestSearchCriteria",
+    "GroupMemberCache",
     "PullRequestItem",
     "_PR_CLOSED_STATES",
     "_REVIEWER_APPROVED_STATES",

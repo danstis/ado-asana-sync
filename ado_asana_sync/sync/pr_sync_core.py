@@ -14,6 +14,7 @@ from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 
 from .app import App
+from .group_member_cache import GroupMemberCache
 from .pr_asana_helpers import _PR_CLOSED_STATES, _get_cached_asana_task, _record_pr_action, update_asana_pr_task
 from .pr_processor import create_ado_user_from_reviewer, process_pull_request
 from .pull_request_item import PullRequestItem
@@ -319,6 +320,8 @@ def process_repository_pull_requests(
     """Process pull requests for a specific repository."""
     processed_pr_ids: set[int] = set()
     user_lookup_cache: dict[str, dict | None] = {}
+    # Re-use the app-level persistent cache when available; otherwise use a run-scoped one.
+    group_member_cache: GroupMemberCache = getattr(app, "group_member_cache", None) or GroupMemberCache()
 
     if GitPullRequestSearchCriteria:
         search_criteria = GitPullRequestSearchCriteria(status="active")
@@ -334,7 +337,9 @@ def process_repository_pull_requests(
         return processed_pr_ids
 
     for pr in pull_requests:
-        process_pull_request(app, pr, repository, asana_users, asana_project_tasks, asana_project, user_lookup_cache)
+        process_pull_request(
+            app, pr, repository, asana_users, asana_project_tasks, asana_project, user_lookup_cache, group_member_cache
+        )
         processed_pr_ids.add(pr.pull_request_id)
 
     return processed_pr_ids
