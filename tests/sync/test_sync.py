@@ -250,6 +250,51 @@ class TestMatchingUser(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    # Tests that matching_user skips users with a missing email key.
+    def test_matching_user_email_key_missing(self):
+        user_list = [{"name": "User 1"}]
+        ado_user = ADOAssignedUser(display_name="User 9", email="user9@example.com")
+
+        result = matching_user(user_list, ado_user)
+
+        self.assertIsNone(result)
+
+    # Tests that matching_user skips users with a missing name key.
+    def test_matching_user_name_key_missing(self):
+        user_list = [{"email": "user1@example.com"}]
+        ado_user = ADOAssignedUser(display_name="User 9", email="user9@example.com")
+
+        result = matching_user(user_list, ado_user)
+
+        self.assertIsNone(result)
+
+    # Tests that matching_user skips users with a None email value.
+    def test_matching_user_email_is_none(self):
+        user_list = [{"email": None, "name": "User 1"}]
+        ado_user = ADOAssignedUser(display_name="User 9", email="user9@example.com")
+
+        result = matching_user(user_list, ado_user)
+
+        self.assertIsNone(result)
+
+    # Tests that matching_user skips users with a None name value.
+    def test_matching_user_name_is_none(self):
+        user_list = [{"email": "user1@example.com", "name": None}]
+        ado_user = ADOAssignedUser(display_name="User 1", email="user9@example.com")
+
+        result = matching_user(user_list, ado_user)
+
+        self.assertIsNone(result)
+
+    # Tests that matching_user still matches by name when email is missing.
+    def test_matching_user_name_matches_despite_missing_email_key(self):
+        user = {"name": "User 1"}
+        ado_user = ADOAssignedUser(display_name="User 1", email="user9@example.com")
+
+        result = matching_user([user], ado_user)
+
+        self.assertEqual(result, user)
+
 
 class TestSyncItemAndChildrenLogging(unittest.TestCase):
     def test_log_when_user_not_matched(self):
