@@ -21,6 +21,7 @@ from ado_asana_sync.database import Database, DatabaseTable
 from ado_asana_sync.utils.logging_tracing import attach_filter_to_telemetry_handlers
 
 from .dry_run import DryRunReport
+from .group_member_cache import GroupMemberCache
 from .matching import DEFAULT_USER_MATCH_STRATEGY, resolve_strategy
 
 # _LOGGER is the logging instance for this file.
@@ -93,6 +94,7 @@ class App:
         self.ado_git_client = None
         self.ado_graph_client = None
         self.asana_client = None
+        self.group_member_cache: Optional[GroupMemberCache] = None
         self.asana_page_size = ASANA_PAGE_SIZE
         self.asana_tag_gid: Optional[str] = None
         self.asana_tag_name = ASANA_TAG_NAME
@@ -227,6 +229,11 @@ class App:
 
         # Clean up any corrupted PR records from previous runs
         self._cleanup_corrupted_pr_data()
+
+        # Initialise persistent group member cache (avoids repeat ADO Graph API calls across runs)
+        group_cache_file = os.path.join(data_dir, "group_member_cache.json")
+        group_cache_ttl = float(os.environ.get("GROUP_CACHE_TTL_HOURS", "6.0")) * 3600
+        self.group_member_cache = GroupMemberCache(cache_file=group_cache_file, ttl_seconds=group_cache_ttl)
 
     def _sync_projects_from_json(self) -> None:
         """
