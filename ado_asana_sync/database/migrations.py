@@ -7,7 +7,7 @@ from typing import Protocol
 
 _LOGGER = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 class _ConnectionProvider(Protocol):
@@ -75,6 +75,10 @@ class DatabaseMigrationsMixin:
             self._migrate_to_version_2(conn)
             self._record_migration(conn, 2, "Add composite unique constraint for projects table")
 
+        if current_version < 3:
+            self._migrate_to_version_3(conn)
+            self._record_migration(conn, 3, "Fix pr_matches index and add asana_gid, reviewer_gid indexes")
+
     def get_current_schema_version(self: _ConnectionProvider) -> int:
         """Get the current schema version from the database."""
         with self.get_connection() as conn:
@@ -125,3 +129,18 @@ class DatabaseMigrationsMixin:
             _LOGGER.info("Successfully migrated %d project records", len(existing_projects))
         else:
             _LOGGER.debug("Projects table already has composite unique constraint, skipping migration")
+
+    def _migrate_to_version_3(self, conn):
+        """Migrate to version 3: fix incorrect pr_matches index and add covering indexes."""
+        # Drop the old incorrect index (was on $.pr_id which never existed in the data)
+        conn.execute("DROP INDEX IF EXISTS idx_pr_matches_data")
+        # Rename old matches index to the new consistent naming scheme
+        conn.execute("DROP INDEX IF EXISTS idx_matches_data")
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_ado_id ON matches(json_extract(data, '$.ado_id'))")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_asana_gid ON matches(json_extract(data, '$.asana_gid'))")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pr_matches_ado_pr_id ON pr_matches(json_extract(data, '$.ado_pr_id'))")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pr_matches_reviewer_gid ON pr_matches(json_extract(data, '$.reviewer_gid'))"
+        )
+        _LOGGER.info("Migrated to version 3: updated indexes on matches and pr_matches tables")

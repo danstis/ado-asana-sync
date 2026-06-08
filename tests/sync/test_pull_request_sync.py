@@ -455,7 +455,7 @@ class TestPullRequestSync(unittest.TestCase):
             },
         ]
 
-        self.mock_app.pr_matches.search.return_value = existing_tasks
+        self.mock_app.pr_matches.search_by_json_fields.return_value = existing_tasks
         current_reviewers = {"current-user-gid"}  # Only one current reviewer
 
         handle_removed_reviewers(self.mock_app, mock_pr, current_reviewers, "test-project")
@@ -736,7 +736,7 @@ class TestPullRequestSync(unittest.TestCase):
                 "doc_id": 555,  # This should be filtered out
             }
         ]
-        mock_pr_matches.search.return_value = mock_db_results
+        mock_pr_matches.search_by_json_fields.return_value = mock_db_results
 
         current_reviewer_gids = ["active-reviewer-456"]  # removed-reviewer-123 is not in this list
 
@@ -778,7 +778,7 @@ class TestPullRequestSync(unittest.TestCase):
                 "doc_id": 333,  # This should be filtered out
             }
         ]
-        mock_app.pr_matches.search.return_value = mock_pr_data
+        mock_app.pr_matches.search_by_json_fields.return_value = mock_pr_data
 
         # Mock required parameters
         asana_users = []
@@ -994,33 +994,19 @@ class TestPullRequestSync(unittest.TestCase):
         mock_project.id = "project-456"
         mock_repo.project = mock_project
 
-        # Mock search to return only repo-2 PRs
-        def search_side_effect(query_func):
-            all_tasks = [
-                {
-                    "ado_pr_id": 100,
-                    "ado_repository_id": "repo-1",
-                    "title": "Active PR",
-                    "status": "active",
-                    "url": "https://example.com/pr/100",
-                    "reviewer_gid": "reviewer-1",
-                    "reviewer_name": "Test User 1",
-                    "asana_gid": "task-1",
-                },
-                {
-                    "ado_pr_id": 200,
-                    "ado_repository_id": "repo-2",
-                    "title": "Closed PR",
-                    "status": "completed",
-                    "url": "https://example.com/pr/200",
-                    "reviewer_gid": "reviewer-2",
-                    "reviewer_name": "Test User 2",
-                    "asana_gid": "task-2",
-                },
-            ]
-            return [task for task in all_tasks if query_func(task)]
-
-        mock_app.pr_matches.search.side_effect = search_side_effect
+        # search_by_json_fields returns only repo-2 tasks (filtering done by SQL in production)
+        mock_app.pr_matches.search_by_json_fields.return_value = [
+            {
+                "ado_pr_id": 200,
+                "ado_repository_id": "repo-2",
+                "title": "Closed PR",
+                "status": "completed",
+                "url": "https://example.com/pr/200",
+                "reviewer_gid": "reviewer-2",
+                "reviewer_name": "Test User 2",
+                "asana_gid": "task-2",
+            }
+        ]
 
         # Call function with processed_pr_ids containing PR 100
         process_closed_pull_requests(mock_app, [], "project-456", {100}, mock_repo)
@@ -1038,7 +1024,7 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Mock empty database
         mock_app = Mock()
-        mock_app.pr_matches.search.return_value = []
+        mock_app.pr_matches.search_by_json_fields.return_value = []
 
         # Should not raise exception with None parameter
         try:
@@ -1080,11 +1066,9 @@ class TestPullRequestSync(unittest.TestCase):
             },
         ]
 
-        # Mock search to return only repo-1 tasks when filtered
-        def search_side_effect(query_func):
-            return [task for task in all_tasks if query_func(task)]
-
-        mock_app.pr_matches.search.side_effect = search_side_effect
+        # search_by_json_fields returns only repo-1 tasks (SQL filtering done at the DB level)
+        repo1_tasks = [task for task in all_tasks if task["ado_repository_id"] == "repo-1"]
+        mock_app.pr_matches.search_by_json_fields.return_value = repo1_tasks
         mock_app.pr_matches.all.return_value = all_tasks
         mock_app.ado_git_client.get_pull_request_by_id.return_value = Mock(status="completed")
         mock_app.asana_tag_gid = "tag-123"
@@ -1129,7 +1113,7 @@ class TestPullRequestSync(unittest.TestCase):
             }
         ]
         mock_app.pr_matches.all.return_value = pr_tasks
-        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.pr_matches.search_by_json_fields.return_value = pr_tasks
 
         # Mock API to throw the exact error we encountered
         mock_app.ado_git_client.get_pull_request_by_id.side_effect = Exception(
@@ -1175,7 +1159,7 @@ class TestPullRequestSync(unittest.TestCase):
             }
         ]
         mock_app.pr_matches.all.return_value = pr_tasks
-        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.pr_matches.search_by_json_fields.return_value = pr_tasks
 
         # Mock API to return abandoned PR
         mock_abandoned_pr = Mock()
@@ -1227,7 +1211,7 @@ class TestPullRequestSync(unittest.TestCase):
             }
         ]
         mock_app.pr_matches.all.return_value = pr_tasks
-        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.pr_matches.search_by_json_fields.return_value = pr_tasks
 
         # Mock API to return draft PR
         mock_draft_pr = Mock()
@@ -1264,7 +1248,7 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Mock empty database
         mock_app = Mock()
-        mock_app.pr_matches.search.return_value = []
+        mock_app.pr_matches.search_by_json_fields.return_value = []
 
         # Should not raise exception with None repository
         try:
@@ -1301,7 +1285,7 @@ class TestPullRequestSync(unittest.TestCase):
                 "review_status": "noVote",  # Old vote status
             }
         ]
-        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.pr_matches.search_by_json_fields.return_value = pr_tasks
         mock_app.asana_tag_gid = "tag-123"
 
         # Mock completed PR
@@ -1381,7 +1365,7 @@ class TestPullRequestSync(unittest.TestCase):
                 "review_status": "waitingForAuthor",
             }
         ]
-        mock_app.pr_matches.search.return_value = pr_tasks
+        mock_app.pr_matches.search_by_json_fields.return_value = pr_tasks
         mock_app.asana_tag_gid = "tag-123"
 
         # Mock completed PR

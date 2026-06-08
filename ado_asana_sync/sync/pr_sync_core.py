@@ -41,12 +41,10 @@ def _get_open_pr_tasks(app: App, repository) -> list:
     if app.pr_matches is None:
         raise ValueError(_ADO_PR_MATCHES_NONE_MSG)
     if repository:
-        repository_id = repository.id
-
-        def repo_query_func(record):
-            return record.get("ado_repository_id") == repository_id and record.get("processing_state", "open") != "closed"
-
-        tasks = app.pr_matches.search(repo_query_func)
+        tasks = app.pr_matches.search_by_json_fields(
+            {"ado_repository_id": repository.id},
+            {"processing_state": "closed"},
+        )
         _LOGGER.info(
             "Second pass: processing repository %s (ID: %s) open database PR tasks not handled in active PR sync",
             repository.name,
@@ -56,11 +54,7 @@ def _get_open_pr_tasks(app: App, repository) -> list:
             pr_task_info = [(task.get("ado_pr_id"), task.get("ado_repository_id")) for task in tasks]
             _LOGGER.debug("Second pass: Found PR tasks for repository %s: %s", repository.name, pr_task_info)
     else:
-
-        def all_query_func(record):
-            return record.get("processing_state", "open") != "closed"
-
-        tasks = app.pr_matches.search(all_query_func)
+        tasks = app.pr_matches.search_by_json_fields({}, {"processing_state": "closed"})
         _LOGGER.info("Second pass: processing all open database PR tasks not handled in active PR sync")
         _LOGGER.debug("Second pass: found %d open PR tasks in database", len(tasks))
     return tasks

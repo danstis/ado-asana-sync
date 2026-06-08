@@ -391,10 +391,7 @@ def handle_removed_reviewers(app: App, pr, current_reviewer_gids: set, asana_pro
     if app.pr_matches is None:
         raise ValueError("app.pr_matches is None")
 
-    def query_func(record):
-        return record.get("ado_pr_id") == pr.pull_request_id
-
-    existing_pr_tasks = app.pr_matches.search(query_func)
+    existing_pr_tasks = app.pr_matches.search_by_json_fields({"ado_pr_id": pr.pull_request_id})
 
     if not existing_pr_tasks:
         return

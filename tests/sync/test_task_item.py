@@ -42,11 +42,7 @@ class TestTaskItem(unittest.TestCase):
         app = MagicMock(App)
 
         app.matches = MagicMock()
-
-        # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = True
-        # Mock the search method of the matches table to return a mock TaskItem object
-        app.matches.search.return_value = [TEST_DB_ITEM_1]
+        app.matches.search_by_json_fields.return_value = [TEST_DB_ITEM_1]
 
         # Call the find_by_ado_id method with a valid ADO ID
         result = TaskItem.find_by_ado_id(app, 1)
@@ -69,9 +65,7 @@ class TestTaskItem(unittest.TestCase):
         app = MagicMock(App)
 
         app.matches = MagicMock()
-
-        # Mock the contains method of the matches table to return False
-        app.matches.contains.return_value = False
+        app.matches.search_by_json_fields.return_value = []
 
         # Call the find_by_ado_id method with a non-existing ADO ID
         result = TaskItem.find_by_ado_id(app, 1)
@@ -98,11 +92,7 @@ class TestTaskItem(unittest.TestCase):
         app = MagicMock(App)
 
         app.matches = MagicMock()
-
-        # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = True
-        # Mock the search method of the matches table to return a mock TaskItem object
-        app.matches.search.return_value = [TEST_DB_ITEM_1]
+        app.matches.search_by_json_fields.return_value = [TEST_DB_ITEM_1]
 
         # Call the search method with an ado_id.
         result = TaskItem.search(app, ado_id=1)
@@ -115,13 +105,9 @@ class TestTaskItem(unittest.TestCase):
         app = MagicMock(App)
 
         app.matches = MagicMock()
+        app.matches.search_by_json_fields.return_value = [TEST_DB_ITEM_1]
 
-        # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = True
-        # Mock the search method of the matches table to return a mock TaskItem object
-        app.matches.search.return_value = [TEST_DB_ITEM_1]
-
-        # Call the search method with an ado_id.
+        # Call the search method with an asana_gid.
         result = TaskItem.search(app, asana_gid="123456")
 
         self.assertEqual(result, TEST_TASK_ITEM_1)
@@ -132,9 +118,7 @@ class TestTaskItem(unittest.TestCase):
         app = MagicMock(App)
 
         app.matches = MagicMock()
-
-        # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = False
+        app.matches.search_by_json_fields.return_value = []
 
         # Call the search method with an ado_id.
         result = TaskItem.search(app, ado_id=5)
@@ -147,11 +131,9 @@ class TestTaskItem(unittest.TestCase):
         app = MagicMock(App)
 
         app.matches = MagicMock()
+        app.matches.search_by_json_fields.return_value = []
 
-        # Mock the contains method of the matches table to return True
-        app.matches.contains.return_value = False
-
-        # Call the search method with an ado_id.
+        # Call the search method with an asana_gid.
         result = TaskItem.search(app, asana_gid="987654")
 
         self.assertIsNone(result)
@@ -160,7 +142,6 @@ class TestTaskItem(unittest.TestCase):
         """Regression test: Ensure doc_id is filtered out when creating TaskItem from database results."""
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = True
 
         # Mock database result that includes doc_id (this would cause constructor error if not filtered)
         mock_db_result = {
@@ -176,7 +157,7 @@ class TestTaskItem(unittest.TestCase):
             "updated_date": "2023-12-01T10:00:00Z",
             "doc_id": 999,  # This should be filtered out
         }
-        app.matches.search.return_value = [mock_db_result]
+        app.matches.search_by_json_fields.return_value = [mock_db_result]
 
         # This should not raise an error about unexpected doc_id argument
         result = TaskItem.search(app, ado_id=123)
@@ -191,7 +172,6 @@ class TestTaskItem(unittest.TestCase):
         """Regression test: Ensure doc_id is filtered out in find_by_ado_id method."""
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = True
 
         # Mock database result with doc_id
         mock_db_result = {
@@ -202,7 +182,7 @@ class TestTaskItem(unittest.TestCase):
             "url": "https://example.com/456",
             "doc_id": 777,  # This should be filtered out
         }
-        app.matches.search.return_value = [mock_db_result]
+        app.matches.search_by_json_fields.return_value = [mock_db_result]
 
         # This should not raise an error about unexpected doc_id argument
         result = TaskItem.find_by_ado_id(app, 456)
@@ -214,32 +194,29 @@ class TestTaskItem(unittest.TestCase):
         self.assertFalse(hasattr(result, "doc_id"))
 
     def test_search_returns_none_when_items_list_empty(self):
-        """Test that search returns None when matches.search returns empty list."""
+        """Test that search returns None when search_by_json_fields returns empty list."""
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = True
-        app.matches.search.return_value = []  # Empty list
+        app.matches.search_by_json_fields.return_value = []
 
         result = TaskItem.search(app, ado_id=123)
 
         self.assertIsNone(result)
 
     def test_find_by_ado_id_returns_none_when_items_list_empty(self):
-        """Test that find_by_ado_id returns None when matches.search returns empty list."""
+        """Test that find_by_ado_id returns None when search_by_json_fields returns empty list."""
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = True
-        app.matches.search.return_value = []  # Empty list
+        app.matches.search_by_json_fields.return_value = []
 
         result = TaskItem.find_by_ado_id(app, 123)
 
         self.assertIsNone(result)
 
     def test_save_new_item(self):
-        """Test saving a new TaskItem."""
+        """Test saving a new TaskItem uses upsert."""
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = False
         app.db_lock = MagicMock()
         app.db_lock.__enter__ = MagicMock(return_value=app.db_lock)
         app.db_lock.__exit__ = MagicMock(return_value=None)
@@ -248,17 +225,17 @@ class TestTaskItem(unittest.TestCase):
 
         task_item.save(app)
 
-        # Verify insert was called
-        app.matches.insert.assert_called_once()
-        call_args = app.matches.insert.call_args[0][0]
-        self.assertEqual(call_args["ado_id"], 456)
-        self.assertEqual(call_args["title"], "New Task")
+        app.matches.upsert_by_json_fields.assert_called_once()
+        call_data = app.matches.upsert_by_json_fields.call_args[0][0]
+        self.assertEqual(call_data["ado_id"], 456)
+        self.assertEqual(call_data["title"], "New Task")
+        call_conditions = app.matches.upsert_by_json_fields.call_args[0][1]
+        self.assertEqual(call_conditions, {"ado_id": 456})
 
     def test_save_existing_item(self):
-        """Test saving an existing TaskItem."""
+        """Test saving an existing TaskItem uses upsert."""
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = True
         app.db_lock = MagicMock()
         app.db_lock.__enter__ = MagicMock(return_value=app.db_lock)
         app.db_lock.__exit__ = MagicMock(return_value=None)
@@ -267,11 +244,10 @@ class TestTaskItem(unittest.TestCase):
 
         task_item.save(app)
 
-        # Verify update was called
-        app.matches.update.assert_called_once()
-        call_args = app.matches.update.call_args[0][0]
-        self.assertEqual(call_args["ado_id"], 789)
-        self.assertEqual(call_args["title"], "Updated Task")
+        app.matches.upsert_by_json_fields.assert_called_once()
+        call_data = app.matches.upsert_by_json_fields.call_args[0][0]
+        self.assertEqual(call_data["ado_id"], 789)
+        self.assertEqual(call_data["title"], "Updated Task")
 
     def test_save_with_none_app_matches_raises_error(self):
         """Test save raises ValueError when app.matches is None."""
@@ -552,14 +528,13 @@ class TestTaskItemDueDateContract(unittest.TestCase):
         mock_app.db_lock = MagicMock()
         mock_app.db_lock.__enter__ = MagicMock(return_value=mock_app.db_lock)
         mock_app.db_lock.__exit__ = MagicMock(return_value=None)
-        mock_app.matches.contains.return_value = False
 
         # Call save method
         task.save(mock_app)
 
-        # Verify the insert was called with due_date included
-        mock_app.matches.insert.assert_called_once()
-        saved_data = mock_app.matches.insert.call_args[0][0]
+        # Verify upsert_by_json_fields was called with due_date included
+        mock_app.matches.upsert_by_json_fields.assert_called_once()
+        saved_data = mock_app.matches.upsert_by_json_fields.call_args[0][0]
         self.assertIn("due_date", saved_data)
         self.assertEqual(saved_data["due_date"], "2025-12-31")
 

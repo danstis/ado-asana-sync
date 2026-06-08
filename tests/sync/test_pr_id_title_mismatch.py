@@ -209,8 +209,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             }
         ]
 
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = mock_search_results
+        self.mock_app.pr_matches.search_by_json_fields.return_value = mock_search_results
 
         # Search for specific PR and reviewer combination
         result = PullRequestItem.search(self.mock_app, ado_pr_id=100, reviewer_gid="reviewer-gid-1")
@@ -238,8 +237,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             }
         ]
 
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = corrupted_search_results
+        self.mock_app.pr_matches.search_by_json_fields.return_value = corrupted_search_results
 
         # Search for specific PR ID but get back wrong data
         result = PullRequestItem.search(
@@ -392,9 +390,7 @@ class TestPRIdTitleMismatch(unittest.TestCase):
             }
         ]
 
-        self.mock_app.pr_matches.search.return_value = corrupted_records
-        self.mock_app.pr_matches.contains.return_value = False  # No existing record for new item
-        self.mock_app.pr_matches.remove = Mock()
+        self.mock_app.pr_matches.search_by_json_fields.return_value = corrupted_records
 
         # Create a valid PR item to save
         valid_pr_item = PullRequestItem(
@@ -410,9 +406,10 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         # Save the valid item (should trigger cleanup)
         valid_pr_item.save(self.mock_app)
 
-        # Verify that the corrupted record was removed
-        self.mock_app.pr_matches.remove.assert_called()
-        self.mock_app.pr_matches.insert.assert_called_once()
+        # Verify that the corrupted record was removed via remove_by_json_fields
+        self.mock_app.pr_matches.remove_by_json_fields.assert_called()
+        # Verify that the valid item was saved via upsert
+        self.mock_app.pr_matches.upsert_by_json_fields.assert_called_once()
 
     def test_corrupted_data_cleanup_startup(self):
         """Test the startup cleanup of all corrupted records."""
@@ -441,14 +438,13 @@ class TestPRIdTitleMismatch(unittest.TestCase):
         ]
 
         self.mock_app.pr_matches.all.return_value = corrupted_records
-        self.mock_app.pr_matches.remove = Mock()
 
         # Run startup cleanup
         cleaned_count = PullRequestItem.cleanup_all_corrupted_records(self.mock_app)
 
         # Should clean up only the corrupted record
         self.assertEqual(cleaned_count, 1)
-        self.mock_app.pr_matches.remove.assert_called_once()
+        self.mock_app.pr_matches.remove_by_json_fields.assert_called_once()
 
     def test_asana_title_property_immutability(self):
         """Test that asana_title property always reflects current object state."""

@@ -383,7 +383,7 @@ class TestDatabaseMigration(unittest.TestCase):
         db = Database(self.db_path)
 
         # Verify the migration was applied (schema version should be 2)
-        self.assertEqual(db.get_current_schema_version(), 2)
+        self.assertEqual(db.get_current_schema_version(), 3)
 
         # Verify the old data is still there
         projects = db.get_projects()
@@ -415,7 +415,7 @@ class TestDatabaseMigration(unittest.TestCase):
 
         # New database should be at current version
         current_version = db.get_current_schema_version()
-        self.assertEqual(current_version, 2)  # CURRENT_SCHEMA_VERSION
+        self.assertEqual(current_version, 3)  # CURRENT_SCHEMA_VERSION
 
         # Verify schema_version table has the initial record
         with db.get_connection() as conn:
@@ -423,7 +423,7 @@ class TestDatabaseMigration(unittest.TestCase):
             records = cursor.fetchall()
 
             self.assertEqual(len(records), 1)
-            self.assertEqual(records[0][0], 2)  # version
+            self.assertEqual(records[0][0], 3)  # version
             self.assertEqual(records[0][1], "Initial schema creation")  # description
 
         db.close()
@@ -460,18 +460,20 @@ class TestDatabaseMigration(unittest.TestCase):
         db.close()
         db = Database(self.db_path)
 
-        # Should now be at version 2
+        # Should now be at current version
         current_version = db.get_current_schema_version()
-        self.assertEqual(current_version, 2)
+        self.assertEqual(current_version, 3)
 
-        # Verify migration was recorded
+        # Verify migrations were recorded (v2 composite constraint + v3 index fix)
         with db.get_connection() as conn:
             cursor = conn.execute("SELECT version, description FROM schema_version ORDER BY id")
             records = cursor.fetchall()
 
-            self.assertEqual(len(records), 1)
+            self.assertEqual(len(records), 2)
             self.assertEqual(records[0][0], 2)  # version
-            self.assertEqual(records[0][1], "Add composite unique constraint for projects table")  # description
+            self.assertEqual(records[0][1], "Add composite unique constraint for projects table")
+            self.assertEqual(records[1][0], 3)  # version
+            self.assertEqual(records[1][1], "Fix pr_matches index and add asana_gid, reviewer_gid indexes")
 
         # Verify data was preserved
         projects = db.get_projects()
@@ -688,7 +690,153 @@ class TestDatabaseWrapper(unittest.TestCase):
 
         db = Database(self.db_path)
         self.assertIsInstance(db.table("matches"), DatabaseTable)
-        self.assertEqual(CURRENT_SCHEMA_VERSION, 2)
+        self.assertEqual(CURRENT_SCHEMA_VERSION, 3)
+        db.close()
+
+    def test_search_by_json_fields_single_condition(self):
+        """Test search_by_json_fields with a single equality condition."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        table.insert({"ado_id": 10, "title": "Task A"})
+        table.insert({"ado_id": 20, "title": "Task B"})
+        table.insert({"ado_id": 30, "title": "Task C"})
+
+        results = table.search_by_json_fields({"ado_id": 20})
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["ado_id"], 20)
+        self.assertEqual(results[0]["title"], "Task B")
+        self.assertIn("doc_id", results[0])
+
+        db.close()
+
+    def test_search_by_json_fields_multiple_conditions(self):
+        """Test search_by_json_fields with multiple AND conditions."""
+        db = Database(self.db_path)
+        table = db.table("pr_matches")
+
+        table.insert({"ado_pr_id": 1, "reviewer_gid": "user-a", "title": "PR 1 - User A"})
+        table.insert({"ado_pr_id": 1, "reviewer_gid": "user-b", "title": "PR 1 - User B"})
+        table.insert({"ado_pr_id": 2, "reviewer_gid": "user-a", "title": "PR 2 - User A"})
+
+        results = table.search_by_json_fields({"ado_pr_id": 1, "reviewer_gid": "user-a"})
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "PR 1 - User A")
+
+        db.close()
+
+    def test_search_by_json_fields_exclude_conditions(self):
+        """Test search_by_json_fields with exclude conditions (NULL-safe inequality)."""
+        db = Database(self.db_path)
+        table = db.table("pr_matches")
+
+        table.insert({"ado_pr_id": 1, "processing_state": "open"})
+        table.insert({"ado_pr_id": 2, "processing_state": "closed"})
+        table.insert({"ado_pr_id": 3})  # No processing_state key
+
+        results = table.search_by_json_fields({}, {"processing_state": "closed"})
+
+        result_ids = {r["ado_pr_id"] for r in results}
+        self.assertIn(1, result_ids)
+        self.assertIn(3, result_ids)  # NULL is treated as not-excluded
+        self.assertNotIn(2, result_ids)
+
+        db.close()
+
+    def test_search_by_json_fields_no_results(self):
+        """Test search_by_json_fields returns empty list when no matches."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        table.insert({"ado_id": 1, "title": "Task A"})
+
+        results = table.search_by_json_fields({"ado_id": 999})
+
+        self.assertEqual(results, [])
+
+        db.close()
+
+    def test_update_by_json_fields(self):
+        """Test update_by_json_fields updates matching records."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        table.insert({"ado_id": 10, "title": "Old Title"})
+        table.insert({"ado_id": 20, "title": "Other Title"})
+
+        updated_ids = table.update_by_json_fields({"ado_id": 10, "title": "New Title"}, {"ado_id": 10})
+
+        self.assertEqual(len(updated_ids), 1)
+
+        results = table.search_by_json_fields({"ado_id": 10})
+        self.assertEqual(results[0]["title"], "New Title")
+
+        other = table.search_by_json_fields({"ado_id": 20})
+        self.assertEqual(other[0]["title"], "Other Title")
+
+        db.close()
+
+    def test_remove_by_json_fields(self):
+        """Test remove_by_json_fields removes matching records."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        table.insert({"ado_id": 10, "title": "Delete Me"})
+        table.insert({"ado_id": 20, "title": "Keep Me"})
+
+        removed_ids = table.remove_by_json_fields({"ado_id": 10})
+
+        self.assertEqual(len(removed_ids), 1)
+        self.assertEqual(len(table.all()), 1)
+        self.assertEqual(table.all()[0]["ado_id"], 20)
+
+        db.close()
+
+    def test_upsert_by_json_fields_insert(self):
+        """Test upsert_by_json_fields inserts when no match exists."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        row_id = table.upsert_by_json_fields({"ado_id": 10, "title": "New Task"}, {"ado_id": 10})
+
+        self.assertIsNotNone(row_id)
+        results = table.all()
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["ado_id"], 10)
+
+        db.close()
+
+    def test_upsert_by_json_fields_update(self):
+        """Test upsert_by_json_fields updates when a match exists."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        original_id = table.insert({"ado_id": 10, "title": "Original"})
+        returned_id = table.upsert_by_json_fields({"ado_id": 10, "title": "Updated"}, {"ado_id": 10})
+
+        self.assertEqual(returned_id, original_id)
+        results = table.all()
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "Updated")
+
+        db.close()
+
+    def test_migration_v3_fixes_pr_matches_index(self):
+        """Test that migration v3 drops the incorrect pr_id index and creates correct indexes."""
+        db = Database(self.db_path)
+
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+            index_names = {row[0] for row in cursor.fetchall()}
+
+            self.assertNotIn("idx_pr_matches_data", index_names)
+            self.assertIn("idx_pr_matches_ado_pr_id", index_names)
+            self.assertIn("idx_pr_matches_reviewer_gid", index_names)
+            self.assertIn("idx_matches_ado_id", index_names)
+            self.assertIn("idx_matches_asana_gid", index_names)
+
         db.close()
 
 
