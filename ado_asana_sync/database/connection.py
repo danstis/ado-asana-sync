@@ -179,6 +179,11 @@ class DatabaseTable:
         where_clause, params = self._build_json_where_clause(conditions)
 
         with self.db.get_connection() as conn:
+            # BEGIN IMMEDIATE acquires a reserved lock before the SELECT so that
+            # no other connection can insert between our SELECT and INSERT,
+            # preventing a TOCTOU duplicate-row race in WAL mode.
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
                 f"SELECT id FROM {self.table_name} WHERE {where_clause} LIMIT 1",  # nosec B608 - table_name is controlled, clause is parameterized
                 params,

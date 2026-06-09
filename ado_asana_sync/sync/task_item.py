@@ -152,6 +152,10 @@ class TaskItem:
         if not app.matches:
             return None
 
+        # ado_id takes priority; asana_gid is only used as a fallback when ado_id
+        # finds nothing.  If ado_id returns a match there is no need to also
+        # search by asana_gid — both identifiers point to the same record once
+        # the initial sync has run.
         items = app.matches.search_by_json_fields({"ado_id": ado_id}) if ado_id is not None else []
         if not items and asana_gid is not None:
             items = app.matches.search_by_json_fields({"asana_gid": asana_gid})

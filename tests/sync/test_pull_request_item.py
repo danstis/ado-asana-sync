@@ -239,24 +239,36 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(result.title, "Documentation update")
 
     def test_save_new_item(self):
-        """Test saving a new PullRequestItem uses upsert."""
+        """Test saving a new PullRequestItem passes correct data and conditions to upsert."""
+        self.mock_app.pr_matches.search_by_json_fields.return_value = []
+
         self.pr_item.save(self.mock_app)
 
         self.mock_app.pr_matches.upsert_by_json_fields.assert_called_once()
-        call_data = self.mock_app.pr_matches.upsert_by_json_fields.call_args[0][0]
+        call_data, call_conditions = self.mock_app.pr_matches.upsert_by_json_fields.call_args[0]
         self.assertEqual(call_data["ado_pr_id"], 123)
         self.assertEqual(call_data["reviewer_gid"], "asana-user-789")
         self.assertEqual(call_data["reviewer_name"], "Dan Anstis")
+        self.assertEqual(call_conditions, {"ado_pr_id": 123, "reviewer_gid": "asana-user-789"})
 
     def test_save_existing_item(self):
-        """Test saving an existing PullRequestItem uses upsert."""
+        """Test that save runs cleanup against existing DB records before upserting."""
+        existing_record = {
+            "ado_pr_id": 123,
+            "reviewer_gid": "asana-user-789",
+            "reviewer_name": "Dan Anstis",
+        }
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [existing_record]
+
         self.pr_item.save(self.mock_app)
 
+        # Cleanup searched for all records with this PR ID
+        self.mock_app.pr_matches.search_by_json_fields.assert_called_with({"ado_pr_id": 123})
+        # Upsert still runs to persist the latest data
         self.mock_app.pr_matches.upsert_by_json_fields.assert_called_once()
         call_data = self.mock_app.pr_matches.upsert_by_json_fields.call_args[0][0]
         self.assertEqual(call_data["ado_pr_id"], 123)
         self.assertEqual(call_data["reviewer_gid"], "asana-user-789")
-        self.assertEqual(call_data["reviewer_name"], "Dan Anstis")
 
     @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_true(self, mock_get_asana_task):
