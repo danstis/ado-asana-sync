@@ -5,7 +5,7 @@ import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .migrations import DatabaseMigrationsMixin
 from .tinydb_migration import TinyDBMigrationMixin
@@ -90,6 +90,119 @@ class DatabaseTable:
     def contains(self, query_func) -> bool:
         """Check if any record matches the query function."""
         return len(self.search(query_func)) > 0
+
+    def _build_json_where_clause(
+        self,
+        conditions: Dict[str, Any],
+        exclude_conditions: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, List[Any]]:
+        """Build a parameterized WHERE clause for JSON field filtering."""
+        where_parts: List[str] = []
+        params: List[Any] = []
+
+        for field, value in conditions.items():
+            where_parts.append("json_extract(data, ?) = ?")
+            params.extend([f"$.{field}", value])
+
+        for field, value in (exclude_conditions or {}).items():
+            # NULL-safe: include rows where the field is absent or differs from the excluded value
+            where_parts.append("(json_extract(data, ?) IS NULL OR json_extract(data, ?) != ?)")
+            params.extend([f"$.{field}", f"$.{field}", value])
+
+        where_clause = " AND ".join(where_parts) if where_parts else "1=1"
+        return where_clause, params
+
+    def search_by_json_fields(
+        self,
+        conditions: Dict[str, Any],
+        exclude_conditions: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search records using SQL JSON field filtering, leveraging database indexes."""
+        where_clause, params = self._build_json_where_clause(conditions, exclude_conditions)
+
+        with self.db.get_connection() as conn:
+            cursor = conn.execute(
+                f"SELECT id, data FROM {self.table_name} WHERE {where_clause}",  # nosec B608 - table_name is controlled, clause is parameterized
+                params,
+            )
+            results = []
+            for row_id, json_data in cursor:
+                record = json.loads(json_data)
+                record["doc_id"] = row_id
+                results.append(record)
+            return results
+
+    def update_by_json_fields(self, data: Dict[str, Any], conditions: Dict[str, Any]) -> List[int]:
+        """Update records matching SQL JSON field conditions."""
+        where_clause, params = self._build_json_where_clause(conditions)
+
+        with self.db.get_connection() as conn:
+            id_cursor = conn.execute(
+                f"SELECT id FROM {self.table_name} WHERE {where_clause}",  # nosec B608 - table_name is controlled, clause is parameterized
+                params,
+            )
+            matching_ids = [row[0] for row in id_cursor]
+
+            if matching_ids:
+                json_data = json.dumps(data, default=str)
+                placeholders = ",".join(["?" for _ in matching_ids])
+                conn.execute(
+                    f"UPDATE {self.table_name} SET data = ?, updated_at = CURRENT_TIMESTAMP "  # nosec B608
+                    f"WHERE id IN ({placeholders})",
+                    [json_data] + matching_ids,
+                )
+
+            return matching_ids
+
+    def remove_by_json_fields(self, conditions: Dict[str, Any]) -> List[int]:
+        """Remove records matching SQL JSON field conditions."""
+        where_clause, params = self._build_json_where_clause(conditions)
+
+        with self.db.get_connection() as conn:
+            id_cursor = conn.execute(
+                f"SELECT id FROM {self.table_name} WHERE {where_clause}",  # nosec B608 - table_name is controlled, clause is parameterized
+                params,
+            )
+            matching_ids = [row[0] for row in id_cursor]
+
+            if matching_ids:
+                placeholders = ",".join(["?" for _ in matching_ids])
+                conn.execute(
+                    f"DELETE FROM {self.table_name} WHERE id IN ({placeholders})",  # nosec B608
+                    matching_ids,
+                )
+
+            return matching_ids
+
+    def upsert_by_json_fields(self, data: Dict[str, Any], conditions: Dict[str, Any]) -> int:
+        """Insert or update a record based on SQL JSON field conditions."""
+        where_clause, params = self._build_json_where_clause(conditions)
+
+        with self.db.get_connection() as conn:
+            # BEGIN IMMEDIATE acquires a reserved lock before the SELECT so that
+            # no other connection can insert between our SELECT and INSERT,
+            # preventing a TOCTOU duplicate-row race in WAL mode.
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
+            cursor = conn.execute(
+                f"SELECT id FROM {self.table_name} WHERE {where_clause} LIMIT 1",  # nosec B608 - table_name is controlled, clause is parameterized
+                params,
+            )
+            row = cursor.fetchone()
+
+            json_data = json.dumps(data, default=str)
+            if row:
+                conn.execute(
+                    f"UPDATE {self.table_name} SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",  # nosec B608
+                    (json_data, row[0]),
+                )
+                return row[0]
+
+            new_cursor = conn.execute(
+                f"INSERT INTO {self.table_name} (data) VALUES (?)",  # nosec B608
+                (json_data,),
+            )
+            return new_cursor.lastrowid
 
     def get(self, doc_id: Optional[int] = None, **kwargs) -> Optional[Dict[str, Any]]:
         """Get a record by doc_id or other criteria."""
@@ -227,13 +340,23 @@ class Database(DatabaseMigrationsMixin, TinyDBMigrationMixin):
             """)
 
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_matches_data
+                CREATE INDEX IF NOT EXISTS idx_matches_ado_id
                 ON matches(json_extract(data, '$.ado_id'))
             """)
 
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_pr_matches_data
-                ON pr_matches(json_extract(data, '$.pr_id'))
+                CREATE INDEX IF NOT EXISTS idx_matches_asana_gid
+                ON matches(json_extract(data, '$.asana_gid'))
+            """)
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pr_matches_ado_pr_id
+                ON pr_matches(json_extract(data, '$.ado_pr_id'))
+            """)
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pr_matches_reviewer_gid
+                ON pr_matches(json_extract(data, '$.reviewer_gid'))
             """)
 
     @contextmanager

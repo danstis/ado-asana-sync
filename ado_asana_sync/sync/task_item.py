@@ -125,16 +125,12 @@ class TaskItem:
             TaskItem: The TaskItem object with the matching ADO ID.
             None: If there is no matching item.
         """
-
-        def query_func(record):
-            return record.get("ado_id") == ado_id
-
-        if app.matches and app.matches.contains(query_func):
-            items = app.matches.search(query_func)
-            if items:
-                # Remove doc_id before creating TaskItem
-                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
-                return cls(**item_data)
+        if not app.matches:
+            return None
+        items = app.matches.search_by_json_fields({"ado_id": ado_id})
+        if items:
+            item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
+            return cls(**item_data)
         return None
 
     @classmethod
@@ -153,17 +149,20 @@ class TaskItem:
         if ado_id is None and asana_gid is None:
             return None
 
-        # Generate the query function based on the input.
-        def query_func(record):
-            return (record.get("ado_id") == ado_id) or (record.get("asana_gid") == asana_gid)
+        if not app.matches:
+            return None
 
-        # return the first matching item, or return None if not found.
-        if app.matches and app.matches.contains(query_func):
-            items = app.matches.search(query_func)
-            if items:
-                # Remove doc_id before creating TaskItem
-                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
-                return cls(**item_data)
+        # ado_id takes priority; asana_gid is only used as a fallback when ado_id
+        # finds nothing.  If ado_id returns a match there is no need to also
+        # search by asana_gid — both identifiers point to the same record once
+        # the initial sync has run.
+        items = app.matches.search_by_json_fields({"ado_id": ado_id}) if ado_id is not None else []
+        if not items and asana_gid is not None:
+            items = app.matches.search_by_json_fields({"asana_gid": asana_gid})
+
+        if items:
+            item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
+            return cls(**item_data)
         return None
 
     def save(self, app: App) -> None:
@@ -191,18 +190,12 @@ class TaskItem:
             "due_date": self.due_date,
         }
 
-        def query_func(record):
-            return record.get("ado_id") == task_data["ado_id"]
-
         if app.matches is None:
             raise ValueError("app.matches is None")
 
         # SQLite database handles its own locking, but we maintain db_lock for compatibility
         with app.db_lock:
-            if app.matches.contains(query_func):
-                app.matches.update(task_data, query_func)
-            else:
-                app.matches.insert(task_data)
+            app.matches.upsert_by_json_fields(task_data, {"ado_id": self.ado_id})
 
     def is_current(self, app: App) -> bool:
         """

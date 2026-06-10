@@ -180,21 +180,29 @@ class PullRequestItem:
         if ado_pr_id is None and reviewer_gid is None and asana_gid is None:
             return None
 
-        query_func = cls._create_search_query(ado_pr_id, reviewer_gid, asana_gid)
+        if not app.pr_matches:
+            return None
 
-        if app.pr_matches and app.pr_matches.contains(query_func):
-            items = app.pr_matches.search(query_func)
-            if items:
-                # Remove doc_id before creating PullRequestItem
-                item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
-                pr_item = cls(**item_data)
+        if ado_pr_id is not None and reviewer_gid is not None:
+            conditions = {"ado_pr_id": ado_pr_id, "reviewer_gid": reviewer_gid}
+        elif ado_pr_id is not None:
+            conditions = {"ado_pr_id": ado_pr_id}
+        elif reviewer_gid is not None:
+            conditions = {"reviewer_gid": reviewer_gid}
+        else:
+            conditions = {"asana_gid": asana_gid}
 
-                # Validate search result for corruption
-                if not cls._validate_search_result(pr_item, ado_pr_id, item_data):
-                    return None  # Don't return corrupted data
+        items = app.pr_matches.search_by_json_fields(conditions)
+        if not items:
+            return None
 
-                return pr_item
-        return None
+        item_data = {k: v for k, v in items[0].items() if k != "doc_id"}
+        pr_item = cls(**item_data)
+
+        if not cls._validate_search_result(pr_item, ado_pr_id, item_data):
+            return None
+
+        return pr_item
 
     def save(self, app: App) -> None:
         """
@@ -234,36 +242,21 @@ class PullRequestItem:
             "assignee_gid": self.assignee_gid,
         }
 
-        # Query for unique combination of PR ID and reviewer
-        def unique_query_func(record):
-            return record.get("ado_pr_id") == pr_data["ado_pr_id"] and record.get("reviewer_gid") == pr_data["reviewer_gid"]
-
         if app.pr_matches is None:
             raise ValueError("app.pr_matches is None")
         if app.db_lock is None:
             raise ValueError("app.db_lock is None")
 
-        # Use a larger critical section to ensure atomicity
         with app.db_lock:
-            # Clean up any corrupted records for this PR/reviewer combination first
             self._cleanup_corrupted_records(app, pr_data)
-
-            # Now save the current record
-            if app.pr_matches.contains(unique_query_func):
-                app.pr_matches.update(pr_data, unique_query_func)
-            else:
-                app.pr_matches.insert(pr_data)
+            app.pr_matches.upsert_by_json_fields(pr_data, {"ado_pr_id": self.ado_pr_id, "reviewer_gid": self.reviewer_gid})
 
     def _cleanup_corrupted_records(self, app: App, current_pr_data: dict) -> None:
         """Clean up corrupted records that don't match current data consistency."""
         if app.pr_matches is None:
             return
 
-        # Find all records for this PR ID
-        def pr_query_func(record):
-            return record.get("ado_pr_id") == current_pr_data["ado_pr_id"]
-
-        matching_records = app.pr_matches.search(pr_query_func)
+        matching_records = app.pr_matches.search_by_json_fields({"ado_pr_id": current_pr_data["ado_pr_id"]})
 
         # Handle case where matching_records might be None or empty, or a mock
         if not matching_records:
@@ -306,11 +299,9 @@ class PullRequestItem:
     def _remove_corrupted_record(self, app: App, record: dict) -> bool:
         """Remove a corrupted record from the database."""
         try:
-
-            def delete_query_func(r):
-                return r.get("ado_pr_id") == record.get("ado_pr_id") and r.get("reviewer_gid") == record.get("reviewer_gid")
-
-            app.pr_matches.remove(query_func=delete_query_func)  # type: ignore[arg-type,union-attr]
+            app.pr_matches.remove_by_json_fields(  # type: ignore[union-attr]
+                {"ado_pr_id": record.get("ado_pr_id"), "reviewer_gid": record.get("reviewer_gid")}
+            )
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger, _ = setup_logging_and_tracing(__name__)
@@ -365,11 +356,9 @@ class PullRequestItem:
     def _remove_corrupted_record_static(cls, app: App, record: dict) -> bool:
         """Remove a corrupted record from the database (static version)."""
         try:
-
-            def delete_query_func(r):
-                return r.get("ado_pr_id") == record.get("ado_pr_id") and r.get("reviewer_gid") == record.get("reviewer_gid")
-
-            app.pr_matches.remove(query_func=delete_query_func)  # type: ignore[arg-type,union-attr]
+            app.pr_matches.remove_by_json_fields(  # type: ignore[union-attr]
+                {"ado_pr_id": record.get("ado_pr_id"), "reviewer_gid": record.get("reviewer_gid")}
+            )
             return True
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger, _ = setup_logging_and_tracing(__name__)

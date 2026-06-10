@@ -300,8 +300,7 @@ class TestSyncItemAndChildrenLogging(unittest.TestCase):
     def test_log_when_user_not_matched(self):
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = False
-        app.matches.search.return_value = []
+        app.matches.search_by_json_fields.return_value = []
 
         ado_task = WorkItem()
         ado_task.id = 1
@@ -1101,8 +1100,7 @@ class TestSyncItemAndChildrenRecursion(unittest.TestCase):
         # Setup mocks
         app = MagicMock()
         app.matches = MagicMock()
-        app.matches.contains.return_value = False  # No existing match
-        app.matches.search.return_value = []  # No existing match
+        app.matches.search_by_json_fields.return_value = []  # No existing match
 
         # Parent Item
         parent_task = WorkItem()

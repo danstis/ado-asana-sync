@@ -127,9 +127,7 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_by_pr_id_and_reviewer(self):
         """Test searching by PR ID and reviewer GID."""
-        # Setup mocks
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = [
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [
             {
                 "ado_pr_id": 123,
                 "ado_repository_id": "repo-456",
@@ -154,7 +152,7 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_not_found(self):
         """Test searching when no match is found."""
-        self.mock_app.pr_matches.contains.return_value = False
+        self.mock_app.pr_matches.search_by_json_fields.return_value = []
 
         result = PullRequestItem.search(self.mock_app, ado_pr_id=999)
 
@@ -167,8 +165,7 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_by_pr_id_only(self):
         """Test searching by PR ID only."""
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = [
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [
             {
                 "ado_pr_id": 456,
                 "ado_repository_id": "repo-789",
@@ -193,8 +190,7 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_by_reviewer_gid_only(self):
         """Test searching by reviewer GID only."""
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = [
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [
             {
                 "ado_pr_id": 789,
                 "ado_repository_id": "repo-123",
@@ -219,8 +215,7 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_by_asana_gid_only(self):
         """Test searching by Asana GID only."""
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = [
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [
             {
                 "ado_pr_id": 999,
                 "ado_repository_id": "repo-555",
@@ -244,32 +239,36 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(result.title, "Documentation update")
 
     def test_save_new_item(self):
-        """Test saving a new PullRequestItem."""
-        # Setup mocks
-        self.mock_app.pr_matches.contains.return_value = False
+        """Test saving a new PullRequestItem passes correct data and conditions to upsert."""
+        self.mock_app.pr_matches.search_by_json_fields.return_value = []
 
         self.pr_item.save(self.mock_app)
 
-        # Verify insert was called
-        self.mock_app.pr_matches.insert.assert_called_once()
-        call_args = self.mock_app.pr_matches.insert.call_args[0][0]
-        self.assertEqual(call_args["ado_pr_id"], 123)
-        self.assertEqual(call_args["reviewer_gid"], "asana-user-789")
-        self.assertEqual(call_args["reviewer_name"], "Dan Anstis")
+        self.mock_app.pr_matches.upsert_by_json_fields.assert_called_once()
+        call_data, call_conditions = self.mock_app.pr_matches.upsert_by_json_fields.call_args[0]
+        self.assertEqual(call_data["ado_pr_id"], 123)
+        self.assertEqual(call_data["reviewer_gid"], "asana-user-789")
+        self.assertEqual(call_data["reviewer_name"], "Dan Anstis")
+        self.assertEqual(call_conditions, {"ado_pr_id": 123, "reviewer_gid": "asana-user-789"})
 
     def test_save_existing_item(self):
-        """Test saving an existing PullRequestItem."""
-        # Setup mocks
-        self.mock_app.pr_matches.contains.return_value = True
+        """Test that save runs cleanup against existing DB records before upserting."""
+        existing_record = {
+            "ado_pr_id": 123,
+            "reviewer_gid": "asana-user-789",
+            "reviewer_name": "Dan Anstis",
+        }
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [existing_record]
 
         self.pr_item.save(self.mock_app)
 
-        # Verify update was called
-        self.mock_app.pr_matches.update.assert_called_once()
-        call_args = self.mock_app.pr_matches.update.call_args[0][0]
-        self.assertEqual(call_args["ado_pr_id"], 123)
-        self.assertEqual(call_args["reviewer_gid"], "asana-user-789")
-        self.assertEqual(call_args["reviewer_name"], "Dan Anstis")
+        # Cleanup searched for all records with this PR ID
+        self.mock_app.pr_matches.search_by_json_fields.assert_called_with({"ado_pr_id": 123})
+        # Upsert still runs to persist the latest data
+        self.mock_app.pr_matches.upsert_by_json_fields.assert_called_once()
+        call_data = self.mock_app.pr_matches.upsert_by_json_fields.call_args[0][0]
+        self.assertEqual(call_data["ado_pr_id"], 123)
+        self.assertEqual(call_data["reviewer_gid"], "asana-user-789")
 
     @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
     def test_is_current_true(self, mock_get_asana_task):
@@ -353,10 +352,6 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_filters_doc_id_from_database_results(self):
         """Regression test: Ensure doc_id is filtered out when creating PullRequestItem from database results."""
-        # Setup mocks
-        self.mock_app.pr_matches.contains.return_value = True
-
-        # Mock database result that includes doc_id (this would cause constructor error if not filtered)
         mock_db_result = {
             "ado_pr_id": 789,
             "ado_repository_id": "repo-789",
@@ -372,23 +367,17 @@ class TestPullRequestItem(unittest.TestCase):
             "review_status": "waiting_for_author",
             "doc_id": 888,  # This should be filtered out
         }
-        self.mock_app.pr_matches.search.return_value = [mock_db_result]
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [mock_db_result]
 
-        # This should not raise an error about unexpected doc_id argument
         result = PullRequestItem.search(self.mock_app, ado_pr_id=789)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.ado_pr_id, 789)
         self.assertEqual(result.title, "Test PR")
-        # Verify doc_id is not present in the created object
         self.assertFalse(hasattr(result, "doc_id"))
 
     def test_search_with_multiple_criteria_filters_doc_id(self):
         """Regression test: Ensure doc_id filtering works with multiple search criteria."""
-        # Setup mocks
-        self.mock_app.pr_matches.contains.return_value = True
-
-        # Mock database result with doc_id
         mock_db_result = {
             "ado_pr_id": 999,
             "ado_repository_id": "repo-999",
@@ -400,15 +389,13 @@ class TestPullRequestItem(unittest.TestCase):
             "asana_gid": "asana-999",
             "doc_id": 111,  # This should be filtered out
         }
-        self.mock_app.pr_matches.search.return_value = [mock_db_result]
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [mock_db_result]
 
-        # Test search with both PR ID and reviewer GID
         result = PullRequestItem.search(self.mock_app, ado_pr_id=999, reviewer_gid="reviewer-456")
 
         self.assertIsNotNone(result)
         self.assertEqual(result.ado_pr_id, 999)
         self.assertEqual(result.reviewer_gid, "reviewer-456")
-        # Verify doc_id is not present in the created object
         self.assertFalse(hasattr(result, "doc_id"))
 
     def test_save_with_none_app_pr_matches_raises_error(self):
@@ -434,9 +421,8 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertIn("app.db_lock is None", str(context.exception))
 
     def test_search_returns_none_when_no_items_found(self):
-        """Test search returns None when pr_matches.search returns empty list."""
-        self.mock_app.pr_matches.contains.return_value = True
-        self.mock_app.pr_matches.search.return_value = []
+        """Test search returns None when search_by_json_fields returns empty list."""
+        self.mock_app.pr_matches.search_by_json_fields.return_value = []
 
         result = PullRequestItem.search(self.mock_app, ado_pr_id=123)
 
@@ -553,10 +539,6 @@ class TestPullRequestItem(unittest.TestCase):
 
     def test_search_query_logic_comprehensive(self):
         """Test the search query logic comprehensively."""
-        # Setup mocks with different scenarios
-        self.mock_app.pr_matches.contains.return_value = True
-
-        # Test case: Search with PR ID and reviewer GID (both match)
         mock_db_result = {
             "ado_pr_id": 123,
             "ado_repository_id": "repo-456",
@@ -567,9 +549,8 @@ class TestPullRequestItem(unittest.TestCase):
             "reviewer_name": "Test Reviewer",
             "asana_gid": "asana-123",
         }
-        self.mock_app.pr_matches.search.return_value = [mock_db_result]
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [mock_db_result]
 
-        # This should find the item because both PR ID and reviewer GID match
         result = PullRequestItem.search(self.mock_app, ado_pr_id=123, reviewer_gid="reviewer-789")
         self.assertIsNotNone(result)
         self.assertEqual(result.ado_pr_id, 123)
