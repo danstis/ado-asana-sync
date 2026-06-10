@@ -839,6 +839,48 @@ class TestDatabaseWrapper(unittest.TestCase):
 
         db.close()
 
+    def test_search_by_json_fields_uses_index(self):
+        """Verify that EXPLAIN QUERY PLAN shows index usage, not a full table scan."""
+        db = Database(self.db_path)
+        table = db.table("matches")
+
+        for i in range(5):
+            table.insert({"ado_id": i, "title": f"Task {i}"})
+
+        with db.get_connection() as conn:
+            rows = conn.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM matches WHERE json_extract(data, '$.ado_id') = ?",
+                (3,),
+            ).fetchall()
+
+        # EXPLAIN QUERY PLAN columns: (id, parent, notused, detail)
+        plan_text = " ".join(row[3] for row in rows).upper()
+        self.assertIn("SEARCH", plan_text, "Expected SEARCH (index scan), not SCAN (full table scan)")
+        self.assertNotIn("SCAN MATCHES", plan_text, "Full table scan detected — index not being used")
+
+        db.close()
+
+    def test_pr_matches_search_by_ado_pr_id_uses_index(self):
+        """Verify that EXPLAIN QUERY PLAN shows index usage on pr_matches for ado_pr_id."""
+        db = Database(self.db_path)
+        table = db.table("pr_matches")
+
+        for i in range(5):
+            table.insert({"ado_pr_id": i, "reviewer_gid": f"gid-{i}"})
+
+        with db.get_connection() as conn:
+            rows = conn.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM pr_matches WHERE json_extract(data, '$.ado_pr_id') = ?",
+                (2,),
+            ).fetchall()
+
+        # EXPLAIN QUERY PLAN columns: (id, parent, notused, detail)
+        plan_text = " ".join(row[3] for row in rows).upper()
+        self.assertIn("SEARCH", plan_text, "Expected SEARCH (index scan), not SCAN (full table scan)")
+        self.assertNotIn("SCAN PR_MATCHES", plan_text, "Full table scan detected — index not being used")
+
+        db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
