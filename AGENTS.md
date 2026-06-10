@@ -29,7 +29,7 @@ Follow these steps to set up your development environment:
 - `ado_asana_sync/sync/task_factory.py`: Logic for building Asana task request bodies and saving newly created tasks.
 - `ado_asana_sync/sync/pull_request_item.py`: Defines the `PullRequestItem` data structure for PR-reviewer relationships.
 - `ado_asana_sync/sync/pr_sync_core.py`: PR sync orchestration (`sync_pull_requests`, `process_repository_pull_requests`, `process_closed_pull_requests`).
-- `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers (`process_pull_request`, `handle_removed_reviewers`, `process_pr_reviewer`).
+- `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers, including group-reviewer detection and fallback handling (`process_pull_request`, `process_pr_reviewer`, `handle_removed_reviewers`, `create_new_pr_reviewer_task`, `update_existing_pr_reviewer_task`, `is_group_reviewer`, `_handle_group_reviewer`).
 - `ado_asana_sync/sync/pr_asana_helpers.py`: Asana helpers specific to PRs (`create_asana_pr_task`, `update_asana_pr_task`, `add_tag_to_pr_task`, `add_closure_comment_to_pr_task`).
 - `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
 - `ado_asana_sync/sync/utils.py`: Shared utility functions (reviewer vote extraction, date conversion, URL encoding).
@@ -68,6 +68,11 @@ The E2E test suite lives in `tests/e2e/` and validates the complete sync workflo
 uv run pytest tests/e2e/ -v
 ```
 
+The suite is currently split across:
+
+- `tests/e2e/test_e2e_work_items.py`: work item sync scenarios
+- `tests/e2e/test_e2e_pull_requests.py`: pull request reviewer sync scenarios
+
 **Key principles for E2E tests:**
 
 - Use real `App` instances with real SQLite databases in temporary directories.
@@ -78,10 +83,20 @@ uv run pytest tests/e2e/ -v
 
 **Adding a new E2E scenario:**
 
-1. Add a test method to `TestE2ESyncWorkItems` (for work items) or `TestE2ESyncPullRequests` (for PRs) in `tests/e2e/test_e2e_sync.py`.
+1. Add a test method to `TestE2ESyncWorkItems` in `tests/e2e/test_e2e_work_items.py` (for work items) or `TestE2ESyncPullRequests` in `tests/e2e/test_e2e_pull_requests.py` (for PRs).
 1. Pre-seed DB if testing an update/close/reopen scenario using `app.matches.insert(...)`.
 1. Set up ADO mock responses via `mock_wit.get_work_item.return_value = ...`.
 1. Assert on `tasks_api.create_task` / `tasks_api.update_task` call arguments and on `app.matches.all()` / `app.pr_matches.all()` database state.
+
+### Group Reviewer Fallback Strategies
+
+ADO pull requests can include group/container reviewers such as `[Project]\\Contributors`. The sync behavior is controlled by `GROUP_REVIEWER_STRATEGY`:
+
+- `ignore`: skip group reviewers entirely. This is the default.
+- `default_user`: create or update the reviewer task and assign it to `GROUP_REVIEWER_DEFAULT_USER`. The fallback user can be resolved by Asana email, GID, or display name.
+- `unassigned_task`: create or update the reviewer task without an assignee, preserving the group name in the task title.
+
+If `GROUP_REVIEWER_STRATEGY=default_user` but `GROUP_REVIEWER_DEFAULT_USER` is unset or cannot be resolved, the group reviewer is skipped.
 
 ## CI/CD
 

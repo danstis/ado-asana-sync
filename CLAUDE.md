@@ -26,7 +26,7 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
   - `ado_asana_sync/sync/task_factory.py`: Logic for building Asana task request bodies and saving newly created tasks.
   - `ado_asana_sync/sync/pull_request_item.py`: Pull request data structure.
   - `ado_asana_sync/sync/pr_sync_core.py`: PR sync orchestration (top-level sync functions).
-  - `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers.
+  - `ado_asana_sync/sync/pr_processor.py`: Logic for processing individual PRs and reviewers, including group-reviewer detection, fallback assignment strategies, and reviewer task create/update flows.
   - `ado_asana_sync/sync/pr_asana_helpers.py`: Asana API helpers specific to PRs.
   - `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
   - `ado_asana_sync/sync/utils.py`: Shared utility functions (reviewer vote extraction, date conversion, URL encoding).
@@ -231,6 +231,11 @@ This project uses **uv** for dependency management with `pyproject.toml` and `uv
 
 The `tests/e2e/` directory contains a comprehensive E2E test suite that validates the complete sync workflow using isolated temporary databases and mocked API endpoints. No real ADO or Asana credentials are required.
 
+The suite is currently split across:
+
+- `tests/e2e/test_e2e_work_items.py`: work item sync scenarios
+- `tests/e2e/test_e2e_pull_requests.py`: pull request reviewer sync scenarios
+
 ### Running E2E Tests
 
 ```bash
@@ -260,6 +265,16 @@ The E2E tests are included automatically in `uv run test` (the standard CI test 
 - **Mocked boundaries**: ADO clients (`app.ado_wit_client`, etc.) and Asana SDK classes (`asana.TasksApi`, etc.) are replaced with `MagicMock` via `unittest.mock.patch`.
 - **Pre-seeded DB**: Update/close/reopen scenarios insert a record into `app.matches` or `app.pr_matches` before running `sync_project` or `sync_pull_requests`.
 - **Assertions**: Verify Asana API call arguments (`tasks_api.create_task.call_args`) and real database state (`app.matches.all()`).
+
+## Group Reviewer Fallback Strategies
+
+ADO pull requests can include group or container reviewers such as `[Project]\\Contributors`. These do not map cleanly to a single user, so reviewer sync supports three fallback modes via `GROUP_REVIEWER_STRATEGY`:
+
+- `ignore`: skip group reviewers entirely. This is the default behavior.
+- `default_user`: create or update the reviewer task and assign it to `GROUP_REVIEWER_DEFAULT_USER`. Resolution accepts an Asana email, GID, or display name.
+- `unassigned_task`: create or update the reviewer task without an assignee, keeping the group name in the task title.
+
+If `default_user` is selected but `GROUP_REVIEWER_DEFAULT_USER` is empty or cannot be resolved, the group reviewer is skipped.
 
 ## Current Features
 

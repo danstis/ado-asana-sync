@@ -195,6 +195,80 @@ class TestPullRequestIntegration(unittest.TestCase):
                 app.close()
 ```
 
+### Integration Test - Pull Request Sync Workflow
+
+```python
+import tempfile
+from contextlib import ExitStack
+from unittest.mock import MagicMock, patch
+
+from tests.utils.test_helpers import AsanaApiMockHelper, RealObjectBuilder, TestDataBuilder
+
+
+@patch("ado_asana_sync.sync.app.os.path.dirname")
+@patch("ado_asana_sync.sync.app.Connection")
+@patch("ado_asana_sync.sync.app.asana.ApiClient")
+def test_sync_pull_requests_real_integration(mock_asana_client, mock_ado_conn, mock_dirname):
+    """
+    TRUE Integration Test: exercises the real PR sync workflow with a real App and DB.
+
+    What this tests:
+    - REAL App instance with REAL TinyDB tables
+    - REAL sync_pull_requests() orchestration across repositories, PRs, and reviewers
+    - REAL reviewer matching and PullRequestItem persistence
+    - Mocked ADO/Asana boundaries only
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        mock_dirname.return_value = temp_dir
+        mock_ado_conn.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
+
+        app = TestDataBuilder.create_real_app(temp_dir)
+        app.connect()
+        app.pr_sync_cache = {"custom_fields": {}, "asana_tasks": {}}
+
+        ado_project = MagicMock(id="proj-id", name="TestProject")
+        repo = RealObjectBuilder.create_real_ado_repository(repo_id="repo-abc", name="test-repo")
+        pr = RealObjectBuilder.create_real_ado_pull_request(pr_id=100, title="Add Feature X", status="active")
+        reviewer = RealObjectBuilder.create_real_ado_reviewer(
+            display_name="Test User", email="test@example.com", vote=0
+        )
+
+        mock_git = MagicMock()
+        mock_git.get_repositories.return_value = [repo]
+        mock_git.get_pull_requests.return_value = [pr]
+        mock_git.get_pull_request_reviewers.return_value = [reviewer]
+        app.ado_git_client = mock_git
+
+        asana_helper = AsanaApiMockHelper()
+        created_task = TestDataBuilder.create_asana_task_data(
+            gid="pr_task_gid_100", name="Pull Request 100: Add Feature X (Test User)"
+        )
+        tasks_api = asana_helper.create_tasks_api_mock(tasks=[], created_task=created_task)
+
+        try:
+            with ExitStack() as stack:
+                stack.enter_context(patch("ado_asana_sync.sync.pr_sync_core.asana.TasksApi", return_value=tasks_api))
+                stack.enter_context(
+                    patch(
+                        "ado_asana_sync.sync.pr_sync_core.asana.UsersApi",
+                        return_value=asana_helper.create_users_api_mock(),
+                    )
+                )
+                from ado_asana_sync.sync.pr_sync_core import sync_pull_requests
+
+                sync_pull_requests(app, ado_project, "workspace-123", "project-456")
+
+            tasks_api.create_task.assert_called_once()
+            pr_records = app.pr_matches.all()
+            assert pr_records[0]["ado_pr_id"] == 100
+            assert pr_records[0]["processing_state"] == "open"
+        finally:
+            app.close()
+```
+
+Use this pattern when you need to verify the full PR sync flow instead of only `process_pr_reviewer()` in isolation.
+
 ### Unit Test - Focused Individual Function
 
 ```python
