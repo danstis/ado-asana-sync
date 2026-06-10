@@ -760,6 +760,42 @@ class TestHandleGroupReviewerExpand(unittest.TestCase):
             mock_create.assert_not_called()
             mock_update.assert_called_once()
 
+    def test_legacy_untagged_task_gets_source_group_reviewer_id_backfilled(self):
+        """A pre-existing task with source_group_reviewer_id=None must be tagged on
+        the next successful expansion so the DB fallback can protect it in future runs.
+        """
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/Project-repo-123/_git/test-repo/pullrequest/{self.pr.pull_request_id}"
+        legacy_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-alice",
+            reviewer_name="Alice Smith",
+            asana_gid="existing-asana-gid",
+            source_group_reviewer_id=None,  # legacy task — no tag yet
+        )
+        legacy_task.save(app)
+
+        mock_asana_task = {"gid": "existing-asana-gid", "modified_at": "2026-01-01T00:00:00Z"}
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
+            ),
+            patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task"),
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
+
+        saved = PullRequestItem.search(app, ado_pr_id=self.pr.pull_request_id, reviewer_gid="gid-alice")
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved.source_group_reviewer_id, "group-guid-expand")
+
 
 # ---------------------------------------------------------------------------
 # 10. process_pull_request — expand_group_members adds member GIDs

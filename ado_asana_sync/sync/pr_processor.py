@@ -413,6 +413,12 @@ def _handle_expand_group_reviewer(
                 source_group_reviewer_id=reviewer_id,
             )
         else:
+            # Lazy backfill: tag tasks created before source_group_reviewer_id existed so
+            # the DB fallback can protect them on future cold-cache expansion failures.
+            if existing_match.source_group_reviewer_id is None and reviewer_id:
+                existing_match.source_group_reviewer_id = reviewer_id
+                if getattr(app, "dry_run", False) is not True:
+                    existing_match.save(app)
             # Use a vote-preserving proxy so the group's aggregate vote cannot overwrite
             # an individual reviewer's vote (e.g. when a user is both a direct reviewer
             # and a member of the expanded group).
