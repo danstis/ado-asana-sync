@@ -102,6 +102,10 @@ You can run the sync tool either locally using `uv` or via Docker.
    ```bash
    uv run python -m ado_asana_sync.sync
    ```
+   Alternatively, use the installed script entry point defined in `pyproject.toml`:
+   ```bash
+   uv run ado-asana-sync
+   ```
 1. **Run a single dry-run or one-shot sync with inline variables:**
    ```bash
    DRY_RUN=true RUN_ONCE=true uv run python -m ado_asana_sync.sync
