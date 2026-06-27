@@ -30,7 +30,21 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
   - `ado_asana_sync/sync/pr_asana_helpers.py`: Asana API helpers specific to PRs.
   - `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
   - `ado_asana_sync/sync/utils.py`: Shared utility functions (reviewer vote extraction, date conversion, URL encoding).
+  - `ado_asana_sync/database/connection.py`: SQLite `Database` and `DatabaseTable` classes; exposes `search_by_json_fields`, `update_by_json_fields`, `upsert_by_json_fields`, and `remove_by_json_fields` for index-backed hot-path queries.
+  - `ado_asana_sync/database/migrations.py`: `DatabaseMigrationsMixin` with schema versioning and migration helpers; currently at schema version 3 with indexes on `ado_id`, `asana_gid`, `ado_pr_id`, and `reviewer_gid`.
   - `data/projects.json.example`: Example project configuration.
+
+## Database Query Guidelines
+
+For **hot-path queries** that filter by indexed fields (`ado_id`, `asana_gid`, `ado_pr_id`, `reviewer_gid`), always use the SQL-backed methods on `DatabaseTable` instead of `.all()` or `.get()`. This avoids full table scans and prevents performance regressions as the database grows:
+
+- `table.search_by_json_fields({"ado_id": value})` — indexed lookup; use instead of `.all()` + manual filtering
+- `table.update_by_json_fields(data, {"ado_id": value})` — indexed update; use instead of `.update(data, query_func)`
+- `table.upsert_by_json_fields(data, {"ado_id": value})` — indexed upsert; use instead of `.upsert(data, query_func)`
+- `table.remove_by_json_fields({"ado_id": value})` — indexed delete; use instead of `.remove(query_func=...)`
+
+Reserve `.all()` for operations that genuinely require every row (e.g. bulk exports, test assertions on full state). Reserve `.search(query_func)` for complex predicates that cannot be expressed as simple equality conditions on indexed fields.
+
 - Write all code in Python.
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 - Enforce markdown formatting with `mdformat` for all `.md` files.
