@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import types
 from datetime import datetime, timezone
 from typing import Any, List
 
@@ -10,6 +11,7 @@ from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 
 from .app import App
+from .group_member_cache import GroupMemberCache
 from .pr_asana_helpers import (
     _REVIEWER_APPROVED_STATES,
     _get_cached_asana_task,
@@ -28,6 +30,17 @@ from .utils import extract_reviewer_vote
 _LOGGER, _TRACER = setup_logging_and_tracing(__name__)
 
 _GROUP_REVIEWER_PATTERN = re.compile(r"^\[.+\]\\")
+
+# Inverse of the vote_mapping in utils.extract_reviewer_vote — used to preserve
+# an existing review_status when the group reviewer object is passed to helpers
+# that derive vote from the reviewer object.
+_REVIEW_STATUS_TO_VOTE: dict[str, int] = {
+    "approved": 10,
+    "approvedWithSuggestions": 5,
+    "noVote": 0,
+    "waitingForAuthor": -5,
+    "rejected": -10,
+}
 
 
 def _get_reviewer_display_name(reviewer) -> str:
@@ -72,11 +85,181 @@ def _resolve_group_reviewer_default_user(asana_users: List[dict], user_ref: str)
     return None
 
 
+def _resolve_single_member(graph_client, member_descriptor: str) -> ADOAssignedUser | None:
+    """Resolve one graph descriptor to an ADOAssignedUser; returns None for nested groups."""
+    try:
+        user = graph_client.get_user(member_descriptor)
+        email = user.mail_address or getattr(user, "principal_name", None)
+        display_name = user.display_name
+        if email and display_name:
+            return ADOAssignedUser(display_name, email)
+        return None
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        _LOGGER.debug("Skipping member descriptor '%s' (may be a nested group): %s", member_descriptor, e)
+        return None
+
+
+def _resolve_group_members_from_ado(
+    app: App, reviewer, group_member_cache: GroupMemberCache | None = None
+) -> List[ADOAssignedUser] | None:
+    """Resolve a group reviewer to individual member users via the ADO Graph API.
+
+    Checks *group_member_cache* before calling the ADO Graph API.  On a
+    successful API call the result is written back to the cache.
+
+    Returns:
+        List[ADOAssignedUser]: successfully resolved members (may be empty).
+        None: expansion could not be performed (unavailable client, missing id,
+              or API error) — callers should use cached members to preserve tasks.
+    """
+    reviewer_id = getattr(reviewer, "id", None)
+
+    # Return cached result when available (avoids repeat Graph API calls).
+    if group_member_cache and reviewer_id:
+        cached = group_member_cache.get(reviewer_id)
+        if cached is not None:
+            return cached
+
+    graph_client = getattr(app, "ado_graph_client", None)
+    if graph_client is None:
+        _LOGGER.warning("ado_graph_client not initialised; cannot expand group '%s'", _get_reviewer_display_name(reviewer))
+        return None
+    if not reviewer_id:
+        _LOGGER.warning("Group reviewer has no 'id' attribute; cannot resolve members")
+        return None
+    try:
+        descriptor_result = graph_client.get_descriptor(reviewer_id)
+        memberships = graph_client.list_memberships(descriptor_result.value, direction="Down")
+        members = [
+            user
+            for membership in memberships
+            for user in [_resolve_single_member(graph_client, membership.member_descriptor)]
+            if user is not None
+        ]
+        if group_member_cache:
+            group_member_cache.set(reviewer_id, members)
+        return members
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        _LOGGER.warning("Failed to resolve members of group '%s': %s", _get_reviewer_display_name(reviewer), e)
+        return None
+
+
+def _collect_expanded_member_gids(
+    app: App,
+    reviewer,
+    asana_users: List[dict],
+    user_lookup_cache: dict | None,
+    group_member_cache: GroupMemberCache | None = None,
+) -> set[str] | None:
+    """Resolve group reviewer members and return their Asana GIDs.
+
+    Returns None when group member resolution failed and no cached fallback exists.
+    Callers should treat None as "skip GID update" to avoid spurious task closures.
+    """
+    members = _resolve_group_members_from_ado(app, reviewer, group_member_cache)
+    if members is None:
+        return None
+    gids: set[str] = set()
+    for member in members:
+        asana_user = _cache_reviewer_lookup(asana_users, member, user_lookup_cache)
+        if asana_user:
+            gids.add(asana_user["gid"])
+    return gids
+
+
+def _get_existing_pr_item_gids(app: App, pr) -> set[str]:
+    """Return all reviewer GIDs currently stored in the DB for a PR."""
+    if app.pr_matches is None:
+        return set()
+
+    def query_fn(record):
+        return record.get("ado_pr_id") == pr.pull_request_id
+
+    return {str(task["reviewer_gid"]) for task in app.pr_matches.search(query_fn) if task.get("reviewer_gid")}
+
+
+def _get_db_group_gids(app: App, pr, reviewer_id: str) -> set[str]:
+    """Query pr_matches for tasks previously created from a specific group reviewer expansion.
+
+    Used as a cold-cache fallback: even if the GroupMemberCache entry has expired
+    or been deleted, tasks tagged with source_group_reviewer_id can still be recovered
+    from the database so they are not incorrectly closed during a transient API failure.
+    """
+    if app.pr_matches is None:
+        return set()
+
+    def query_fn(record):
+        return record.get("ado_pr_id") == pr.pull_request_id and record.get("source_group_reviewer_id") == reviewer_id
+
+    return {str(t["reviewer_gid"]) for t in app.pr_matches.search(query_fn) if t.get("reviewer_gid")}
+
+
+def _get_group_preservation_gids(
+    app: App,
+    pr,
+    reviewer,
+    asana_users: List[dict],
+    user_lookup_cache: dict | None,
+    group_member_cache: GroupMemberCache | None,
+) -> set[str]:
+    """Return Asana GIDs to preserve when live group expansion fails.
+
+    Priority:
+    1. In-memory / persistent cache (fast, no DB query).
+    2. DB records tagged with source_group_reviewer_id (covers cold/expired cache).
+    3. Empty set when neither source has data (genuine first run — nothing to preserve).
+    """
+    reviewer_id = getattr(reviewer, "id", None)
+
+    # 1. Try cache first.
+    if group_member_cache and reviewer_id:
+        cached_members = group_member_cache.get(reviewer_id)
+        if cached_members:
+            gids: set[str] = set()
+            for member in cached_members:
+                asana_user = _cache_reviewer_lookup(asana_users, member, user_lookup_cache)
+                if asana_user:
+                    gids.add(asana_user["gid"])
+            return gids
+
+    # 2. Fall back to DB records from prior successful expansions.
+    if reviewer_id:
+        return _get_db_group_gids(app, pr, reviewer_id)
+
+    return set()
+
+
+def _collect_gids_for_reviewer(
+    app: App,
+    reviewer,
+    pr,
+    asana_users: List[dict],
+    user_lookup_cache: dict | None,
+    group_member_cache: GroupMemberCache | None = None,
+) -> set[str]:
+    """Return the GIDs to add to current_reviewer_gids for a single reviewer.
+
+    For expand_group_members strategy with a group reviewer, returns member GIDs.
+    On expansion failure, falls back to cached or DB-stored member GIDs for this
+    group only, so unrelated reviewer removals are still processed correctly.
+    For all other cases, returns a singleton set or empty set.
+    """
+    if is_group_reviewer(reviewer) and getattr(app, "group_reviewer_strategy", "ignore") == "expand_group_members":
+        expanded = _collect_expanded_member_gids(app, reviewer, asana_users, user_lookup_cache, group_member_cache)
+        if expanded is None:
+            return _get_group_preservation_gids(app, pr, reviewer, asana_users, user_lookup_cache, group_member_cache)
+        return expanded
+    gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
+    return {gid} if gid else set()
+
+
 def _collect_group_reviewer_gid(app: App, reviewer, asana_users: List[dict]) -> str | None:
     """Return the synthetic GID to track for a group reviewer, or None to skip."""
     strategy = getattr(app, "group_reviewer_strategy", "ignore")
     if strategy == "ignore":
         return None
+    if strategy == "expand_group_members":
+        return None  # individual GIDs collected via _collect_expanded_member_gids
     if strategy == "default_user":
         default_ref = getattr(app, "group_reviewer_default_user", "")
         if _resolve_group_reviewer_default_user(asana_users, default_ref) is None:
@@ -181,6 +364,70 @@ def _resolve_group_reviewer_assignee(app: App, pr, asana_users: List[dict], disp
     return resolved["gid"]
 
 
+def _make_vote_preserving_reviewer(reviewer, existing_match: PullRequestItem):
+    """Return a reviewer proxy with the existing vote to prevent group vote overwrites."""
+    preserved_vote = _REVIEW_STATUS_TO_VOTE.get(existing_match.review_status or "noVote", 0)
+    return types.SimpleNamespace(vote=preserved_vote)
+
+
+def _handle_expand_group_reviewer(
+    app: App,
+    pr,
+    repository,
+    reviewer,
+    asana_users: List[dict],
+    asana_project_tasks: List[dict],
+    asana_project: str,
+    group_member_cache: GroupMemberCache | None = None,
+) -> None:
+    """Handle expand_group_members strategy: create/update individual member tasks."""
+    display_name = _get_reviewer_display_name(reviewer)
+    reviewer_id = getattr(reviewer, "id", None)
+    members = _resolve_group_members_from_ado(app, reviewer, group_member_cache)
+    if members is None:
+        _LOGGER.warning("PR %s: group '%s' expansion failed; existing tasks preserved", pr.pull_request_id, display_name)
+        return
+    if not members:
+        _LOGGER.info("PR %s: group '%s' resolved to no members, skipping", pr.pull_request_id, display_name)
+        return
+    for member in members:
+        asana_matched_user = matching_user(asana_users, member)
+        if not asana_matched_user:
+            _LOGGER.debug(
+                "PR %s: group member %s <%s> not found in Asana",
+                pr.pull_request_id,
+                member.display_name,
+                member.email,
+            )
+            continue
+        existing_match = PullRequestItem.search(app, ado_pr_id=pr.pull_request_id, reviewer_gid=asana_matched_user["gid"])
+        if existing_match is None:
+            create_new_pr_reviewer_task(
+                app,
+                pr,
+                repository,
+                reviewer,
+                asana_matched_user,
+                asana_project_tasks,
+                asana_project,
+                source_group_reviewer_id=reviewer_id,
+            )
+        else:
+            # Lazy backfill: tag tasks created before source_group_reviewer_id existed so
+            # the DB fallback can protect them on future cold-cache expansion failures.
+            if existing_match.source_group_reviewer_id is None and reviewer_id:
+                existing_match.source_group_reviewer_id = reviewer_id
+                if getattr(app, "dry_run", False) is not True:
+                    existing_match.save(app)
+            # Use a vote-preserving proxy so the group's aggregate vote cannot overwrite
+            # an individual reviewer's vote (e.g. when a user is both a direct reviewer
+            # and a member of the expanded group).
+            vote_proxy = _make_vote_preserving_reviewer(reviewer, existing_match)
+            update_existing_pr_reviewer_task(
+                app, pr, repository, vote_proxy, existing_match, asana_matched_user, asana_project
+            )
+
+
 def _handle_group_reviewer(
     app: App,
     pr,
@@ -189,11 +436,13 @@ def _handle_group_reviewer(
     asana_users: List[dict],
     asana_project_tasks: List[dict],
     asana_project: str,
+    group_member_cache: GroupMemberCache | None = None,
 ) -> None:
     """Handle an ADO group/container reviewer according to the configured GROUP_REVIEWER_STRATEGY.
 
     Strategies:
     - ignore (default): log and skip, identical to previous behaviour.
+    - expand_group_members: resolve members via ADO Graph API and create individual tasks.
     - default_user: create/update a task assigned to GROUP_REVIEWER_DEFAULT_USER.
     - unassigned_task: create/update an unassigned task with the group name in the title.
     """
@@ -208,6 +457,12 @@ def _handle_group_reviewer(
     )
 
     if strategy == "ignore":
+        return
+
+    if strategy == "expand_group_members":
+        _handle_expand_group_reviewer(
+            app, pr, repository, reviewer, asana_users, asana_project_tasks, asana_project, group_member_cache
+        )
         return
 
     assignee_gid = _resolve_group_reviewer_assignee(app, pr, asana_users, display_name, strategy)
@@ -308,6 +563,7 @@ def process_pull_request(
     asana_project_tasks: List[dict],
     asana_project: str,
     user_lookup_cache: dict | None = None,
+    group_member_cache: GroupMemberCache | None = None,
 ) -> None:
     """Process a single pull request, creating reviewer tasks."""
     _LOGGER.debug("Processing PR %s: %s", pr.pull_request_id, pr.title)
@@ -342,9 +598,9 @@ def process_pull_request(
         if reviewer_id:
             processed_reviewers.add(reviewer_id)
 
-        gid = _collect_reviewer_gid(app, reviewer, asana_users, user_lookup_cache)
-        if gid:
-            current_reviewer_gids.add(gid)
+        current_reviewer_gids.update(
+            _collect_gids_for_reviewer(app, reviewer, pr, asana_users, user_lookup_cache, group_member_cache)
+        )
 
         process_pr_reviewer(
             app,
@@ -354,6 +610,7 @@ def process_pull_request(
             asana_users,
             asana_project_tasks,
             asana_project,
+            group_member_cache,
         )
 
     handle_removed_reviewers(app, pr, current_reviewer_gids, asana_project)
@@ -427,10 +684,13 @@ def process_pr_reviewer(
     asana_users: List[dict],
     asana_project_tasks: List[dict],
     asana_project: str,
+    group_member_cache: GroupMemberCache | None = None,
 ) -> None:
     """Process a single reviewer for a pull request."""
     if is_group_reviewer(reviewer):
-        _handle_group_reviewer(app, pr, repository, reviewer, asana_users, asana_project_tasks, asana_project)
+        _handle_group_reviewer(
+            app, pr, repository, reviewer, asana_users, asana_project_tasks, asana_project, group_member_cache
+        )
         return
 
     ado_reviewer = create_ado_user_from_reviewer(reviewer)
@@ -487,6 +747,7 @@ def create_new_pr_reviewer_task(
     asana_matched_user: dict,
     asana_project_tasks: List[dict],
     asana_project: str,
+    source_group_reviewer_id: str | None = None,
 ) -> None:
     """Create a new Asana task for a PR reviewer."""
     _LOGGER.debug(
@@ -512,6 +773,7 @@ def create_new_pr_reviewer_task(
         created_date=current_utc_time,
         updated_date=current_utc_time,
         review_status=extract_reviewer_vote(reviewer),
+        source_group_reviewer_id=source_group_reviewer_id,
     )
 
     asana_task = get_asana_task_by_name(asana_project_tasks, pr_item.asana_title)

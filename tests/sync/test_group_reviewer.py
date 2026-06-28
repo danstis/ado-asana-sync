@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+from ado_asana_sync.sync.pr_processor import _resolve_group_members_from_ado
 from ado_asana_sync.sync.pull_request_item import PullRequestItem
 from ado_asana_sync.sync.pull_request_sync import (
     _handle_group_reviewer,
@@ -41,7 +42,8 @@ def _make_app(temp_dir: str, strategy: str = "ignore", default_user: str = "") -
     app.ado_url = "https://dev.azure.com/testorg"
 
     # Propagate strategy fields that __init__ would have set under the patch
-    app.group_reviewer_strategy = strategy if strategy in {"ignore", "default_user", "unassigned_task"} else "ignore"
+    _valid = {"ignore", "default_user", "unassigned_task", "expand_group_members"}
+    app.group_reviewer_strategy = strategy if strategy in _valid else "ignore"
     app.group_reviewer_default_user = default_user
     if app.group_reviewer_strategy == "default_user" and not default_user:
         app.group_reviewer_strategy = "ignore"
@@ -527,3 +529,653 @@ class TestUpdateAsanaPrTaskGroupAssignee(unittest.TestCase):
 
         update_call_args = mock_tasks_api.update_task.call_args[0]
         self.assertEqual(update_call_args[0]["data"]["assignee"], "user-gid-fallback")
+
+
+# ---------------------------------------------------------------------------
+# 7. expand_group_members config
+# ---------------------------------------------------------------------------
+
+
+class TestExpandGroupMembersConfig(unittest.TestCase):
+    def test_expand_group_members_strategy_is_valid(self):
+        env = {"GROUP_REVIEWER_STRATEGY": "expand_group_members"}
+        with patch.dict(os.environ, env, clear=False):
+            from ado_asana_sync.sync.app import App
+
+            with patch("ado_asana_sync.sync.app.configure_azure_monitor"):
+                app = App(
+                    ado_pat="p",
+                    ado_url="https://dev.azure.com/x",
+                    asana_token="t",
+                    asana_workspace_name="ws",
+                )
+                self.assertEqual(app.group_reviewer_strategy, "expand_group_members")
+
+
+# ---------------------------------------------------------------------------
+# 8. _resolve_group_members_from_ado
+# ---------------------------------------------------------------------------
+
+
+class TestResolveGroupMembersFromAdo(unittest.TestCase):
+    def _make_app_with_graph_client(self, graph_client=None):
+        with patch("ado_asana_sync.sync.app.configure_azure_monitor"):
+            from ado_asana_sync.sync.app import App
+
+            app = App(
+                ado_pat="p",
+                ado_url="https://dev.azure.com/x",
+                asana_token="t",
+                asana_workspace_name="ws",
+            )
+        app.ado_graph_client = graph_client
+        return app
+
+    def test_returns_list_of_ado_users_from_graph_api(self):
+        mock_graph = MagicMock()
+
+        descriptor_result = MagicMock()
+        descriptor_result.value = "vssgp.xxx"
+        mock_graph.get_descriptor.return_value = descriptor_result
+
+        membership = MagicMock()
+        membership.member_descriptor = "aad.user1"
+        mock_graph.list_memberships.return_value = [membership]
+
+        graph_user = MagicMock()
+        graph_user.mail_address = "alice@corp.com"
+        graph_user.display_name = "Alice"
+        mock_graph.get_user.return_value = graph_user
+
+        app = self._make_app_with_graph_client(mock_graph)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        result = _resolve_group_members_from_ado(app, reviewer)
+        self.assertEqual(len(result), 1)
+        self.assertIsInstance(result[0], ADOAssignedUser)
+        self.assertEqual(result[0].email, "alice@corp.com")
+        self.assertEqual(result[0].display_name, "Alice")
+
+    def test_returns_none_when_graph_client_is_none(self):
+        app = self._make_app_with_graph_client(None)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+        result = _resolve_group_members_from_ado(app, reviewer)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_reviewer_has_no_id(self):
+        mock_graph = MagicMock()
+        app = self._make_app_with_graph_client(mock_graph)
+
+        class ReviewerNoId:
+            display_name = "[Corp]\\Dev"
+            unique_name = "vstfs:///abc"
+            is_container = True
+
+        result = _resolve_group_members_from_ado(app, ReviewerNoId())
+        self.assertIsNone(result)
+
+    def test_returns_none_on_api_exception(self):
+        mock_graph = MagicMock()
+        mock_graph.get_descriptor.side_effect = Exception("network error")
+
+        app = self._make_app_with_graph_client(mock_graph)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+        result = _resolve_group_members_from_ado(app, reviewer)
+        self.assertIsNone(result)
+
+    def test_skips_member_descriptors_that_are_groups(self):
+        mock_graph = MagicMock()
+
+        descriptor_result = MagicMock()
+        descriptor_result.value = "vssgp.xxx"
+        mock_graph.get_descriptor.return_value = descriptor_result
+
+        membership1 = MagicMock()
+        membership1.member_descriptor = "vssgp.nested_group"
+        membership2 = MagicMock()
+        membership2.member_descriptor = "aad.user2"
+        mock_graph.list_memberships.return_value = [membership1, membership2]
+
+        valid_user = MagicMock()
+        valid_user.mail_address = "bob@corp.com"
+        valid_user.display_name = "Bob"
+
+        def get_user_side_effect(descriptor):
+            if descriptor == "vssgp.nested_group":
+                raise Exception("not a user")
+            return valid_user
+
+        mock_graph.get_user.side_effect = get_user_side_effect
+
+        app = self._make_app_with_graph_client(mock_graph)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+        result = _resolve_group_members_from_ado(app, reviewer)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].display_name, "Bob")
+
+
+# ---------------------------------------------------------------------------
+# 9. _handle_group_reviewer — expand_group_members strategy
+# ---------------------------------------------------------------------------
+
+
+EXPAND_ASANA_USERS = [
+    {"gid": "gid-alice", "name": "Alice Smith", "email": "alice@corp.com"},
+    {"gid": "gid-bob", "name": "Bob Jones", "email": "bob@corp.com"},
+]
+
+
+class TestHandleGroupReviewerExpand(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.pr = _make_pr(pr_id=77)
+        self.repo = _make_repo()
+        self.reviewer = RealObjectBuilder.create_real_ado_group_reviewer(
+            display_name="[Corp]\\Reviewers", id="group-guid-expand"
+        )
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _app(self):
+        app = _make_app(self.tmp, strategy="expand_group_members")
+        self.addCleanup(app.db.close)
+        return app
+
+    def _make_two_members(self):
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        return [
+            ADOAssignedUser("Alice Smith", "alice@corp.com"),
+            ADOAssignedUser("Bob Jones", "bob@corp.com"),
+        ]
+
+    def test_expand_creates_individual_task_per_member(self):
+        app = self._app()
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=self._make_two_members(),
+            ),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
+            self.assertEqual(mock_create.call_count, 2)
+
+    def test_expand_no_members_creates_no_task(self):
+        app = self._app()
+        with (
+            patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=[]),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
+            mock_create.assert_not_called()
+
+    def test_expand_member_not_in_asana_is_skipped(self):
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=[ADOAssignedUser("Unknown User", "unknown@corp.com")],
+            ),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
+            mock_create.assert_not_called()
+
+    def test_expand_existing_task_updated_not_recreated(self):
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/Project-repo-123/_git/test-repo/pullrequest/{self.pr.pull_request_id}"
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title="Old Title",
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-alice",
+            reviewer_name="Alice Smith",
+            asana_gid="existing-asana-gid",
+        )
+        existing.save(app)
+
+        mock_asana_task = {"gid": "existing-asana-gid", "modified_at": "2026-01-01T00:00:00Z"}
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
+            ),
+            patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
+            mock_create.assert_not_called()
+            mock_update.assert_called_once()
+
+    def test_legacy_untagged_task_gets_source_group_reviewer_id_backfilled(self):
+        """A pre-existing task with source_group_reviewer_id=None must be tagged on
+        the next successful expansion so the DB fallback can protect it in future runs.
+        """
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/Project-repo-123/_git/test-repo/pullrequest/{self.pr.pull_request_id}"
+        legacy_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-alice",
+            reviewer_name="Alice Smith",
+            asana_gid="existing-asana-gid",
+            source_group_reviewer_id=None,  # legacy task — no tag yet
+        )
+        legacy_task.save(app)
+
+        mock_asana_task = {"gid": "existing-asana-gid", "modified_at": "2026-01-01T00:00:00Z"}
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
+            ),
+            patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task"),
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
+
+        saved = PullRequestItem.search(app, ado_pr_id=self.pr.pull_request_id, reviewer_gid="gid-alice")
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved.source_group_reviewer_id, "group-guid-expand")
+
+
+# ---------------------------------------------------------------------------
+# 10. process_pull_request — expand_group_members adds member GIDs
+# ---------------------------------------------------------------------------
+
+
+class TestProcessPullRequestExpandGids(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.pr = _make_pr(pr_id=88)
+        self.repo = _make_repo()
+        self.reviewer = RealObjectBuilder.create_real_ado_group_reviewer(display_name="[Corp]\\Dev", id="group-guid-88")
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _app(self):
+        app = _make_app(self.tmp, strategy="expand_group_members")
+        app.ado_git_client = MagicMock()
+        app.ado_git_client.get_pull_request_reviewers.return_value = [self.reviewer]
+        self.addCleanup(app.db.close)
+        return app
+
+    def _two_members(self):
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        return [
+            ADOAssignedUser("Alice Smith", "alice@corp.com"),
+            ADOAssignedUser("Bob Jones", "bob@corp.com"),
+        ]
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_process_pull_request_expand_adds_member_gids_to_current_reviewer_gids(
+        self, mock_handle_group, mock_handle_removed
+    ):
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        asana_users = [
+            {"gid": "gid-alice", "name": "Alice Smith", "email": "alice@corp.com"},
+            {"gid": "gid-bob", "name": "Bob Jones", "email": "bob@corp.com"},
+        ]
+        app = self._app()
+        with patch(
+            "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+            return_value=self._two_members(),
+        ):
+            process_pull_request(app, self.pr, self.repo, asana_users, [], "proj-gid")
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("gid-alice", current_gids)
+        self.assertIn("gid-bob", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_process_pull_request_expand_no_members_leaves_gids_empty(self, mock_handle_group, mock_handle_removed):
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=[]):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid")
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertNotIn("gid-alice", current_gids)
+        self.assertNotIn("gid-bob", current_gids)
+
+
+# ---------------------------------------------------------------------------
+# 11. Failure safety: API failure preserves existing tasks
+# ---------------------------------------------------------------------------
+
+
+class TestExpandFailureSafety(unittest.TestCase):
+    """When group expansion fails, previously-cached member tasks must not be closed.
+
+    The preservation is now precise: only the specific group's cached member GIDs
+    are preserved, not the entire PR task set. This ensures unrelated reviewers that
+    were legitimately removed in the same sync cycle are still closed correctly.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.pr = _make_pr(pr_id=99)
+        self.repo = _make_repo()
+        self.reviewer = RealObjectBuilder.create_real_ado_group_reviewer(display_name="[Corp]\\Dev", id="group-guid-99")
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _app(self):
+        app = _make_app(self.tmp, strategy="expand_group_members")
+        app.ado_git_client = MagicMock()
+        app.ado_git_client.get_pull_request_reviewers.return_value = [self.reviewer]
+        self.addCleanup(app.db.close)
+        return app
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_expansion_failure_with_cache_preserves_group_member_tasks(self, mock_handle_group, mock_handle_removed):
+        """When expansion fails but the cache has the group's prior members, those GIDs are
+        preserved in current_reviewer_gids so their tasks are not closed."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        asana_users = [{"gid": "gid-existing-member", "name": "Existing", "email": "existing@corp.com"}]
+
+        cache = GroupMemberCache()
+        cache.set("group-guid-99", [ADOAssignedUser("Existing", "existing@corp.com")])
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, asana_users, [], "proj-gid", group_member_cache=cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("gid-existing-member", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_expansion_failure_without_cache_does_not_preserve(self, mock_handle_group, mock_handle_removed):
+        """When expansion fails with no cache entry (first run), no GIDs are preserved —
+        there are no tasks to protect because the group was never successfully expanded."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        cache = GroupMemberCache()  # empty cache
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertEqual(current_gids, set())
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_group_failure_does_not_prevent_removal_of_unrelated_direct_reviewer(self, mock_handle_group, mock_handle_removed):
+        """Key regression: when one group expansion fails, a separately removed direct reviewer
+        must still have their GID absent from current_reviewer_gids so their task is closed."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        # Cache contains only group member Alice — Bob is NOT cached.
+        asana_users = [
+            {"gid": "gid-alice", "name": "Alice", "email": "alice@corp.com"},
+            {"gid": "gid-bob", "name": "Bob", "email": "bob@corp.com"},
+        ]
+        cache = GroupMemberCache()
+        cache.set("group-guid-99", [ADOAssignedUser("Alice", "alice@corp.com")])
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, asana_users, [], "proj-gid", group_member_cache=cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        # Alice's GID is preserved (she's in the group's cache).
+        self.assertIn("gid-alice", current_gids)
+        # Bob was not in this group's cache — his stale task should be closeable.
+        self.assertNotIn("gid-bob", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_graph_client_none_with_cache_preserves_tasks(self, mock_handle_group, mock_handle_removed):
+        """When ado_graph_client is None, cached member GIDs are preserved."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        app.ado_graph_client = None
+        asana_users = [{"gid": "gid-member-from-prior-sync", "name": "Prior", "email": "prior@corp.com"}]
+
+        cache = GroupMemberCache()
+        cache.set("group-guid-99", [ADOAssignedUser("Prior", "prior@corp.com")])
+
+        process_pull_request(app, self.pr, self.repo, asana_users, [], "proj-gid", group_member_cache=cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("gid-member-from-prior-sync", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_missing_reviewer_id_with_cache_preserves_tasks(self, mock_handle_group, mock_handle_removed):
+        """When reviewer has no id attribute (so cache cannot be keyed), nothing is preserved."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        class ReviewerNoId:
+            display_name = "[Corp]\\Dev"
+            unique_name = "vstfs:///abc"
+            is_container = True
+            vote = 0
+
+        app = _make_app(self.tmp, strategy="expand_group_members")
+        app.ado_git_client = MagicMock()
+        app.ado_git_client.get_pull_request_reviewers.return_value = [ReviewerNoId()]
+        app.ado_graph_client = MagicMock()
+        self.addCleanup(app.db.close)
+
+        cache = GroupMemberCache()  # cache cannot help — reviewer has no id
+
+        process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertEqual(current_gids, set())
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_cold_cache_db_fallback_preserves_group_member_tasks(self, mock_handle_group, mock_handle_removed):
+        """Key regression: when cache is cold/expired but the DB has tasks from a prior
+        successful group expansion (tagged with source_group_reviewer_id), those tasks
+        must be preserved during a transient expansion failure.
+
+        Scenario:
+        1. Prior sync: group expanded successfully, task saved with source_group_reviewer_id.
+        2. Cache expires (or cache file deleted).
+        3. Current sync: Graph API fails → expansion returns None.
+        4. Expected: task is preserved via DB fallback, NOT closed.
+        """
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_item import PullRequestItem
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+
+        # Pre-create a task tagged as coming from this group (as if a prior run created it)
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-group-member",
+            reviewer_name="Group Member",
+            asana_gid="asana-group-member-task",
+            source_group_reviewer_id="group-guid-99",  # tagged with the group's reviewer ID
+        )
+        existing.save(app)
+
+        # Cache is cold (no entry for this group)
+        empty_cache = GroupMemberCache()
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=empty_cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        # DB fallback recovered the group member's GID → task is NOT closed
+        self.assertIn("gid-group-member", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_cold_cache_db_fallback_does_not_mask_unrelated_direct_reviewer_removal(
+        self, mock_handle_group, mock_handle_removed
+    ):
+        """DB fallback preserves only this group's tasks: unrelated removed direct reviewers
+        are still closed even when the group expansion fails and cache is cold."""
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_item import PullRequestItem
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+
+        # Group member task — tagged, should be preserved
+        group_member_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-group-member",
+            reviewer_name="Group Member",
+            asana_gid="task-group-member",
+            source_group_reviewer_id="group-guid-99",
+        )
+        group_member_task.save(app)
+
+        # Direct reviewer task — NOT tagged with any group, should NOT be preserved by the fallback
+        direct_reviewer_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-bob-direct",
+            reviewer_name="Bob (direct reviewer, now removed)",
+            asana_gid="task-bob",
+            source_group_reviewer_id=None,  # direct reviewer, no group association
+        )
+        direct_reviewer_task.save(app)
+
+        empty_cache = GroupMemberCache()
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=empty_cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        # Group member preserved via DB fallback
+        self.assertIn("gid-group-member", current_gids)
+        # Bob's stale direct-reviewer task is NOT preserved — he was legitimately removed
+        self.assertNotIn("gid-bob-direct", current_gids)
+
+
+# ---------------------------------------------------------------------------
+# 12. Vote preservation: group vote must not overwrite direct reviewer vote
+# ---------------------------------------------------------------------------
+
+
+class TestExpandVotePreservation(unittest.TestCase):
+    """When updating a task from group expansion, the individual's existing vote must be preserved."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.pr = _make_pr(pr_id=100)
+        self.repo = _make_repo()
+        self.group_reviewer = RealObjectBuilder.create_real_ado_group_reviewer(
+            display_name="[Corp]\\Dev", id="group-guid-100", vote=0
+        )
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _app(self):
+        app = _make_app(self.tmp, strategy="expand_group_members")
+        self.addCleanup(app.db.close)
+        return app
+
+    def test_group_expansion_preserves_existing_approved_vote(self):
+        """If Alice approved the PR directly, group expansion must not reset her vote to noVote.
+
+        The PR title changed (triggering an update), but the group reviewer's vote (0=noVote)
+        must not overwrite Alice's previously recorded approved vote.
+        """
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+        # Existing task has "approved" review_status and an old title (ensures is_current → False)
+        existing = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title="Old PR Title",
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-alice",
+            reviewer_name="Alice Smith",
+            review_status="approved",
+            asana_gid="alice-asana-gid",
+        )
+        existing.save(app)
+
+        asana_users = [{"gid": "gid-alice", "name": "Alice Smith", "email": "alice@corp.com"}]
+        mock_asana_task = {"gid": "alice-asana-gid", "modified_at": "2026-01-01T00:00:00Z"}
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
+            ),
+            patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, self.group_reviewer, asana_users, [], "proj-gid")
+
+        mock_update.assert_called_once()
+        updated_pr_item = mock_update.call_args[0][1]
+        self.assertEqual(updated_pr_item.review_status, "approved")

@@ -263,17 +263,19 @@ class RealObjectBuilder:
         unique_name: str = "vstfs:///Classification/TeamProject/abc123",
         is_container: bool = True,
         vote: int = 0,
+        id: str = "group-guid-123",
     ):
         """Create a real-ish ADO group/container reviewer object (not a mock)."""
 
         class ADOGroupReviewerObj:
-            def __init__(self, display_name, unique_name, is_container, vote):
+            def __init__(self, display_name, unique_name, is_container, vote, obj_id):
                 self.display_name = display_name
                 self.unique_name = unique_name
                 self.is_container = is_container
                 self.vote = vote
+                self.id = obj_id
 
-        return ADOGroupReviewerObj(display_name, unique_name, is_container, vote)
+        return ADOGroupReviewerObj(display_name, unique_name, is_container, vote, id)
 
 
 def create_minimal_external_api_patches():

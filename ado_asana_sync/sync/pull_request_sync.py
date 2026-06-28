@@ -13,6 +13,7 @@ except ImportError:
 from ado_asana_sync.utils.date import iso8601_utc
 
 from .asana import get_asana_task
+from .group_member_cache import GroupMemberCache
 from .pr_asana_helpers import (
     _PR_CLOSED_STATES,
     _REVIEWER_APPROVED_STATES,
@@ -24,7 +25,10 @@ from .pr_asana_helpers import (
     update_asana_pr_task,
 )
 from .pr_processor import (
+    _collect_expanded_member_gids,
+    _handle_expand_group_reviewer,
     _handle_group_reviewer,
+    _resolve_group_members_from_ado,
     _resolve_group_reviewer_default_user,
     create_ado_user_from_reviewer,
     create_new_pr_reviewer_task,
@@ -53,6 +57,7 @@ from .utils import encode_url_for_asana, extract_reviewer_vote
 __all__ = [
     "ADOAssignedUser",
     "GitPullRequestSearchCriteria",
+    "GroupMemberCache",
     "PullRequestItem",
     "_PR_CLOSED_STATES",
     "_REVIEWER_APPROVED_STATES",
@@ -62,7 +67,10 @@ __all__ = [
     "add_tag_to_pr_task",
     "create_asana_pr_task",
     "update_asana_pr_task",
+    "_collect_expanded_member_gids",
+    "_handle_expand_group_reviewer",
     "_handle_group_reviewer",
+    "_resolve_group_members_from_ado",
     "_resolve_group_reviewer_default_user",
     "create_ado_user_from_reviewer",
     "create_new_pr_reviewer_task",
