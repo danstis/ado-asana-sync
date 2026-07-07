@@ -96,7 +96,7 @@ You can run the sync tool either locally using `uv` or via Docker.
 
 1. **Install dependencies:**
    ```bash
-   uv sync
+   uv sync --dev
    ```
 1. **Run the application:**
    ```bash
@@ -110,6 +110,8 @@ You can run the sync tool either locally using `uv` or via Docker.
    ```bash
    DRY_RUN=true RUN_ONCE=true uv run python -m ado_asana_sync.sync
    ```
+
+The checked-in VS Code run profiles use the same `uv` workflow: they run `uv sync --dev` before launch and use the `.venv` environment that `uv` manages for the workspace.
 
 In dry-run mode, expect log-only output such as create/update/close summaries. No Asana writes are sent, and no new entries are saved to `data/appdata.db`.
 
