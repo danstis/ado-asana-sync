@@ -86,6 +86,8 @@ cp data/projects.json.example data/projects.json
 
 The application stores its sync state in a SQLite database at `data/appdata.db`. This file tracks which ADO items have been synced to Asana so that subsequent runs perform incremental updates rather than recreating everything from scratch.
 
+Schema migrations are applied automatically on startup — no manual steps are required when upgrading. The database is currently at schema version 3. Hot-path lookups leverage SQLite JSON indexes on the `ado_id`, `asana_gid`, `ado_pr_id`, and `reviewer_gid` fields so that queries remain fast even as the sync history grows.
+
 **Important:** Ensure the `data/` directory is persisted across restarts (e.g. via a Docker volume or bind mount). Without this, the sync database is lost and all Asana tasks will be recreated on the next run.
 
 ### Running the Application

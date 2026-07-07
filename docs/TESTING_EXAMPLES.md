@@ -269,6 +269,82 @@ def test_sync_pull_requests_real_integration(mock_asana_client, mock_ado_conn, m
 
 Use this pattern when you need to verify the full PR sync flow instead of only `process_pr_reviewer()` in isolation.
 
+### Integration Test - Database Layer with Index-Backed Queries
+
+The database layer exposes `search_by_json_fields`, `update_by_json_fields`, `upsert_by_json_fields`, and `remove_by_json_fields` for indexed hot-path queries. Always test these against a real temporary SQLite database so schema migrations and index creation are exercised end-to-end.
+
+```python
+import tempfile
+import unittest
+from ado_asana_sync.database.connection import Database
+
+
+class TestDatabaseIndexedQueries(unittest.TestCase):
+    """Integration tests for the SQLite database layer using a real temp database."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        db_path = f"{self._tmp.name}/test.db"
+        # REAL Database — applies all migrations up to the current schema version
+        self.db = Database(db_path)
+
+    def tearDown(self):
+        self.db.close()
+        self._tmp.cleanup()
+
+    def test_upsert_and_search_by_json_fields(self):
+        """Verify that index-backed upsert and search round-trip correctly."""
+        table = self.db.table("matches")
+
+        record = {"ado_id": 42, "asana_gid": "gid-001", "title": "My Task"}
+        table.upsert_by_json_fields(record, {"ado_id": 42})
+
+        # Use the indexed query — does NOT fall back to a full table scan
+        results = table.search_by_json_fields({"ado_id": 42})
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["asana_gid"], "gid-001")
+
+    def test_update_by_json_fields_overwrites_existing_record(self):
+        """Verify that update_by_json_fields replaces the matched row."""
+        table = self.db.table("matches")
+
+        table.upsert_by_json_fields({"ado_id": 7, "asana_gid": "old"}, {"ado_id": 7})
+        table.update_by_json_fields({"ado_id": 7, "asana_gid": "new"}, {"ado_id": 7})
+
+        results = table.search_by_json_fields({"ado_id": 7})
+        self.assertEqual(results[0]["asana_gid"], "new")
+
+    def test_remove_by_json_fields_deletes_record(self):
+        """Verify that remove_by_json_fields removes only the matching row."""
+        table = self.db.table("pr_matches")
+
+        table.upsert_by_json_fields({"ado_pr_id": 10, "reviewer_gid": "r-001"}, {"ado_pr_id": 10, "reviewer_gid": "r-001"})
+        table.upsert_by_json_fields({"ado_pr_id": 11, "reviewer_gid": "r-002"}, {"ado_pr_id": 11, "reviewer_gid": "r-002"})
+
+        table.remove_by_json_fields({"ado_pr_id": 10})
+
+        remaining = table.search_by_json_fields({"ado_pr_id": 11})
+        deleted = table.search_by_json_fields({"ado_pr_id": 10})
+
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(len(deleted), 0)
+
+    def test_schema_version_is_current(self):
+        """Verify that a fresh database is migrated to the latest schema version."""
+        from ado_asana_sync.database.migrations import CURRENT_SCHEMA_VERSION
+
+        version = self.db.get_current_schema_version()
+        self.assertEqual(version, CURRENT_SCHEMA_VERSION)
+```
+
+**Key points:**
+
+- Always create a `Database` instance against a `tempfile.TemporaryDirectory` path — this exercises the real migration path including index creation.
+- Use `search_by_json_fields` (not `.all()` + manual filtering) in integration tests that target indexed fields (`ado_id`, `asana_gid`, `ado_pr_id`, `reviewer_gid`).
+- `.all()` remains the right choice when an assertion needs to inspect the *entire* table state (e.g. verifying record count or checking that no extra rows were written).
+- `test_schema_version_is_current` guards against migration regressions — add it to any test class that exercises the database layer.
+
 ### Unit Test - Focused Individual Function
 
 ```python
