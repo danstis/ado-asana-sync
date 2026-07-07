@@ -127,7 +127,7 @@ def _update_existing_group_reviewer_match(
     """Sync an existing group reviewer DB record and its Asana task with current PR state."""
     new_vote = extract_reviewer_vote(reviewer)
     if (
-        existing_match.title == pr.title
+        existing_match.title == pr.title.strip()
         and existing_match.status == pr.status
         and existing_match.review_status == new_vote
         and existing_match.assignee_gid == assignee_gid
@@ -135,7 +135,7 @@ def _update_existing_group_reviewer_match(
     ):
         _LOGGER.debug("Group reviewer task is already up to date: %s", existing_match.asana_title)
         return
-    existing_match.title = pr.title
+    existing_match.title = pr.title.strip()
     existing_match.status = pr.status
     existing_match.updated_date = iso8601_utc(datetime.now())
     existing_match.review_status = new_vote
@@ -541,7 +541,7 @@ def create_new_pr_reviewer_task(
 
 def _check_title_change(pr, existing_match: PullRequestItem) -> bool:
     """Check for a PR title change and validate data integrity. Returns False if corruption detected."""
-    if existing_match.title != pr.title:
+    if existing_match.title != pr.title.strip():
         _LOGGER.info("PR title changed from '%s' to '%s'", existing_match.title, pr.title)
         if existing_match.ado_pr_id != pr.pull_request_id:
             _LOGGER.error(
@@ -614,7 +614,7 @@ def update_existing_pr_reviewer_task(
         return
     _log_review_status_change(pr, existing_match, reviewer)
 
-    existing_match.title = pr.title
+    existing_match.title = pr.title.strip()
     existing_match.status = pr.status
     existing_match.updated_date = iso8601_utc(datetime.now())
     existing_match.review_status = extract_reviewer_vote(reviewer)

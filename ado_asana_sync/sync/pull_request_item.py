@@ -387,7 +387,7 @@ class PullRequestItem:
             return False
 
         # Check if PR has been updated - compare title and basic properties
-        if ado_pr.title != self.title:
+        if ado_pr.title.strip() != self.title:
             return False
 
         if ado_pr.status != self.status:

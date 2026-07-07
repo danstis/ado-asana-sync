@@ -591,6 +591,60 @@ class TestPullRequestItemTitleNormalization(unittest.TestCase):
         pr = self._make_pr("My PR")
         self.assertEqual(pr.title, "My PR")
 
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_is_current_true_when_ado_title_has_trailing_whitespace(self, mock_get_asana_task):
+        """is_current returns True when the live ADO title has trailing whitespace but stored title is stripped."""
+        stored_pr = self._make_pr("My PR")
+        stored_pr.asana_gid = "gid-999"
+        stored_pr.asana_updated = "2024-01-01T10:00:00Z"
+        stored_pr.status = "active"
+
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "My PR  "  # trailing whitespace — same semantic title
+        mock_ado_pr.status = "active"
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        mock_app = Mock()
+        result = stored_pr.is_current(mock_app, mock_ado_pr)
+
+        self.assertTrue(result)
+
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_is_current_true_when_ado_title_has_leading_whitespace(self, mock_get_asana_task):
+        """is_current returns True when the live ADO title has leading whitespace but stored title is stripped."""
+        stored_pr = self._make_pr("My PR")
+        stored_pr.asana_gid = "gid-999"
+        stored_pr.asana_updated = "2024-01-01T10:00:00Z"
+        stored_pr.status = "active"
+
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "  My PR"  # leading whitespace
+        mock_ado_pr.status = "active"
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        mock_app = Mock()
+        result = stored_pr.is_current(mock_app, mock_ado_pr)
+
+        self.assertTrue(result)
+
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_is_current_false_when_title_genuinely_changed(self, mock_get_asana_task):
+        """is_current correctly returns False when the ADO title has actually changed (not just whitespace)."""
+        stored_pr = self._make_pr("My PR")
+        stored_pr.asana_gid = "gid-999"
+        stored_pr.asana_updated = "2024-01-01T10:00:00Z"
+        stored_pr.status = "active"
+
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "My Renamed PR"
+        mock_ado_pr.status = "active"
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        mock_app = Mock()
+        result = stored_pr.is_current(mock_app, mock_ado_pr)
+
+        self.assertFalse(result)
+
 
 if __name__ == "__main__":
     unittest.main()

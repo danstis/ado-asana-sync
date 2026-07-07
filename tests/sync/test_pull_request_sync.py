@@ -1399,6 +1399,99 @@ class TestPullRequestSync(unittest.TestCase):
         self.assertTrue(mock_app.ado_git_client.get_pull_request_by_id.called, "PR should be fetched")
 
 
+class TestUpdateExistingPRReviewerTaskTitleNormalization(unittest.TestCase):
+    """Regression tests: update_existing_pr_reviewer_task must be idempotent when ADO title has incidental whitespace."""
+
+    def setUp(self):
+        self.mock_app = Mock()
+        self.mock_app.asana_tag_gid = "tag-abc"
+        self.mock_app.db_lock = Mock()
+        self.mock_app.db_lock.__enter__ = Mock(return_value=self.mock_app.db_lock)
+        self.mock_app.db_lock.__exit__ = Mock(return_value=None)
+
+        self.mock_repository = Mock()
+        self.mock_repository.id = "repo-1"
+        self.mock_repository.name = "testrepo"
+        self.mock_repository.project = Mock()
+        self.mock_repository.project.name = "TestProject"
+
+        self.mock_reviewer = Mock()
+        self.mock_reviewer.vote = 0
+        self.mock_reviewer.id = "reviewer-1"
+
+        self.mock_asana_user = {"gid": "user-1", "name": "Test User"}
+
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_idempotent_when_ado_title_has_trailing_whitespace(self, mock_get_asana_task, mock_update_task):
+        """update_existing_pr_reviewer_task must not trigger repeated updates when ADO title has trailing whitespace."""
+        mock_pr = Mock()
+        mock_pr.pull_request_id = 1
+        mock_pr.title = "My PR  "  # ADO returns trailing whitespace
+        mock_pr.status = "active"
+
+        stored_item = PullRequestItem(
+            ado_pr_id=1,
+            ado_repository_id="repo-1",
+            title="My PR",  # Already stored stripped
+            status="active",
+            url="https://dev.azure.com/org/proj/_git/repo/pullrequest/1",
+            reviewer_gid="user-1",
+            reviewer_name="Test User",
+            asana_gid="task-gid-1",
+            asana_updated="2024-01-01T10:00:00Z",
+            review_status="noVote",
+        )
+
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        update_existing_pr_reviewer_task(
+            self.mock_app, mock_pr, self.mock_repository, self.mock_reviewer, stored_item, self.mock_asana_user, "project-1"
+        )
+
+        mock_update_task.assert_not_called()
+
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    @patch("ado_asana_sync.sync.pr_asana_helpers.get_asana_task")
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_does_update_when_title_genuinely_changes(self, mock_pr_item_get_task, mock_pr_helpers_get_task, mock_update_task):
+        """update_existing_pr_reviewer_task must still update when the ADO title genuinely differs."""
+        mock_pr = Mock()
+        mock_pr.pull_request_id = 1
+        mock_pr.title = "My Renamed PR"
+        mock_pr.status = "active"
+
+        stored_item = PullRequestItem(
+            ado_pr_id=1,
+            ado_repository_id="repo-1",
+            title="My PR",  # Different stored title
+            status="active",
+            url="https://dev.azure.com/org/proj/_git/repo/pullrequest/1",
+            reviewer_gid="user-1",
+            reviewer_name="Test User",
+            asana_gid="task-gid-1",
+            asana_updated="2024-01-01T10:00:00Z",
+            review_status="noVote",
+        )
+
+        task_data = {"modified_at": "2024-01-01T10:00:00Z"}
+        mock_pr_item_get_task.return_value = task_data
+        mock_pr_helpers_get_task.return_value = task_data
+
+        with patch("ado_asana_sync.sync.pr_processor.iso8601_utc", return_value="2024-01-02T00:00:00Z"):
+            update_existing_pr_reviewer_task(
+                self.mock_app,
+                mock_pr,
+                self.mock_repository,
+                self.mock_reviewer,
+                stored_item,
+                self.mock_asana_user,
+                "project-1",
+            )
+
+        mock_update_task.assert_called_once()
+
+
 class TestPullRequestSyncFacadeCompatibility(unittest.TestCase):
     """Verify the pull_request_sync facade exports the expected public surface."""
 
