@@ -2,6 +2,7 @@
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff"
   },
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
   "python.analysis.typeCheckingMode": "off",
   "cSpell.words": ["msrest", "pytz", "rtype", "timezones", "tinydb", "VSTS"],
   "git.branchProtection": ["main"],
