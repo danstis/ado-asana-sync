@@ -1,13 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
-  ],
-  "packageRules": [
-    {
-      "matchDepTypes": ["action"],
-      "pinDigests": false
-    }
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "helpers:githubDigestChangelogs"
   ],
   "separateMajorMinor": true,
   "separateMultipleMajor": true
