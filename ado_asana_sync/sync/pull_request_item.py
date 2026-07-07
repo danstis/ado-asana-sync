@@ -54,6 +54,7 @@ class PullRequestItem:
     assignee_gid: Optional[str] = None
 
     def __post_init__(self) -> None:
+        self.title = self.title.strip() if isinstance(self.title, str) else self.title
         self.processing_state = self.processing_state or "open"
         if not self.validate_data_consistency():
             logger, _ = setup_logging_and_tracing(__name__)

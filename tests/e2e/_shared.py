@@ -8,11 +8,12 @@ patching only external ADO/Asana client boundaries.
 import shutil
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from tests.utils.test_helpers import AsanaApiMockHelper
 
-_RECENT_DATE = "2026-05-30T10:00:00.000Z"
+_RECENT_DATE = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 _OLD_ASANA_DATE = "2025-01-01T10:00:00.000Z"
 _TEST_USER_ASSIGNED = {"displayName": "Test User", "uniqueName": "test@example.com"}
 _ADO_BASE_URL = "https://dev.azure.com/test/project/_workitems/edit"
