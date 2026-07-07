@@ -4,7 +4,15 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run Quality Checks",
+      "label": "uv: sync",
+      "type": "shell",
+      "command": "uv",
+      "args": ["sync", "--dev"],
+      "isBackground": false,
+      "problemMatcher": []
+    },
+    {
+      "label": "uv: check",
       "type": "shell",
       "command": "uv",
       "args": ["run", "check"],
@@ -12,9 +20,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Run Tests",
+      "label": "uv: test",
       "type": "shell",
-      "command": "uv", 
+      "command": "uv",
       "args": ["run", "test"],
       "isBackground": false,
       "problemMatcher": []
