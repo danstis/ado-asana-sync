@@ -34,6 +34,10 @@ Key files:
 
 - `ado_asana_sync/sync/pull_request_sync.py`: Re-export facade for backward compatibility.
 
+- `ado_asana_sync/database/connection.py`: SQLite `Database` and `DatabaseTable` classes exposing `search_by_json_fields`, `update_by_json_fields`, `upsert_by_json_fields`, and `remove_by_json_fields` for index-backed queries.
+
+- `ado_asana_sync/database/migrations.py`: Schema versioning and migration helper mixin (`DatabaseMigrationsMixin`); currently at schema version 3 with indexes on `ado_id`, `asana_gid`, `ado_pr_id`, and `reviewer_gid`.
+
 - `data/projects.json.example`: Example project configuration.
 
 - Write all code in Python.
