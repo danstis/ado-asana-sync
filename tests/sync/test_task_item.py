@@ -489,6 +489,35 @@ class TestTaskItem(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestTaskItemTitleNormalization(unittest.TestCase):
+    """Tests that TaskItem strips whitespace from title and item_type on creation."""
+
+    def test_title_trailing_whitespace_stripped(self):
+        """Title with trailing whitespace is normalized on construction."""
+        task = TaskItem(ado_id=1, ado_rev=1, title="Fix bug  ", item_type="Bug", url="http://test.com")
+        self.assertEqual(task.title, "Fix bug")
+
+    def test_title_leading_whitespace_stripped(self):
+        """Title with leading whitespace is normalized on construction."""
+        task = TaskItem(ado_id=1, ado_rev=1, title="  Fix bug", item_type="Bug", url="http://test.com")
+        self.assertEqual(task.title, "Fix bug")
+
+    def test_item_type_whitespace_stripped(self):
+        """item_type with surrounding whitespace is normalized on construction."""
+        task = TaskItem(ado_id=1, ado_rev=1, title="Fix bug", item_type=" Bug ", url="http://test.com")
+        self.assertEqual(task.item_type, "Bug")
+
+    def test_asana_title_uses_normalized_title(self):
+        """asana_title uses the stripped title to ensure consistent Asana task name lookup."""
+        task = TaskItem(ado_id=42, ado_rev=1, title="Fix login  ", item_type="Bug", url="http://test.com")
+        self.assertEqual(task.asana_title, "Bug 42: Fix login")
+
+    def test_clean_title_unchanged(self):
+        """A title with no extra whitespace is unchanged."""
+        task = TaskItem(ado_id=1, ado_rev=1, title="Fix bug", item_type="Bug", url="http://test.com")
+        self.assertEqual(task.title, "Fix bug")
+
+
 class TestTaskItemDueDateContract(unittest.TestCase):
     """Contract tests for TaskItem due date functionality (TDD - will fail initially)"""
 

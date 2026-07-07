@@ -54,8 +54,8 @@ class TaskItem:
 
         self.ado_id = ado_id
         self.ado_rev = ado_rev
-        self.title = title
-        self.item_type = item_type
+        self.title = title.strip() if isinstance(title, str) else title
+        self.item_type = item_type.strip() if isinstance(item_type, str) else item_type
         self.url = url
         self.asana_gid = asana_gid
         self.asana_updated = asana_updated

@@ -362,6 +362,36 @@ class TestGetAsanaTaskByName(unittest.TestCase):
         # Assert that the result is None
         self.assertIsNone(result)
 
+    def test_task_found_with_trailing_whitespace_in_search_name(self):
+        """Task matched when search name has trailing whitespace."""
+        task_list = [{"name": "Task 1", "gid": "1"}]
+        result = get_asana_task_by_name(task_list, "Task 1  ")
+        self.assertEqual(result, {"name": "Task 1", "gid": "1"})
+
+    def test_task_found_with_leading_whitespace_in_search_name(self):
+        """Task matched when search name has leading whitespace."""
+        task_list = [{"name": "Task 1", "gid": "1"}]
+        result = get_asana_task_by_name(task_list, "  Task 1")
+        self.assertEqual(result, {"name": "Task 1", "gid": "1"})
+
+    def test_task_found_with_trailing_whitespace_in_stored_name(self):
+        """Task matched when the stored Asana task name has trailing whitespace."""
+        task_list = [{"name": "Task 1  ", "gid": "1"}]
+        result = get_asana_task_by_name(task_list, "Task 1")
+        self.assertEqual(result, {"name": "Task 1  ", "gid": "1"})
+
+    def test_task_missing_name_key_is_skipped(self):
+        """Tasks without a name key do not cause an error and are skipped."""
+        task_list = [{"gid": "1"}, {"name": "Task 2", "gid": "2"}]
+        result = get_asana_task_by_name(task_list, "Task 2")
+        self.assertEqual(result, {"name": "Task 2", "gid": "2"})
+
+    def test_task_none_name_is_skipped(self):
+        """Tasks with a None name do not cause an error and are skipped."""
+        task_list = [{"name": None, "gid": "1"}, {"name": "Task 2", "gid": "2"}]
+        result = get_asana_task_by_name(task_list, "Task 2")
+        self.assertEqual(result, {"name": "Task 2", "gid": "2"})
+
 
 class TestReadProjects(unittest.TestCase):
     """Test read_projects function using REAL App instances for true integration testing."""

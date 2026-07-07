@@ -527,3 +527,86 @@ class TestUpdateAsanaPrTaskGroupAssignee(unittest.TestCase):
 
         update_call_args = mock_tasks_api.update_task.call_args[0]
         self.assertEqual(update_call_args[0]["data"]["assignee"], "user-gid-fallback")
+
+
+class TestUpdateExistingGroupReviewerMatchTitleNormalization(unittest.TestCase):
+    """Regression: _update_existing_group_reviewer_match must be idempotent when ADO PR title has incidental whitespace."""
+
+    def _make_stored_item(self, title: str = "My PR") -> PullRequestItem:
+        return PullRequestItem(
+            ado_pr_id=1,
+            ado_repository_id="repo-1",
+            title=title,
+            status="active",
+            url="https://dev.azure.com/org/proj/_git/repo/pullrequest/1",
+            reviewer_gid="group:[Proj]\\Reviewers",
+            reviewer_name="Group: [Proj]\\Reviewers",
+            asana_gid="task-gid-group",
+            asana_updated="2024-01-01T10:00:00Z",
+            review_status="noVote",
+            assignee_gid=None,
+        )
+
+    def _make_pr_with_title(self, title: str):
+        return RealObjectBuilder.create_real_ado_pull_request(pr_id=1, title=title, status="active")
+
+    def _make_reviewer(self):
+        return RealObjectBuilder.create_real_ado_group_reviewer(display_name="[Proj]\\Reviewers", vote=0)
+
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    def test_idempotent_when_ado_title_has_trailing_whitespace(self, mock_update_task):
+        """_update_existing_group_reviewer_match is a no-op when live ADO title only differs by trailing whitespace."""
+        from ado_asana_sync.sync.pr_processor import _update_existing_group_reviewer_match
+
+        mock_app = MagicMock()
+        mock_app.asana_tag_gid = "tag-gid"
+
+        stored_item = self._make_stored_item("My PR")  # stored title is already stripped
+        pr = self._make_pr_with_title("My PR  ")  # ADO returns trailing whitespace
+        reviewer = self._make_reviewer()
+
+        _update_existing_group_reviewer_match(
+            mock_app, stored_item, pr, reviewer, assignee_gid=None, asana_project_tasks=[], asana_project="proj-gid"
+        )
+
+        mock_update_task.assert_not_called()
+
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    def test_idempotent_when_ado_title_has_leading_whitespace(self, mock_update_task):
+        """_update_existing_group_reviewer_match is a no-op when live ADO title only differs by leading whitespace."""
+        from ado_asana_sync.sync.pr_processor import _update_existing_group_reviewer_match
+
+        mock_app = MagicMock()
+        mock_app.asana_tag_gid = "tag-gid"
+
+        stored_item = self._make_stored_item("My PR")
+        pr = self._make_pr_with_title("  My PR")  # leading whitespace
+        reviewer = self._make_reviewer()
+
+        _update_existing_group_reviewer_match(
+            mock_app, stored_item, pr, reviewer, assignee_gid=None, asana_project_tasks=[], asana_project="proj-gid"
+        )
+
+        mock_update_task.assert_not_called()
+
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    def test_does_update_when_title_genuinely_changes(self, mock_update_task):
+        """_update_existing_group_reviewer_match updates Asana when the ADO PR title genuinely differs."""
+        from unittest.mock import patch as inner_patch
+
+        from ado_asana_sync.sync.pr_processor import _update_existing_group_reviewer_match
+
+        mock_app = MagicMock()
+        mock_app.asana_tag_gid = "tag-gid"
+        mock_update_task.return_value = None
+
+        stored_item = self._make_stored_item("My PR")
+        pr = self._make_pr_with_title("My Renamed PR")
+        reviewer = self._make_reviewer()
+
+        with inner_patch("ado_asana_sync.sync.pr_processor.iso8601_utc", return_value="2024-01-02T00:00:00Z"):
+            _update_existing_group_reviewer_match(
+                mock_app, stored_item, pr, reviewer, assignee_gid=None, asana_project_tasks=[], asana_project="proj-gid"
+            )
+
+        mock_update_task.assert_called_once()

@@ -557,5 +557,94 @@ class TestPullRequestItem(unittest.TestCase):
         self.assertEqual(result.reviewer_gid, "reviewer-789")
 
 
+class TestPullRequestItemTitleNormalization(unittest.TestCase):
+    """Tests that PullRequestItem strips whitespace from title on creation."""
+
+    def _make_pr(self, title: str) -> PullRequestItem:
+        return PullRequestItem(
+            ado_pr_id=1,
+            ado_repository_id="repo-1",
+            title=title,
+            status="active",
+            url="https://dev.azure.com/org/proj/_git/repo/pullrequest/1",
+            reviewer_gid="gid-1",
+            reviewer_name="Reviewer",
+        )
+
+    def test_title_trailing_whitespace_stripped(self):
+        """Title with trailing whitespace is normalized on construction."""
+        pr = self._make_pr("My PR  ")
+        self.assertEqual(pr.title, "My PR")
+
+    def test_title_leading_whitespace_stripped(self):
+        """Title with leading whitespace is normalized on construction."""
+        pr = self._make_pr("  My PR")
+        self.assertEqual(pr.title, "My PR")
+
+    def test_asana_title_uses_normalized_title(self):
+        """asana_title uses the stripped title to ensure consistent Asana task name lookup."""
+        pr = self._make_pr("My PR  ")
+        self.assertEqual(pr.asana_title, "Pull Request 1: My PR (Reviewer)")
+
+    def test_clean_title_unchanged(self):
+        """A title with no extra whitespace is unchanged."""
+        pr = self._make_pr("My PR")
+        self.assertEqual(pr.title, "My PR")
+
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_is_current_true_when_ado_title_has_trailing_whitespace(self, mock_get_asana_task):
+        """is_current returns True when the live ADO title has trailing whitespace but stored title is stripped."""
+        stored_pr = self._make_pr("My PR")
+        stored_pr.asana_gid = "gid-999"
+        stored_pr.asana_updated = "2024-01-01T10:00:00Z"
+        stored_pr.status = "active"
+
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "My PR  "  # trailing whitespace — same semantic title
+        mock_ado_pr.status = "active"
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        mock_app = Mock()
+        result = stored_pr.is_current(mock_app, mock_ado_pr)
+
+        self.assertTrue(result)
+
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_is_current_true_when_ado_title_has_leading_whitespace(self, mock_get_asana_task):
+        """is_current returns True when the live ADO title has leading whitespace but stored title is stripped."""
+        stored_pr = self._make_pr("My PR")
+        stored_pr.asana_gid = "gid-999"
+        stored_pr.asana_updated = "2024-01-01T10:00:00Z"
+        stored_pr.status = "active"
+
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "  My PR"  # leading whitespace
+        mock_ado_pr.status = "active"
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        mock_app = Mock()
+        result = stored_pr.is_current(mock_app, mock_ado_pr)
+
+        self.assertTrue(result)
+
+    @patch("ado_asana_sync.sync.pull_request_item.get_asana_task")
+    def test_is_current_false_when_title_genuinely_changed(self, mock_get_asana_task):
+        """is_current correctly returns False when the ADO title has actually changed (not just whitespace)."""
+        stored_pr = self._make_pr("My PR")
+        stored_pr.asana_gid = "gid-999"
+        stored_pr.asana_updated = "2024-01-01T10:00:00Z"
+        stored_pr.status = "active"
+
+        mock_ado_pr = Mock()
+        mock_ado_pr.title = "My Renamed PR"
+        mock_ado_pr.status = "active"
+        mock_get_asana_task.return_value = {"modified_at": "2024-01-01T10:00:00Z"}
+
+        mock_app = Mock()
+        result = stored_pr.is_current(mock_app, mock_ado_pr)
+
+        self.assertFalse(result)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -67,8 +67,10 @@ def get_asana_project_tasks(app: App, asana_project: str | None) -> list[dict]:
 
 def get_asana_task_by_name(task_list: list[dict], task_name: str) -> dict | None:
     """Returns the entire task dict for the named Asana task from the given list of tasks."""
+    normalized_name = task_name.strip()
     for t in task_list:
-        if t["name"] == task_name:
+        name = t.get("name")
+        if isinstance(name, str) and name.strip() == normalized_name:
             return t
     return None
 
