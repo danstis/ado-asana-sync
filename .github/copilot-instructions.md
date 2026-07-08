@@ -42,6 +42,8 @@ Key files:
 
 - Write all code in Python.
 
+- Keep every function at or below a cognitive complexity of 15. This is a design guideline for how you write code, separate from Ruff's enforced cyclomatic complexity limit of 10 below.
+
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 
 - Enforce markdown formatting with `mdformat` for all `.md` files.
