@@ -123,6 +123,27 @@ def _record_task_action(app: App, action: str, ado_id: int, title: str) -> None:
         report.record_task_close(ado_id=ado_id, title=title)
 
 
+def _sync_projects_concurrently(app: App, projects: list, thread_count: int) -> None:
+    """Submit each project to a thread pool and log any exception it raises.
+
+    Consuming futures via as_completed/result() is required to surface
+    exceptions raised in worker threads; executor.map's lazy iterator
+    would otherwise trap them silently.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=thread_count) as executor:
+        future_to_project = {executor.submit(sync_project, app, project): project for project in projects}
+        for future in concurrent.futures.as_completed(future_to_project):
+            project = future_to_project[future]
+            try:
+                future.result()
+            except Exception as exception:  # pylint: disable=broad-exception-caught
+                _LOGGER.error(
+                    "Error syncing project %s: %s",
+                    project.get("adoProjectName", "unknown"),
+                    exception,
+                )
+
+
 def start_sync(app: App) -> None:
     """Start the synchronization process between Azure DevOps and Asana.
 
@@ -165,11 +186,7 @@ def start_sync(app: App) -> None:
                 len(projects),
                 optimal_thread_count,
             )
-            with concurrent.futures.ThreadPoolExecutor(max_workers=optimal_thread_count) as executor:
-                try:
-                    executor.map(sync_project, [app] * len(projects), projects)
-                except Exception as exception:  # pylint: disable=broad-exception-caught
-                    _LOGGER.error("Error in sync_project thread: %s", exception)
+            _sync_projects_concurrently(app, projects, optimal_thread_count)
 
             if _is_dry_run(app):
                 _get_dry_run_report(app).log_summary()

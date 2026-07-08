@@ -1,3 +1,4 @@
+import concurrent.futures
 import unittest
 from io import StringIO
 from types import SimpleNamespace
@@ -20,9 +21,13 @@ class _ExecutorStub:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def map(self, func, apps, projects):
-        for app, project in zip(apps, projects, strict=False):
-            func(app, project)
+    def submit(self, func, *args, **kwargs):
+        future = concurrent.futures.Future()
+        try:
+            future.set_result(func(*args, **kwargs))
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            future.set_exception(exc)
+        return future
 
 
 class TestRuntimeModes(unittest.TestCase):
@@ -62,6 +67,53 @@ class TestRuntimeModes(unittest.TestCase):
 
         mock_read_projects.assert_called_once_with(app)
         mock_sync_project.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    @patch("ado_asana_sync.sync.sync.sleep")
+    @patch("ado_asana_sync.sync.sync.sync_project")
+    @patch(
+        "ado_asana_sync.sync.sync.read_projects",
+        return_value=[
+            {"adoProjectName": "A", "adoTeamName": "team-a"},
+            {"adoProjectName": "B", "adoTeamName": "team-b"},
+        ],
+    )
+    @patch("ado_asana_sync.sync.sync.create_tag_if_not_existing", return_value="tag-gid")
+    @patch("ado_asana_sync.sync.sync.get_asana_workspace", return_value="workspace-gid")
+    @patch("ado_asana_sync.sync.sync._LOGGER")
+    def test_start_sync_logs_exception_from_failing_project(
+        self,
+        mock_logger,
+        _mock_workspace,
+        _mock_tag,
+        _mock_read_projects,
+        mock_sync_project,
+        mock_sleep,
+    ):
+        app = MagicMock()
+        app.asana_workspace_name = "workspace"
+        app.asana_tag_name = "synced"
+        app.run_once = True
+        app.dry_run = False
+        app.sleep_time = 30
+
+        def sync_project_side_effect(_app, project):
+            if project["adoProjectName"] == "A":
+                raise RuntimeError("boom")
+
+        mock_sync_project.side_effect = sync_project_side_effect
+
+        start_sync(app)
+
+        self.assertEqual(mock_sync_project.call_count, 2)
+        logged_failing_project = any(
+            "A" in call_args.args and isinstance(call_args.args[-1], RuntimeError)
+            for call_args in mock_logger.error.call_args_list
+        )
+        self.assertTrue(
+            logged_failing_project,
+            f"Expected an error log mentioning project 'A' and the RuntimeError, got: {mock_logger.error.call_args_list}",
+        )
         mock_sleep.assert_not_called()
 
     @patch("ado_asana_sync.sync.sync.sleep", side_effect=[None, RuntimeError("stop after second cycle")])
