@@ -194,3 +194,163 @@ class TestSyncIntegration(unittest.TestCase):
 
         finally:
             app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_update_existing_task_does_not_double_fetch(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """update_existing_task must reuse the caller-provided ado_task and fetch the Asana task only once."""
+        from ado_asana_sync.sync.sync import update_existing_task
+        from ado_asana_sync.sync.task_item import TaskItem
+
+        mock_dirname.return_value = self.temp_dir
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
+
+        app = TestDataBuilder.create_real_app(self.temp_dir)
+        app.connect()
+
+        mock_wit_client = MagicMock()
+        app.ado_wit_client = mock_wit_client
+
+        ado_work_item = TestDataBuilder.create_ado_work_item(item_id=2001, title="Updated Title", work_item_type="Task")
+        ado_work_item.rev = 2
+
+        existing_match = TaskItem(
+            ado_id=2001,
+            ado_rev=1,
+            title="Old Title",
+            item_type="Task",
+            url="http://ado/2001",
+            asana_gid="existing_gid",
+            asana_updated="2025-01-01T10:00:00.000Z",
+            created_date="2025-01-01T10:00:00.000Z",
+            updated_date="2025-01-01T10:00:00.000Z",
+        )
+
+        mock_asana_task = TestDataBuilder.create_asana_task_data(gid="existing_gid", name="Task 2001: Old Title")
+        asana_helper = AsanaApiMockHelper()
+        mock_tasks_api = asana_helper.create_tasks_api_mock(tasks=[mock_asana_task], updated_task=mock_asana_task)
+
+        try:
+            with ExitStack() as stack:
+                for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
+                    stack.enter_context(patch_ctx)
+                with patch("ado_asana_sync.sync.sync.get_asana_task", return_value=mock_asana_task) as mock_get_asana_task:
+                    update_existing_task(app, ado_work_item, existing_match, None, "AsanaProject")
+
+                mock_wit_client.get_work_item.assert_not_called()
+                mock_get_asana_task.assert_called_once()
+
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_process_closed_items_single_asana_fetch(self, mock_asana_client, mock_ado_connection, mock_dirname):
+        """process_closed_items must fetch the Asana task once and thread it into is_current and update_task_if_needed."""
+        from ado_asana_sync.sync.sync import process_closed_items
+
+        mock_dirname.return_value = self.temp_dir
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
+
+        from datetime import datetime, timezone
+
+        recent_timestamp = datetime.now(timezone.utc).isoformat()
+
+        app = TestDataBuilder.create_real_app(self.temp_dir)
+        app.connect()
+        app.matches.insert(
+            {
+                "ado_id": 3001,
+                "ado_rev": 1,
+                "title": "Old Title",
+                "item_type": "Task",
+                "url": "http://ado/3001",
+                "asana_gid": "existing_gid",
+                "asana_updated": "2025-01-01T10:00:00.000Z",
+                "created_date": recent_timestamp,
+                "updated_date": recent_timestamp,
+            }
+        )
+        all_tasks = app.matches.all()
+
+        mock_wit_client = MagicMock()
+        app.ado_wit_client = mock_wit_client
+        ado_work_item = TestDataBuilder.create_ado_work_item(item_id=3001, title="New Title", work_item_type="Task")
+        ado_work_item.rev = 2
+        mock_wit_client.get_work_item.return_value = ado_work_item
+
+        mock_asana_task = TestDataBuilder.create_asana_task_data(gid="existing_gid", name="Task 3001: Old Title")
+        asana_helper = AsanaApiMockHelper()
+        mock_tasks_api = asana_helper.create_tasks_api_mock(tasks=[mock_asana_task], updated_task=mock_asana_task)
+
+        try:
+            with ExitStack() as stack:
+                for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
+                    stack.enter_context(patch_ctx)
+                with patch("ado_asana_sync.sync.sync.get_asana_task", return_value=mock_asana_task) as mock_get_asana_task:
+                    process_closed_items(app, all_tasks, set(), [], "AsanaProject")
+
+                self.assertEqual(mock_wit_client.get_work_item.call_count, 1)
+                mock_get_asana_task.assert_called_once()
+
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_process_closed_items_missing_asana_task_does_not_refetch(
+        self, mock_asana_client, mock_ado_connection, mock_dirname
+    ):
+        """When the pre-fetched Asana task is genuinely missing (None), update_task_if_needed must not fetch again."""
+        from ado_asana_sync.sync.sync import process_closed_items
+
+        mock_dirname.return_value = self.temp_dir
+        mock_ado_connection.return_value = MagicMock()
+        mock_asana_client.return_value = MagicMock()
+
+        from datetime import datetime, timezone
+
+        recent_timestamp = datetime.now(timezone.utc).isoformat()
+
+        app = TestDataBuilder.create_real_app(self.temp_dir)
+        app.connect()
+        app.matches.insert(
+            {
+                "ado_id": 3002,
+                "ado_rev": 1,
+                "title": "Old Title",
+                "item_type": "Task",
+                "url": "http://ado/3002",
+                "asana_gid": "deleted_gid",
+                "asana_updated": "2025-01-01T10:00:00.000Z",
+                "created_date": recent_timestamp,
+                "updated_date": recent_timestamp,
+            }
+        )
+        all_tasks = app.matches.all()
+
+        mock_wit_client = MagicMock()
+        app.ado_wit_client = mock_wit_client
+        ado_work_item = TestDataBuilder.create_ado_work_item(item_id=3002, title="New Title", work_item_type="Task")
+        ado_work_item.rev = 2
+        mock_wit_client.get_work_item.return_value = ado_work_item
+
+        asana_helper = AsanaApiMockHelper()
+        mock_tasks_api = asana_helper.create_tasks_api_mock()
+
+        try:
+            with ExitStack() as stack:
+                for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
+                    stack.enter_context(patch_ctx)
+                with patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None) as mock_get_asana_task:
+                    process_closed_items(app, all_tasks, set(), [], "AsanaProject")
+
+                mock_get_asana_task.assert_called_once()
+
+        finally:
+            app.close()

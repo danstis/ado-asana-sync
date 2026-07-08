@@ -413,6 +413,73 @@ class TestTaskItem(unittest.TestCase):
         # Should return False because asana_task will be None
         self.assertFalse(result)
 
+    def test_is_current_uses_provided_ado_task_without_refetch(self):
+        """Test is_current uses a caller-supplied ado_task instead of re-fetching it."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+        mock_asana_task = {"modified_at": "2023-12-01T10:00:00Z"}
+
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z",
+        )
+
+        result = task_item.is_current(app, ado_task=mock_ado_task, asana_task=mock_asana_task)
+
+        self.assertTrue(result)
+        app.ado_wit_client.get_work_item.assert_not_called()
+
+    def test_is_current_uses_provided_asana_task_without_refetch(self):
+        """Test is_current uses a caller-supplied asana_task instead of calling get_asana_task."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+        mock_asana_task = {"modified_at": "2023-12-01T10:00:00Z"}
+
+        task_item = TaskItem(
+            ado_id=123,
+            ado_rev=5,
+            title="Test Task",
+            item_type="Bug",
+            url="https://example.com/123",
+            asana_gid="asana-123",
+            asana_updated="2023-12-01T10:00:00Z",
+        )
+
+        with patch("ado_asana_sync.sync.task_item.get_asana_task") as mock_get_asana_task:
+            result = task_item.is_current(app, ado_task=mock_ado_task, asana_task=mock_asana_task)
+
+        self.assertTrue(result)
+        mock_get_asana_task.assert_not_called()
+
+    def test_is_current_provided_asana_task_none_does_not_refetch(self):
+        """A caller-supplied asana_task of None (task genuinely missing) must not trigger a re-fetch."""
+        app = MagicMock()
+        app.ado_wit_client = MagicMock()
+
+        mock_ado_task = MagicMock()
+        mock_ado_task.rev = 5
+
+        task_item = TaskItem(
+            ado_id=123, ado_rev=5, title="Test Task", item_type="Bug", url="https://example.com/123", asana_gid="asana-123"
+        )
+
+        with patch("ado_asana_sync.sync.task_item.get_asana_task") as mock_get_asana_task:
+            result = task_item.is_current(app, ado_task=mock_ado_task, asana_task=None)
+
+        self.assertFalse(result)
+        mock_get_asana_task.assert_not_called()
+
     def test_equality_with_different_objects(self):
         """Test equality comparison with different object types."""
         task_item = TaskItem(ado_id=123, ado_rev=1, title="Test Task", item_type="Bug", url="https://example.com/123")
