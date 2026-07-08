@@ -51,6 +51,7 @@ Reserve `.all()` for operations that genuinely require every row (e.g. bulk expo
 ### Coding Conventions
 
 - Write all code in Python.
+- Keep every function at or below a cognitive complexity of 15.
 - Run tools using `uv run`.
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 - Adhere to formatting rules defined in `.editorconfig`.
@@ -164,7 +165,7 @@ If `GROUP_REVIEWER_STRATEGY=default_user` but `GROUP_REVIEWER_DEFAULT_USER` is u
 
 ## Quality & Tooling (use tox.ini settings)
 
-- Linting: `uv run lint`, Formatting check: `uv run format-check` (max line length 127, complexity 10)
+- Linting: `uv run lint`, Formatting check: `uv run format-check` (max line length 127, complexity 15)
 - Types: `uv run type-check`
 - All at once: `uv run check` (runs in parallel)
 - Tests + coverage: `uv run test` (coverage enforced ≥ 60%)

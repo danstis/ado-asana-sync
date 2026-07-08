@@ -42,6 +42,8 @@ Key files:
 
 - Write all code in Python.
 
+- Keep every function at or below a cognitive complexity of 15.
+
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 
 - Enforce markdown formatting with `mdformat` for all `.md` files.
@@ -129,7 +131,7 @@ Every integration test MUST:
 
 All linting and code quality tools are configured in `pyproject.toml` and orchestrated via Python scripts:
 
-- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run lint` or `uv run format-check`
+- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 15 - Run with `uv run lint` or `uv run format-check`
 - **pytest**: Includes coverage reporting with branch coverage - Run with `uv run test`
 - **mypy**: Static type checking with missing import ignoring - Run with `uv run type-check`
 - **All together**: Run all quality checks in parallel - Run with `uv run check`

@@ -46,6 +46,7 @@ For **hot-path queries** that filter by indexed fields (`ado_id`, `asana_gid`, `
 Reserve `.all()` for operations that genuinely require every row (e.g. bulk exports, test assertions on full state). Reserve `.search(query_func)` for complex predicates that cannot be expressed as simple equality conditions on indexed fields.
 
 - Write all code in Python.
+- Keep every function at or below a cognitive complexity of 15.
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 - Enforce markdown formatting with `mdformat` for all `.md` files.
 - Add dependencies only with `uv add <dependency>`.
@@ -194,7 +195,7 @@ Always justify internal mocking in test comments and prefer real object approach
 
 All linting and code quality tools are configured in `pyproject.toml` and orchestrated via Python scripts:
 
-- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run lint` or `uv run format-check` (scans entire project, respects `.gitignore`)
+- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 15 - Run with `uv run lint` or `uv run format-check` (scans entire project, respects `.gitignore`)
 - **pytest**: Includes coverage reporting with branch coverage - Run with `uv run test`
 - **mypy**: Static type checking with missing import ignoring - Run with `uv run type-check`
 - **All together**: Run all quality checks in parallel - Run with `uv run check`
