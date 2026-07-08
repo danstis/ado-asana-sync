@@ -21,7 +21,7 @@
   - `data/projects.json.example`: Project config example.
 - Run tools using `uv run <tool and args>`.
 - Write Python code only.
-- Keep every function at or below a cyclomatic complexity of 15 (enforced by Ruff's McCabe check, `C901`).
+- Keep every function at or below a cognitive complexity of 15. This is a design guideline for how you write code, separate from Ruff's enforced cyclomatic complexity limit of 10.
 - Use `uv run ruff` for linting, formatting, and security checks, plus `.editorconfig`.
 - Add dependencies with `uv add <dependency>`.
 - Always update the readme and other documentation based on the changes made.

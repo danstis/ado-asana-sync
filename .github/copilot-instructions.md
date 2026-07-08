@@ -42,7 +42,7 @@ Key files:
 
 - Write all code in Python.
 
-- Keep every function at or below a cyclomatic complexity of 15 (enforced by Ruff's McCabe check, `C901`).
+- Keep every function at or below a cognitive complexity of 15. This is a design guideline for how you write code, separate from Ruff's enforced cyclomatic complexity limit of 10 below.
 
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 
@@ -131,7 +131,7 @@ Every integration test MUST:
 
 All linting and code quality tools are configured in `pyproject.toml` and orchestrated via Python scripts:
 
-- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 15 - Run with `uv run lint` or `uv run format-check`
+- **ruff**: Handles linting, formatting, and security checks with line length 127 and max complexity 10 - Run with `uv run lint` or `uv run format-check`
 - **pytest**: Includes coverage reporting with branch coverage - Run with `uv run test`
 - **mypy**: Static type checking with missing import ignoring - Run with `uv run type-check`
 - **All together**: Run all quality checks in parallel - Run with `uv run check`

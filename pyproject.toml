@@ -56,7 +56,7 @@ ignore = [
 "tests/sync/test_sync.py" = ["F401"]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 15
+max-complexity = 10
 
 [tool.pytest.ini_options]
 filterwarnings = [
