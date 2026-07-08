@@ -46,7 +46,7 @@ For **hot-path queries** that filter by indexed fields (`ado_id`, `asana_gid`, `
 Reserve `.all()` for operations that genuinely require every row (e.g. bulk exports, test assertions on full state). Reserve `.search(query_func)` for complex predicates that cannot be expressed as simple equality conditions on indexed fields.
 
 - Write all code in Python.
-- Keep every function at or below a cognitive complexity of 15.
+- Keep every function at or below a cyclomatic complexity of 15 (enforced by Ruff's McCabe check, `C901`).
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 - Enforce markdown formatting with `mdformat` for all `.md` files.
 - Add dependencies only with `uv add <dependency>`.

@@ -51,7 +51,7 @@ Reserve `.all()` for operations that genuinely require every row (e.g. bulk expo
 ### Coding Conventions
 
 - Write all code in Python.
-- Keep every function at or below a cognitive complexity of 15.
+- Keep every function at or below a cyclomatic complexity of 15 (enforced by Ruff's McCabe check, `C901`).
 - Run tools using `uv run`.
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 - Adhere to formatting rules defined in `.editorconfig`.

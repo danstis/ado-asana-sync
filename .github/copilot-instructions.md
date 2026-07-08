@@ -42,7 +42,7 @@ Key files:
 
 - Write all code in Python.
 
-- Keep every function at or below a cognitive complexity of 15.
+- Keep every function at or below a cyclomatic complexity of 15 (enforced by Ruff's McCabe check, `C901`).
 
 - Enforce linting and formatting with `ruff` (configured in `pyproject.toml`).
 
