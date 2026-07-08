@@ -10,6 +10,8 @@ from .app import App
 from .asana import get_asana_task
 from .utils import validate_due_date
 
+_UNSET = object()
+
 
 class TaskItem:
     """
@@ -197,24 +199,33 @@ class TaskItem:
         with app.db_lock:
             app.matches.upsert_by_json_fields(task_data, {"ado_id": self.ado_id})
 
-    def is_current(self, app: App) -> bool:
+    def is_current(self, app: App, ado_task: Any = None, asana_task: Any = _UNSET) -> bool:
         """
         Check if the current TaskItem is up-to-date with its corresponding tasks in Azure DevOps (ADO) and Asana.
 
-        This method retrieves the corresponding tasks in ADO and Asana using the stored IDs, and compares their revision number
-        and last updated time with the stored values. If either the ADO task's revision number or the Asana task's last updated
-        time is different from the stored values, the TaskItem is considered not current.
+        This method compares the ADO task's revision number and the Asana task's last updated time with the stored
+        values. If either is different from the stored values, the TaskItem is considered not current.
+
+        Callers that already fetched the ADO work item and/or Asana task in the current sync cycle should pass them
+        in via `ado_task` / `asana_task` to avoid a redundant API call. When omitted, they are fetched using the
+        stored IDs, matching the previous behavior.
 
         Args:
-            a (App): The App instance.
+            app (App): The App instance.
+            ado_task: The already-fetched ADO work item, or None to fetch it using `self.ado_id`.
+            asana_task: The already-fetched Asana task (may legitimately be None if it was fetched and not found).
+                Omit entirely to fetch it using `self.asana_gid`.
 
         Returns:
             bool: True if the TaskItem is current, False otherwise.
         """
-        if app.ado_wit_client is None:
-            return False
-        ado_task = app.ado_wit_client.get_work_item(self.ado_id)
-        asana_task = get_asana_task(app, self.asana_gid) if self.asana_gid else None
+        if ado_task is None:
+            if app.ado_wit_client is None:
+                return False
+            ado_task = app.ado_wit_client.get_work_item(self.ado_id)
+
+        if asana_task is _UNSET:
+            asana_task = get_asana_task(app, self.asana_gid) if self.asana_gid else None
 
         if not ado_task or not asana_task:
             return False

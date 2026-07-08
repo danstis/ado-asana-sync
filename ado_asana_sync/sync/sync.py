@@ -646,12 +646,12 @@ def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tas
 
 def update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=None):
     """Updates an existing Asana task based on ADO changes."""
-    if existing_match.is_current(app):
+    asana_task = get_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
+    if existing_match.is_current(app, ado_task=ado_task, asana_task=asana_task):
         _LOGGER.info("%s:task is already up to date", existing_match.asana_title)
         return
 
     _LOGGER.info("%s:task has been updated, updating task", existing_match.asana_title)
-    asana_task = get_asana_task(app, existing_match.asana_gid)
     if asana_task is None:
         _LOGGER.error("No Asana task found with gid: %s", existing_match.asana_gid)
         return
@@ -706,7 +706,8 @@ def process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_
             except Exception as e:  # pylint: disable=broad-exception-caught
                 _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
                 continue
-            if existing_match.is_current(app):
+            asana_task = get_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
+            if existing_match.is_current(app, ado_task=ado_task, asana_task=asana_task):
                 _LOGGER.info(
                     "%s:Task is up to date",
                     existing_match.asana_title,
@@ -717,7 +718,7 @@ def process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_
                 "%s:Task has been updated, updating task",
                 existing_match.asana_title,
             )
-            update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project)
+            update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project, asana_task=asana_task)
 
 
 def is_item_older_than_threshold(wi):
@@ -751,9 +752,10 @@ def get_existing_match(app, wi):
     return existing_match
 
 
-def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project):
+def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project, asana_task=None):
     """Updates an Asana task if needed based on the provided Azure DevOps task."""
-    asana_task = get_asana_task(app, existing_match.asana_gid)
+    if asana_task is None:
+        asana_task = get_asana_task(app, existing_match.asana_gid)
     ado_assigned = get_task_user(ado_task)
     asana_matched_user = matching_user(asana_users, ado_assigned)
     if asana_task is None:
