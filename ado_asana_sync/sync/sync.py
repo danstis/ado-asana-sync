@@ -166,10 +166,20 @@ def start_sync(app: App) -> None:
                 optimal_thread_count,
             )
             with concurrent.futures.ThreadPoolExecutor(max_workers=optimal_thread_count) as executor:
-                try:
-                    executor.map(sync_project, [app] * len(projects), projects)
-                except Exception as exception:  # pylint: disable=broad-exception-caught
-                    _LOGGER.error("Error in sync_project thread: %s", exception)
+                future_to_project = {executor.submit(sync_project, app, project): project for project in projects}
+                # Consuming futures via as_completed/result() is required to surface
+                # exceptions raised in worker threads; executor.map's lazy iterator
+                # would otherwise trap them silently.
+                for future in concurrent.futures.as_completed(future_to_project):
+                    project = future_to_project[future]
+                    try:
+                        future.result()
+                    except Exception as exception:  # pylint: disable=broad-exception-caught
+                        _LOGGER.error(
+                            "Error syncing project %s: %s",
+                            project.get("adoProjectName", "unknown"),
+                            exception,
+                        )
 
             if _is_dry_run(app):
                 _get_dry_run_report(app).log_summary()
