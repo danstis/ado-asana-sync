@@ -55,6 +55,9 @@ _CLOSED_STATES = {state.strip() for state in os.environ.get("CLOSED_STATES", "Cl
 _THREAD_COUNT = max(1, int(os.environ.get("THREAD_COUNT", 8)))
 # _MAX_DEPTH defines the maximum depth of subtasks to sync
 _MAX_DEPTH = int(os.environ.get("MAX_DEPTH", 3))
+# _UNSET distinguishes "caller did not supply asana_task" from "caller already fetched it and it is None",
+# so a genuinely missing Asana task is not re-fetched.
+_UNSET = object()
 
 # ADO field constants
 ADO_STATE = "System.State"
@@ -752,9 +755,9 @@ def get_existing_match(app, wi):
     return existing_match
 
 
-def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project, asana_task=None):
+def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_project, asana_task=_UNSET):
     """Updates an Asana task if needed based on the provided Azure DevOps task."""
-    if asana_task is None:
+    if asana_task is _UNSET:
         asana_task = get_asana_task(app, existing_match.asana_gid)
     ado_assigned = get_task_user(ado_task)
     asana_matched_user = matching_user(asana_users, ado_assigned)
