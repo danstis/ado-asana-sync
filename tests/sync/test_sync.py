@@ -3,11 +3,13 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from asana.rest import ApiException
+from azure.devops.v7_0.work.models import WorkItemLink, WorkItemReference
 from azure.devops.v7_0.work_item_tracking.models import WorkItem
 
 from ado_asana_sync.sync.sync import (
     DEFAULT_SYNC_THRESHOLD,
     ADOAssignedUser,
+    _extract_work_item_id,
     _get_deactivated_user_gids,
     _parse_sync_threshold,
     cleanup_invalid_work_items,
@@ -22,6 +24,7 @@ from ado_asana_sync.sync.sync import (
     get_task_user,
     is_item_older_than_threshold,
     matching_user,
+    process_backlog_items,
     read_projects,
     remove_mapping,
     sync_item_and_children,
@@ -294,6 +297,38 @@ class TestMatchingUser(unittest.TestCase):
         result = matching_user([user], ado_user)
 
         self.assertEqual(result, user)
+
+
+class TestExtractWorkItemId(unittest.TestCase):
+    def test_extract_work_item_id_with_work_item_link(self):
+        wi = WorkItemLink(target=WorkItemReference(id=42))
+        self.assertEqual(_extract_work_item_id(wi), 42)
+
+    def test_extract_work_item_id_with_work_item_reference_direct(self):
+        wi = WorkItemReference(id=99)
+        self.assertEqual(_extract_work_item_id(wi), 99)
+
+    def test_extract_work_item_id_with_none_target(self):
+        wi = WorkItemLink()
+        self.assertIsNone(_extract_work_item_id(wi))
+
+    def test_extract_work_item_id_with_no_attributes(self):
+        wi = object()
+        self.assertIsNone(_extract_work_item_id(wi))
+
+
+class TestProcessBacklogItemsSkipsUnextractableIds(unittest.TestCase):
+    @patch("ado_asana_sync.sync.sync.sync_item_and_children")
+    def test_process_backlog_items_skips_items_with_no_extractable_id(self, mock_sync_item_and_children):
+        ado_items = MagicMock()
+        ado_items.work_items = [WorkItemLink()]
+
+        with patch("ado_asana_sync.sync.sync._LOGGER") as mock_logger:
+            processed_ids = process_backlog_items(MagicMock(), ado_items, [], [], "proj")
+
+        mock_sync_item_and_children.assert_not_called()
+        mock_logger.warning.assert_called_once()
+        self.assertEqual(processed_ids, set())
 
 
 class TestSyncItemAndChildrenLogging(unittest.TestCase):

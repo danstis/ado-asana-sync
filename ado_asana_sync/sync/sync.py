@@ -75,6 +75,14 @@ CACHE_VALIDITY_DURATION = timedelta(hours=24)
 _CONFIG_IS_NONE_MSG = "app.config is None"
 
 
+def _extract_work_item_id(wi) -> int | None:
+    """Extract a work item ID from either a WorkItemLink or WorkItemReference."""
+    target = getattr(wi, "target", None)
+    if target is not None:
+        return getattr(target, "id", None)
+    return getattr(wi, "id", None)
+
+
 def _parse_sync_threshold(value: str | None) -> int:
     """Parse the sync threshold environment variable into a non-negative integer."""
     if value is None:
@@ -365,7 +373,7 @@ def sync_project(app: App, project):
     )
 
     if ado_items.work_items:
-        item_ids = [item.target.id for item in ado_items.work_items]
+        item_ids = [_id for item in ado_items.work_items if (_id := _extract_work_item_id(item)) is not None]
         _LOGGER.info("Found %d ADO work items in backlog", len(item_ids))
 
     processed_item_ids = process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asana_project)
@@ -451,9 +459,13 @@ def process_backlog_items(app, ado_items, asana_users, asana_project_tasks, asan
     processed_ids = set()
 
     for wi in ado_items.work_items:
+        wi_id = _extract_work_item_id(wi)
+        if wi_id is None:
+            _LOGGER.warning("Could not extract work item ID from %s, skipping", wi)
+            continue
         sync_item_and_children(
             app,
-            wi.target.id,
+            wi_id,
             processed_ids,
             asana_users,
             asana_project_tasks,
