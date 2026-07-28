@@ -694,5 +694,79 @@ class TestDueDateTimezoneConfiguration(unittest.TestCase):
         self.assertEqual(result, "2026-08-01")
 
 
+class TestDueDateOnlyPayloads(unittest.TestCase):
+    """A date-only ADO value carries no instant, so ADO_TIMEZONE must never shift it.
+
+    `Microsoft.VSTS.Scheduling.DueDate` is a DateTime field and normally arrives with a time
+    component, but a date-only string is already the calendar date the user meant. Reinterpreting
+    it as UTC midnight and converting would move it to the previous day in any west-of-UTC
+    timezone, silently corrupting a value that needed no correction at all.
+    """
+
+    def _work_item(self, due_date):
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": due_date}
+        ado_work_item.id = 12345
+        return ado_work_item
+
+    def test_date_only_string_is_unchanged_in_west_of_utc_timezone(self):
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "America/Los_Angeles"}, clear=True):
+            result = convert_ado_date_to_asana_format("2026-08-01")
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_date_only_string_is_unchanged_in_east_of_utc_timezone(self):
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=True):
+            result = convert_ado_date_to_asana_format("2026-08-01")
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_date_only_string_is_unchanged_when_env_unset(self):
+        """Regression guard: the default UTC path already returned the date as-is."""
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = convert_ado_date_to_asana_format("2026-08-01")
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_date_only_string_is_unchanged_via_explicit_tz_argument(self):
+        from zoneinfo import ZoneInfo
+
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = convert_ado_date_to_asana_format("2026-08-01", tz=ZoneInfo("America/Los_Angeles"))
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_extract_date_only_work_item_field_is_unchanged(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "America/Los_Angeles"}, clear=True):
+            result = extract_due_date_from_ado(self._work_item("2026-08-01"))
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_value_with_time_component_still_converts_through_timezone(self):
+        """Guard that the date-only short-circuit did not swallow real instants."""
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "America/Los_Angeles"}, clear=True):
+            result = extract_due_date_from_ado(self._work_item("2026-08-01T05:00:00Z"))
+
+        self.assertEqual(result, "2026-07-31")
+
+    def test_invalid_date_only_string_still_raises_value_error(self):
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        with self.assertRaises(ValueError):
+            convert_ado_date_to_asana_format("2026-13-45")
+
+
 if __name__ == "__main__":
     unittest.main()

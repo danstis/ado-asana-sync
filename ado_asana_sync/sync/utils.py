@@ -1,7 +1,7 @@
 """Utility functions shared across sync modules."""
 
 import logging
-from datetime import datetime, tzinfo
+from datetime import date, datetime, tzinfo
 from urllib.parse import quote
 
 from ado_asana_sync.utils.date import _to_local_date_string, get_ado_timezone
@@ -52,6 +52,9 @@ def convert_ado_date_to_asana_format(iso_datetime_string: str, tz: tzinfo | None
     """
     Convert ADO ISO datetime string to Asana YYYY-MM-DD format.
 
+    A date-only input (no time component) is returned unchanged: it is already a calendar date
+    rather than an instant, so shifting it through `tz` would move it to the wrong day.
+
     Args:
         iso_datetime_string: ISO 8601 datetime string from ADO
         tz: Timezone to render the calendar date in. Defaults to `get_ado_timezone()`
@@ -67,9 +70,14 @@ def convert_ado_date_to_asana_format(iso_datetime_string: str, tz: tzinfo | None
     if not iso_datetime_string or not isinstance(iso_datetime_string, str):
         raise TypeError("Input must be a non-empty string")
 
+    value = iso_datetime_string.strip()
+
     try:
+        if "T" not in value and " " not in value:
+            return date.fromisoformat(value).isoformat()
+
         # Handle Z timezone suffix by replacing with +00:00
-        normalized_string = iso_datetime_string.replace("Z", "+00:00")
+        normalized_string = value.replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized_string)
         return _to_local_date_string(dt, tz or get_ado_timezone())
     except ValueError as e:
