@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from zoneinfo import ZoneInfo, available_timezones
 
+import pytest
+
 from ado_asana_sync.utils.date import get_ado_timezone, iso8601_utc
 
 
@@ -50,6 +52,10 @@ class TestIso8601Utc(unittest.TestCase):
 class TestGetAdoTimezone(unittest.TestCase):
     """Unit tests for get_ado_timezone: resolves ADO_TIMEZONE, never the host tz."""
 
+    @pytest.fixture(autouse=True)
+    def _inject_monkeypatch(self, monkeypatch):
+        self.monkeypatch = monkeypatch
+
     def test_defaults_to_utc_when_env_unset(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertIs(get_ado_timezone(), timezone.utc)
@@ -70,16 +76,11 @@ class TestGetAdoTimezone(unittest.TestCase):
 
     @unittest.skipIf(not hasattr(time, "tzset"), "POSIX only")
     def test_never_uses_host_local_timezone(self):
-        original_tz = os.environ.get("TZ")
         try:
-            os.environ["TZ"] = "Pacific/Auckland"
+            self.monkeypatch.setenv("TZ", "Pacific/Auckland")
             time.tzset()
-            with patch.dict(os.environ, {}, clear=False):
-                os.environ.pop("ADO_TIMEZONE", None)
-                self.assertIs(get_ado_timezone(), timezone.utc)
+            self.monkeypatch.delenv("ADO_TIMEZONE", raising=False)
+            self.assertIs(get_ado_timezone(), timezone.utc)
         finally:
-            if original_tz is None:
-                os.environ.pop("TZ", None)
-            else:
-                os.environ["TZ"] = original_tz
+            self.monkeypatch.undo()
             time.tzset()

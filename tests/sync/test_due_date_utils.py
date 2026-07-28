@@ -4,6 +4,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestDueDateUtilities(unittest.TestCase):
     """Unit tests for due date conversion and utility functions."""
@@ -531,6 +533,10 @@ class TestDueDateUtilities(unittest.TestCase):
 class TestDueDateTimezoneConfiguration(unittest.TestCase):
     """Unit tests for ADO_TIMEZONE-aware due date conversion (both conversion paths)."""
 
+    @pytest.fixture(autouse=True)
+    def _inject_monkeypatch(self, monkeypatch):
+        self.monkeypatch = monkeypatch
+
     def test_extract_uses_configured_timezone_for_utc_instant(self):
         """The exact scenario from the bug report: NZST midnight-Aug-1 stored as noon-UTC-Jul-31."""
         from ado_asana_sync.sync.sync import extract_due_date_from_ado
@@ -590,18 +596,14 @@ class TestDueDateTimezoneConfiguration(unittest.TestCase):
         ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0)}
         ado_work_item.id = 12345
 
-        original_tz = os.environ.get("TZ")
         try:
-            os.environ["TZ"] = "America/Los_Angeles"
+            self.monkeypatch.setenv("TZ", "America/Los_Angeles")
             time.tzset()
-            with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=False):
-                result = extract_due_date_from_ado(ado_work_item)
+            self.monkeypatch.setenv("ADO_TIMEZONE", "Pacific/Auckland")
+            result = extract_due_date_from_ado(ado_work_item)
             self.assertEqual(result, "2026-08-01")
         finally:
-            if original_tz is None:
-                os.environ.pop("TZ", None)
-            else:
-                os.environ["TZ"] = original_tz
+            self.monkeypatch.undo()
             time.tzset()
 
     def test_naive_datetime_unset_ado_timezone_ignores_host_local(self):
@@ -612,18 +614,14 @@ class TestDueDateTimezoneConfiguration(unittest.TestCase):
         ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0)}
         ado_work_item.id = 12345
 
-        original_tz = os.environ.get("TZ")
         try:
-            os.environ["TZ"] = "Pacific/Auckland"
+            self.monkeypatch.setenv("TZ", "Pacific/Auckland")
             time.tzset()
-            with patch.dict(os.environ, {}, clear=True):
-                result = extract_due_date_from_ado(ado_work_item)
+            self.monkeypatch.delenv("ADO_TIMEZONE", raising=False)
+            result = extract_due_date_from_ado(ado_work_item)
             self.assertEqual(result, "2026-07-31")
         finally:
-            if original_tz is None:
-                os.environ.pop("TZ", None)
-            else:
-                os.environ["TZ"] = original_tz
+            self.monkeypatch.undo()
             time.tzset()
 
     def test_dst_transition_uses_real_tz_database(self):
