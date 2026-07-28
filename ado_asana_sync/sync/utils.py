@@ -1,8 +1,10 @@
 """Utility functions shared across sync modules."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, tzinfo
 from urllib.parse import quote
+
+from ado_asana_sync.utils.date import _to_local_date_string, get_ado_timezone
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,15 +48,17 @@ def extract_reviewer_vote(reviewer) -> str:
         return "noVote"
 
 
-def convert_ado_date_to_asana_format(iso_datetime_string: str) -> str:
+def convert_ado_date_to_asana_format(iso_datetime_string: str, tz: tzinfo | None = None) -> str:
     """
     Convert ADO ISO datetime string to Asana YYYY-MM-DD format.
 
     Args:
         iso_datetime_string: ISO 8601 datetime string from ADO
+        tz: Timezone to render the calendar date in. Defaults to `get_ado_timezone()`
+            (the `ADO_TIMEZONE` env var, or UTC if unset).
 
     Returns:
-        str: Date in YYYY-MM-DD format (normalized to UTC)
+        str: The calendar date in `tz`, formatted as YYYY-MM-DD
 
     Raises:
         ValueError: If the datetime string is invalid
@@ -64,18 +68,10 @@ def convert_ado_date_to_asana_format(iso_datetime_string: str) -> str:
         raise TypeError("Input must be a non-empty string")
 
     try:
-        from datetime import timezone
-
         # Handle Z timezone suffix by replacing with +00:00
         normalized_string = iso_datetime_string.replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized_string)
-
-        # Normalize timezone-aware datetimes to UTC to ensure consistency
-        # This prevents date mismatches when different timezones are used
-        if dt.tzinfo is not None:
-            dt = dt.astimezone(timezone.utc)
-
-        return dt.strftime("%Y-%m-%d")
+        return _to_local_date_string(dt, tz or get_ado_timezone())
     except ValueError as e:
         raise ValueError(f"Invalid datetime format: {iso_datetime_string}") from e
 

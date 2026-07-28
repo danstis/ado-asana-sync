@@ -298,9 +298,13 @@ If `default_user` is selected but `GROUP_REVIEWER_DEFAULT_USER` is empty or cann
 - Syncs due dates from ADO work items to Asana tasks during **initial creation only**
 - Preserves user modifications in Asana to prevent data loss
 - Uses ADO field: `Microsoft.VSTS.Scheduling.DueDate` → Asana field: `due_on`
+- The extracted date is the calendar date in `ADO_TIMEZONE` (see `.env.example`; default `UTC`, byte-identical
+  to unconfigured behaviour), not simply the UTC calendar date — ADO stores a picked due date as midnight in
+  the picker's timezone converted to UTC, so truncating to UTC can land on the wrong day
 - Handles invalid dates gracefully with warning logs, continues sync operation
 - TaskItem extended with optional `due_date` field stored in JSON database
 - Performance tested for 5000+ work items without degradation
+- Because due dates only sync on creation, changing `ADO_TIMEZONE` only affects newly created Asana tasks
 
 ## Configuration
 

@@ -1,8 +1,11 @@
+import os
+import time
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 from zoneinfo import ZoneInfo, available_timezones
 
-from ado_asana_sync.utils.date import iso8601_utc
+from ado_asana_sync.utils.date import get_ado_timezone, iso8601_utc
 
 
 class TestIso8601Utc(unittest.TestCase):
@@ -42,3 +45,41 @@ class TestIso8601Utc(unittest.TestCase):
     def test_raise_type_error(self):
         with self.assertRaises(AttributeError):
             iso8601_utc("2022-01-01T12:00:00+00:00")
+
+
+class TestGetAdoTimezone(unittest.TestCase):
+    """Unit tests for get_ado_timezone: resolves ADO_TIMEZONE, never the host tz."""
+
+    def test_defaults_to_utc_when_env_unset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIs(get_ado_timezone(), timezone.utc)
+
+    def test_returns_zoneinfo_for_valid_iana_name(self):
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=True):
+            self.assertEqual(get_ado_timezone(), ZoneInfo("Pacific/Auckland"))
+
+    def test_blank_value_falls_back_to_utc(self):
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "   "}, clear=True):
+            self.assertIs(get_ado_timezone(), timezone.utc)
+
+    def test_invalid_name_warns_and_falls_back_to_utc(self):
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Mars/Olympus"}, clear=True):
+            with self.assertLogs("ado_asana_sync.utils.date", level="WARNING"):
+                result = get_ado_timezone()
+            self.assertIs(result, timezone.utc)
+
+    @unittest.skipIf(not hasattr(time, "tzset"), "POSIX only")
+    def test_never_uses_host_local_timezone(self):
+        original_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "Pacific/Auckland"
+            time.tzset()
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("ADO_TIMEZONE", None)
+                self.assertIs(get_ado_timezone(), timezone.utc)
+        finally:
+            if original_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original_tz
+            time.tzset()

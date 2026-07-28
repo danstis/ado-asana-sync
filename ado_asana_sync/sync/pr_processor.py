@@ -109,7 +109,7 @@ def _create_new_group_reviewer_task(
     else:
         pr_item.asana_gid = asana_task["gid"]
         pr_item.asana_updated = asana_task.get("modified_at")
-        pr_item.updated_date = iso8601_utc(datetime.now())
+        pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
         pr_item.save(app)
         if app.asana_tag_gid is not None:
             update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)
@@ -137,7 +137,7 @@ def _update_existing_group_reviewer_match(
         return
     existing_match.title = pr.title.strip()
     existing_match.status = pr.status
-    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.review_status = new_vote
     existing_match.assignee_gid = assignee_gid
     if app.asana_tag_gid is None:
@@ -363,7 +363,7 @@ def _close_removed_reviewer_task(app: App, pr_item: PullRequestItem, asana_proje
     """Close the Asana task for a reviewer that was removed from a PR."""
     pr_item.status = "reviewer_removed"
     pr_item.review_status = "removed"
-    pr_item.updated_date = iso8601_utc(datetime.now())
+    pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
 
     if pr_item.asana_gid and app.asana_tag_gid is not None:
         try:
@@ -532,7 +532,7 @@ def create_new_pr_reviewer_task(
         _LOGGER.debug("Linking existing Asana task for PR %s reviewer", pr.pull_request_id)
         pr_item.asana_gid = asana_task["gid"]
         pr_item.asana_updated = asana_task.get("modified_at")
-        pr_item.updated_date = iso8601_utc(datetime.now())
+        pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
         if getattr(app, "dry_run", False) is not True:
             pr_item.save(app)
         if app.asana_tag_gid is not None:
@@ -616,7 +616,7 @@ def update_existing_pr_reviewer_task(
 
     existing_match.title = pr.title.strip()
     existing_match.status = pr.status
-    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.review_status = extract_reviewer_vote(reviewer)
     existing_match.asana_updated = asana_task["modified_at"]
 

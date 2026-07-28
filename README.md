@@ -44,6 +44,7 @@ cp .env.example .env
 **Optional Variables:**
 
 - `CLOSED_STATES`: Comma-separated ADO states considered closed (default: `Closed,Removed,Done`).
+- `ADO_TIMEZONE`: IANA timezone name (e.g. `Pacific/Auckland`) that ADO due dates are calculated against (default: `UTC`). ADO stores a picked due date as midnight in the picker's timezone converted to UTC, so leaving this unset preserves today's exact behaviour, while setting it to your ADO organisation/profile timezone corrects due dates that would otherwise land on the wrong calendar day in Asana. An invalid name logs a warning and falls back to `UTC`. Only newly created Asana tasks pick up a changed value — due dates are not re-sent on update.
 - `THREAD_COUNT`: Number of projects to sync in parallel (default: `8`).
 - `SLEEP_TIME`: Seconds to sleep between sync runs (default: `300`).
 - `RUN_ONCE`: Run a single sync cycle and exit with a normal process status (default: `false`).

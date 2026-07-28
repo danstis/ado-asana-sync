@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import asana
@@ -138,7 +138,7 @@ def create_asana_pr_task(app: App, asana_project: str, pr_item: PullRequestItem,
         result = tasks_api_instance.create_task(body, opts={})
         pr_item.asana_gid = result["gid"]
         pr_item.asana_updated = result["modified_at"]
-        pr_item.updated_date = iso8601_utc(datetime.now())
+        pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
 
         if is_completed:
             pr_item.processing_state = "closed"
@@ -200,7 +200,7 @@ def update_asana_pr_task(app: App, pr_item: PullRequestItem, tag: str, asana_pro
     try:
         result = tasks_api_instance.update_task(body, pr_item.asana_gid, opts={})
         pr_item.asana_updated = result["modified_at"]
-        pr_item.updated_date = iso8601_utc(datetime.now())
+        pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
 
         if is_completed:
             pr_item.processing_state = "closed"

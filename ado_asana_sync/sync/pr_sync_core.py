@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List
 
 try:
@@ -100,7 +100,7 @@ def _finalize_closed_pr_task(app: App, pr_item: PullRequestItem, pr: Any, asana_
         return
     asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
     pr_item.status = pr.status if pr else "completed"
-    pr_item.updated_date = iso8601_utc(datetime.now())
+    pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
 
     if asana_task and not asana_task.get("completed", False):
         if app.asana_tag_gid is not None:
@@ -123,7 +123,7 @@ def _handle_inaccessible_pr(app: App, pr_item: PullRequestItem, asana_project: s
         return
     asana_task = _get_cached_asana_task(app, pr_item.asana_gid)
     pr_item.status = "abandoned"
-    pr_item.updated_date = iso8601_utc(datetime.now())
+    pr_item.updated_date = iso8601_utc(datetime.now(timezone.utc))
 
     if asana_task and not asana_task.get("completed", False) and app.asana_tag_gid is not None:
         update_asana_pr_task(app, pr_item, app.asana_tag_gid, asana_project)

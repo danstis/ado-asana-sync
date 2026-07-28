@@ -1,3 +1,5 @@
+import os
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -42,10 +44,11 @@ class TestDueDateUtilities(unittest.TestCase):
 
     def test_extract_due_date_from_ado_with_timezone_aware_datetime_non_utc(self):
         """
-        Unit Test: extract_due_date_from_ado normalizes non-UTC timezone-aware datetimes to UTC.
+        Unit Test: extract_due_date_from_ado renders in UTC by default (ADO_TIMEZONE unset).
 
-        This test verifies the critical timezone handling bug fix where non-UTC timezones
-        could result in different dates than the ISO string handling path.
+        This is the default-`ADO_TIMEZONE=UTC` regression guard: it locks in the pre-existing
+        UTC-truncation behaviour for anyone who does not configure `ADO_TIMEZONE`. See
+        TestDueDateTimezoneConfiguration for the ADO_TIMEZONE-aware behaviour.
         """
         from ado_asana_sync.sync.sync import extract_due_date_from_ado
 
@@ -68,7 +71,7 @@ class TestDueDateUtilities(unittest.TestCase):
         Unit Test: Verify same moment in time produces same date regardless of representation.
 
         This test ensures datetime objects and ISO strings produce consistent results
-        when representing the same moment in time.
+        when representing the same moment in time, under the default `ADO_TIMEZONE=UTC`.
         """
         from ado_asana_sync.sync.sync import extract_due_date_from_ado
 
@@ -239,9 +242,10 @@ class TestDueDateUtilities(unittest.TestCase):
 
     def test_convert_ado_date_to_asana_format_with_timezone_normalization(self):
         """
-        Unit Test: convert_ado_date_to_asana_format normalizes non-UTC timezones to UTC.
+        Unit Test: convert_ado_date_to_asana_format renders in UTC by default (ADO_TIMEZONE unset).
 
-        This test verifies the timezone normalization fix for ISO string inputs.
+        This is the default-`ADO_TIMEZONE=UTC` regression guard for ISO string inputs. See
+        TestDueDateTimezoneConfiguration for the ADO_TIMEZONE-aware behaviour.
         """
         from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
 
@@ -522,6 +526,174 @@ class TestDueDateUtilities(unittest.TestCase):
         # %20 becomes %2520 (the % is encoded as %25)
         expected_url = "https://example.com/already%2520encoded"
         self.assertEqual(result, expected_url)
+
+
+class TestDueDateTimezoneConfiguration(unittest.TestCase):
+    """Unit tests for ADO_TIMEZONE-aware due date conversion (both conversion paths)."""
+
+    def test_extract_uses_configured_timezone_for_utc_instant(self):
+        """The exact scenario from the bug report: NZST midnight-Aug-1 stored as noon-UTC-Jul-31."""
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)}
+        ado_work_item.id = 12345
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=True):
+            result = extract_due_date_from_ado(ado_work_item)
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_extract_string_path_uses_configured_timezone(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2026-07-31T12:00:00Z"}
+        ado_work_item.id = 12345
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=True):
+            result = extract_due_date_from_ado(ado_work_item)
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_extract_negative_offset_timezone(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2026-08-01T05:00:00Z"}
+        ado_work_item.id = 12345
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "America/Los_Angeles"}, clear=True):
+            result = extract_due_date_from_ado(ado_work_item)
+
+        self.assertEqual(result, "2026-07-31")
+
+    def test_datetime_and_string_paths_agree_under_configured_timezone(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=True):
+            dt_item = MagicMock()
+            dt_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)}
+            dt_item.id = 1
+
+            str_item = MagicMock()
+            str_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2026-07-31T12:00:00Z"}
+            str_item.id = 2
+
+            self.assertEqual(extract_due_date_from_ado(dt_item), "2026-08-01")
+            self.assertEqual(extract_due_date_from_ado(str_item), "2026-08-01")
+
+    def test_naive_datetime_is_treated_as_utc_not_host_local(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0)}
+        ado_work_item.id = 12345
+
+        original_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Los_Angeles"
+            time.tzset()
+            with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=False):
+                result = extract_due_date_from_ado(ado_work_item)
+            self.assertEqual(result, "2026-08-01")
+        finally:
+            if original_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original_tz
+            time.tzset()
+
+    def test_naive_datetime_unset_ado_timezone_ignores_host_local(self):
+        """Guard: with ADO_TIMEZONE unset, the host TZ must still not be consulted (default stays UTC)."""
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0)}
+        ado_work_item.id = 12345
+
+        original_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "Pacific/Auckland"
+            time.tzset()
+            with patch.dict(os.environ, {}, clear=True):
+                result = extract_due_date_from_ado(ado_work_item)
+            self.assertEqual(result, "2026-07-31")
+        finally:
+            if original_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original_tz
+            time.tzset()
+
+    def test_dst_transition_uses_real_tz_database(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        cases = [
+            ("2026-04-04T11:00:00Z", "2026-04-05"),  # NZDT (+13) still in effect
+            ("2026-09-26T12:00:00Z", "2026-09-27"),  # NZST (+12)
+        ]
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=True):
+            for iso_string, expected in cases:
+                with self.subTest(iso_string=iso_string):
+                    ado_work_item = MagicMock()
+                    ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": iso_string}
+                    ado_work_item.id = 12345
+
+                    result = extract_due_date_from_ado(ado_work_item)
+
+                    self.assertEqual(result, expected)
+
+    def test_invalid_timezone_name_falls_back_to_utc_without_raising(self):
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2026-07-31T12:00:00Z"}
+        ado_work_item.id = 12345
+
+        with patch.dict(os.environ, {"ADO_TIMEZONE": "Mars/Olympus"}, clear=True):
+            with self.assertLogs("ado_asana_sync.utils.date", level="WARNING"):
+                result = extract_due_date_from_ado(ado_work_item)
+
+        self.assertEqual(result, "2026-07-31")
+
+    def test_explicit_tz_argument_overrides_environment(self):
+        from zoneinfo import ZoneInfo
+
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)}
+        ado_work_item.id = 12345
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = extract_due_date_from_ado(ado_work_item, tz=ZoneInfo("Pacific/Auckland"))
+
+        self.assertEqual(result, "2026-08-01")
+
+    def test_default_behaviour_unchanged_when_env_unset(self):
+        """Regression guard: with ADO_TIMEZONE unset, output is byte-identical to pre-fix behaviour."""
+        from ado_asana_sync.sync.sync import extract_due_date_from_ado
+
+        ado_work_item = MagicMock()
+        ado_work_item.fields = {"Microsoft.VSTS.Scheduling.DueDate": "2026-07-31T12:00:00Z"}
+        ado_work_item.id = 12345
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = extract_due_date_from_ado(ado_work_item)
+
+        self.assertEqual(result, "2026-07-31")
+
+    def test_convert_ado_date_to_asana_format_explicit_tz_argument_overrides_environment(self):
+        from zoneinfo import ZoneInfo
+
+        from ado_asana_sync.sync.utils import convert_ado_date_to_asana_format
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = convert_ado_date_to_asana_format("2026-07-31T12:00:00Z", tz=ZoneInfo("Pacific/Auckland"))
+
+        self.assertEqual(result, "2026-08-01")
 
 
 if __name__ == "__main__":

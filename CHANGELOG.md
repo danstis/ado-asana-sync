@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Due dates synced from ADO could land on the wrong calendar day**: ADO stores a picked due date as
+  midnight-in-the-picker's-timezone converted to UTC, but the sync read the UTC calendar date straight
+  off that instant, which is the wrong day whenever the offset crosses midnight UTC (e.g. NZ, UTC+12/+13).
+  Added an opt-in `ADO_TIMEZONE` environment variable (IANA name, default `UTC`) so the calendar date is
+  computed in the timezone the date was actually picked in. Behaviour is byte-identical to today when
+  `ADO_TIMEZONE` is unset. Only newly created Asana tasks pick up a changed value.
+- **Host-local timestamps leaking into `updated_date`**: several call sites stamped `datetime.now()`
+  (host-local wall clock) as if it were UTC, skewing the closed-item unmap window by the host's UTC
+  offset. All now use `datetime.now(timezone.utc)`.
+
 ### Removed
 
 - **Unused dependencies**: Removed `tinydb` and `pytz` from project dependencies
