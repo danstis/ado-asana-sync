@@ -1,7 +1,7 @@
 """Utility functions shared across sync modules."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,8 +64,6 @@ def convert_ado_date_to_asana_format(iso_datetime_string: str) -> str:
         raise TypeError("Input must be a non-empty string")
 
     try:
-        from datetime import timezone
-
         # Handle Z timezone suffix by replacing with +00:00
         normalized_string = iso_datetime_string.replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized_string)

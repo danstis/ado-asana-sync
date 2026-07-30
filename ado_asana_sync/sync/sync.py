@@ -691,7 +691,7 @@ def update_existing_task(app, ado_task, existing_match, asana_matched_user, asan
     existing_match.title = ado_task.fields[ADO_TITLE]
     existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
     existing_match.state = ado_task.fields[ADO_STATE]
-    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
     existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
     existing_match.asana_updated = asana_task["modified_at"]
@@ -797,7 +797,7 @@ def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_proj
     existing_match.title = ado_task.fields[ADO_TITLE]
     existing_match.item_type = ado_task.fields[ADO_WORK_ITEM_TYPE]
     existing_match.state = ado_task.fields[ADO_STATE]
-    existing_match.updated_date = iso8601_utc(datetime.now())
+    existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
     existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
     existing_match.asana_updated = asana_task["modified_at"]
@@ -859,7 +859,7 @@ def update_asana_task(app: App, task: TaskItem, tag: str, asana_project_gid: str
     try:
         result = tasks_api_instance.update_task(body, task.asana_gid, opts={})
         task.asana_updated = result["modified_at"]
-        task.updated_date = iso8601_utc(datetime.now())
+        task.updated_date = iso8601_utc(datetime.now(timezone.utc))
         task.save(app)
         tag_asana_item(app, task, tag)
 

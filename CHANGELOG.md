@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Host-local timestamps leaking into `updated_date`**: several call sites stamped `datetime.now()`
+  (host-local wall clock) as if it were UTC, skewing the closed-item unmap window by the host's UTC
+  offset. All now use `datetime.now(timezone.utc)`.
+
 ### Removed
 
 - **Unused dependencies**: Removed `tinydb` and `pytz` from project dependencies
