@@ -5,7 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import os
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import datetime, timedelta, timezone
 from time import sleep
 from typing import Any, Tuple
 
@@ -14,7 +14,7 @@ from asana.rest import ApiException  # type: ignore
 from azure.devops.v7_0.work.models import TeamContext  # type: ignore
 from azure.devops.v7_0.work_item_tracking.models import WorkItem  # type: ignore
 
-from ado_asana_sync.utils.date import _to_local_date_string, get_ado_timezone, iso8601_utc
+from ado_asana_sync.utils.date import iso8601_utc
 from ado_asana_sync.utils.logging_tracing import setup_logging_and_tracing
 from ado_asana_sync.utils.utils import safe_get
 
@@ -484,30 +484,27 @@ def process_backlog_item(app, ado_item_batch, asana_users, asana_project_tasks, 
     return process_backlog_items(app, ado_item_batch, asana_users, asana_project_tasks, asana_project)
 
 
-def extract_due_date_from_ado(ado_work_item, tz: tzinfo | None = None) -> str | None:
+def extract_due_date_from_ado(ado_work_item) -> str | None:
     """Extract due date from ADO work item and convert to YYYY-MM-DD format.
 
     Args:
         ado_work_item: Azure DevOps work item object
-        tz: Timezone to render the calendar date in. Defaults to `get_ado_timezone()`
-            (the `ADO_TIMEZONE` env var, or UTC if unset).
 
     Returns:
-        str | None: The calendar date in `tz` (default UTC), formatted as YYYY-MM-DD,
-            or None if not present or invalid
+        str | None: Due date in YYYY-MM-DD format, or None if not present or invalid
     """
     try:
         due_date_value = ado_work_item.fields.get(ADO_DUE_DATE)
         if not due_date_value or (isinstance(due_date_value, str) and not due_date_value.strip()):
             return None
 
-        resolved_tz = tz or get_ado_timezone()
-
         if isinstance(due_date_value, datetime):
-            return _to_local_date_string(due_date_value, resolved_tz)
+            if due_date_value.tzinfo is not None:
+                due_date_value = due_date_value.astimezone(timezone.utc)
+            return due_date_value.strftime("%Y-%m-%d")
 
         if isinstance(due_date_value, str):
-            return convert_ado_date_to_asana_format(due_date_value, tz=resolved_tz)
+            return convert_ado_date_to_asana_format(due_date_value)
 
     except (ValueError, TypeError, AttributeError) as e:
         _LOGGER.warning(

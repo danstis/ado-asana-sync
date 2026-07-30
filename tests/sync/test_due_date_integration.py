@@ -1,4 +1,3 @@
-import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -105,83 +104,6 @@ class TestDueDateIntegration(unittest.TestCase):
                 create_task_call = mock_tasks_api.create_task.call_args[0][0]
                 self.assertEqual(create_task_call["data"]["due_on"], "2025-12-31")
                 self.assertEqual(create_task_call["data"]["name"], "Task 12345: Test Due Date Sync")
-
-        finally:
-            app.close()
-
-    @patch("ado_asana_sync.sync.app.os.path.dirname")
-    @patch("ado_asana_sync.sync.app.Connection")
-    @patch("ado_asana_sync.sync.app.asana.ApiClient")
-    def test_due_date_uses_configured_timezone_REAL_INTEGRATION(self, mock_asana_client, mock_ado_connection, mock_dirname):
-        """
-        TRUE Integration Test: ADO_TIMEZONE is honoured end-to-end, from ADO field to Asana due_on.
-
-        A due date picked as "1 Aug" in a Pacific/Auckland ADO profile is stored by ADO as the
-        UTC instant 2026-07-31T12:00:00Z. With ADO_TIMEZONE=Pacific/Auckland, both the saved DB
-        row and the Asana create_task body must show 2026-08-01, not the UTC-truncated 2026-07-31.
-        """
-        mock_dirname.return_value = self.temp_dir
-        mock_ado_connection.return_value = MagicMock()
-        mock_asana_client.return_value = MagicMock()
-
-        app = TestDataBuilder.create_real_app(self.temp_dir)
-
-        asana_helper = AsanaApiMockHelper()
-        mock_tasks_api = asana_helper.create_tasks_api_mock(
-            created_task={
-                "gid": "67890",
-                "name": "Test Due Date Timezone",
-                "due_on": "2026-08-01",
-                "completed": False,
-                "modified_at": "2026-07-31T10:00:00.000Z",
-            }
-        )
-
-        try:
-            app.connect()
-
-            ado_work_item = TestDataBuilder.create_ado_work_item(
-                item_id=12345,
-                title="Test Due Date Timezone",
-                work_item_type="Task",
-                due_date="2026-07-31T12:00:00.000Z",
-            )
-
-            asana_users = [{"gid": "user123", "name": "Test User", "email": "test@example.com"}]
-
-            app.ado_wit_client = MagicMock()
-            app.ado_wit_client.get_work_item.return_value = ado_work_item
-
-            with (
-                patch.dict(os.environ, {"ADO_TIMEZONE": "Pacific/Auckland"}, clear=False),
-                patch("ado_asana_sync.sync.sync.asana.TasksApi", return_value=mock_tasks_api),
-                patch("ado_asana_sync.sync.sync.asana.WorkspacesApi", return_value=asana_helper.create_workspace_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.ProjectsApi", return_value=asana_helper.create_projects_api_mock()),
-                patch("ado_asana_sync.sync.sync.asana.TagsApi", return_value=asana_helper.create_tags_api_mock()),
-                patch("ado_asana_sync.sync.sync.get_asana_task", return_value=None),
-                patch("ado_asana_sync.sync.sync.get_asana_task_by_name", return_value=None),
-                patch("ado_asana_sync.sync.sync.find_custom_field_by_name", return_value=None),
-                patch("ado_asana_sync.sync.sync.tag_asana_item", return_value=None),
-            ):
-                processed_ids = set()
-                sync_item_and_children(
-                    app,
-                    ado_work_item.id,
-                    processed_ids,
-                    asana_users,
-                    [],
-                    "project456",
-                )
-
-                saved_items = app.matches.all()
-                self.assertEqual(len(saved_items), 1)
-
-                saved_task = saved_items[0]
-                self.assertEqual(saved_task["due_date"], "2026-08-01")
-
-                mock_tasks_api.create_task.assert_called_once()
-                create_task_call = mock_tasks_api.create_task.call_args[0][0]
-                self.assertEqual(create_task_call["data"]["due_on"], "2026-08-01")
 
         finally:
             app.close()
