@@ -68,6 +68,11 @@ Reserve `.all()` for operations that genuinely require every row (e.g. bulk expo
 - **Coverage**: Ensure test coverage remains above 60% for all changes
 - **Tool Configuration**: **ALWAYS** use the settings defined in `pyproject.toml` for all code quality and linting tools
 
+## Timestamp Guidelines
+
+- Always generate current timestamps with `datetime.now(timezone.utc)`, never bare `datetime.now()`. The latter stamps host-local wall-clock time, which silently skews any field documented as UTC (see `4eeb6b0`, which fixed a host-clock leak that skewed the `SYNC_THRESHOLD` closed-item unmap window by the host's UTC offset).
+- Use `iso8601_utc()` from `ado_asana_sync.utils.date` to render a `datetime` as an ISO 8601 UTC string, e.g. for `updated_date` fields. It normalizes naive datetimes to UTC before formatting, so pass it a `datetime.now(timezone.utc)` value rather than a naive one.
+
 ## Test Quality Standards
 
 **CRITICAL**: Follow these testing principles to avoid brittle, over-mocked tests that provide false confidence:
