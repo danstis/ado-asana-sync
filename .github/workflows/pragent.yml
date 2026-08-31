@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: PR Agent action step
         id: pragent
-        uses: Codium-ai/pr-agent@f6af7d77554ff8d26adffded077e6461329e92fa # main
+        uses: Codium-ai/pr-agent@bd400eff4653c7bd63902846846ca52357ef1e76 # main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
