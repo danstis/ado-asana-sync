@@ -517,6 +517,31 @@ def extract_due_date_from_ado(ado_work_item) -> str | None:
     return None
 
 
+def _resolve_assigned_to(
+    existing_match: TaskItem,
+    ado_assigned: ADOAssignedUser | None,
+    asana_matched_user: dict | None,
+) -> str | None:
+    """Return the Asana gid to store, preserving the existing assignee on a failed match.
+
+    Only clear the assignee when the ADO work item genuinely has no assignee. When ADO
+    has an assignee that cannot be resolved to a current Asana user, keep whatever is
+    already stored and log a warning rather than un-assigning the task.
+    """
+    if asana_matched_user is not None:
+        return asana_matched_user.get("gid", None)
+    if ado_assigned is None:
+        return None
+    _LOGGER.warning(
+        "%s:ADO assignee %s <%s> could not be matched to an Asana user; keeping existing assignee %s",
+        existing_match.asana_title,
+        ado_assigned.display_name,
+        ado_assigned.email,
+        existing_match.assigned_to,
+    )
+    return existing_match.assigned_to
+
+
 def _should_skip_unassigned_item(
     ado_task: WorkItem,
     ado_assigned: ADOAssignedUser | None,
@@ -693,7 +718,7 @@ def update_existing_task(app, ado_task, existing_match, asana_matched_user, asan
     existing_match.state = ado_task.fields[ADO_STATE]
     existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
-    existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+    existing_match.assigned_to = _resolve_assigned_to(existing_match, get_task_user(ado_task), asana_matched_user)
     existing_match.asana_updated = asana_task["modified_at"]
     existing_match.due_date = extract_due_date_from_ado(ado_task)
     update_asana_task(
@@ -799,7 +824,7 @@ def update_task_if_needed(app, ado_task, existing_match, asana_users, asana_proj
     existing_match.state = ado_task.fields[ADO_STATE]
     existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
-    existing_match.assigned_to = asana_matched_user.get("gid", None) if asana_matched_user is not None else None
+    existing_match.assigned_to = _resolve_assigned_to(existing_match, ado_assigned, asana_matched_user)
     existing_match.asana_updated = asana_task["modified_at"]
     update_asana_task(
         app,
@@ -959,6 +984,13 @@ def get_asana_users(app: App, asana_workspace_gid: str) -> list[dict]:
         return []
 
     deactivated_gids = _get_deactivated_user_gids(app, asana_workspace_gid)
+
+    if deactivated_gids is None:
+        _LOGGER.error(
+            "Could not determine deactivated Asana users for workspace %s; the user list may include deactivated accounts",
+            asana_workspace_gid,
+        )
+        return all_users
 
     if not deactivated_gids:
         return all_users

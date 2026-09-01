@@ -20,7 +20,7 @@ This repository provides a robust tool for synchronizing tasks between Azure Dev
   - `ado_asana_sync/sync/asana.py`: Handles Asana API (tags, task lookups).
   - `ado_asana_sync/sync/asana_client.py`: Asana API helpers for workspaces, projects, tasks, and user membership queries.
   - `ado_asana_sync/sync/ado_parser.py`: ADO-specific item parsing utilities (extracts assigned user details from work items).
-  - `ado_asana_sync/sync/matching.py`: User and task matching logic between ADO and Asana (email/display-name lookup).
+  - `ado_asana_sync/sync/matching.py`: Tiered ADO→Asana user matching ladder (exact email → email local part → normalized display name), gated by `USER_MATCH_STRATEGY`; returns `None` (never guesses) on an ambiguous match.
   - `ado_asana_sync/sync/dry_run.py`: Dry-run tracking helpers; records planned create/update/close actions without writing to Asana.
   - `ado_asana_sync/sync/task_item.py`: Task data structure with due_date field support.
   - `ado_asana_sync/sync/task_factory.py`: Logic for building Asana task request bodies and saving newly created tasks.

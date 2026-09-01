@@ -53,6 +53,7 @@ cp .env.example .env
 - `LOGLEVEL`: Console log level (default: `INFO`).
 - `GROUP_REVIEWER_STRATEGY`: How to handle ADO group/container reviewers (e.g. `[Project]\Contributor`). Options: `ignore` (default, skips them), `default_user` (assigns tasks to `GROUP_REVIEWER_DEFAULT_USER`), `unassigned_task` (creates an unassigned task with the group name).
 - `GROUP_REVIEWER_DEFAULT_USER`: Asana user email, GID, or display name to assign group reviewer tasks to when `GROUP_REVIEWER_STRATEGY=default_user`.
+- `USER_MATCH_STRATEGY`: How far to walk the ADO→Asana user matching ladder. Options: `exact` (exact email only), `prefix` (also match the email local part before the `@`), `name` (default, also match the normalized display name). An unmatched ADO assignee leaves the existing Asana assignee untouched rather than clearing it.
 - `OTEL_TRACES_SAMPLER_ARG`: Trace sampling percentage for Application Insights (e.g. `0.05` = 5%, `1.0` = 100%; default: `0.05`).
 - `APPINSIGHTS_LOGLEVEL`: Minimum log level forwarded to Application Insights telemetry (default: `WARNING`).
 - `APPINSIGHTS_SAMPLE_DEBUG` / `APPINSIGHTS_SAMPLE_INFO`: Sampling rate for DEBUG/INFO logs sent to Application Insights (default: `0.05`).
@@ -145,7 +146,8 @@ You can verify the first sync by checking your mapped Asana project for newly cr
 
 - Synchronizes Azure DevOps work items (User Stories, Bugs, Tasks, etc.) to Asana tasks
 - Maintains bidirectional sync for updates, assignments, and status changes
-- Automatic user matching between ADO and Asana based on email addresses
+- Tiered user matching between ADO and Asana: exact email → email local part (before the `@`) → normalized display name (whitespace/order/comma tolerant), controlled by `USER_MATCH_STRATEGY`
+- An ADO assignee that cannot be matched to a current Asana user leaves the existing Asana assignee untouched (a warning is logged) rather than un-assigning the task
 - Configurable closed states mapping
 
 ### Pull Request Synchronization
@@ -168,7 +170,7 @@ The system follows this logic to determine which PRs to sync:
 1. **Repository Discovery**: For each configured ADO project, discover all Git repositories
 1. **Active PR Filtering**: Query only PRs with `status="active"` (excludes completed/abandoned PRs)
 1. **Reviewer Requirements**: Only sync PRs that have at least one assigned reviewer
-1. **User Matching**: Only create tasks for reviewers who have matching Asana accounts (by email)
+1. **User Matching**: Only create tasks for reviewers who have matching Asana accounts, using the same tiered ladder as work item sync (exact email → email local part → normalized display name)
 1. **Deduplication**: Prevent duplicate reviewer processing by unique email identifier
 1. **Cleanup Processing**: Additionally process previously synced PRs that may now be closed/completed
 

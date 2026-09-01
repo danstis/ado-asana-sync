@@ -913,8 +913,8 @@ class TestGetDeactivatedUserGids(unittest.TestCase):
         self.assertEqual(result, {"user2", "user4"})
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
-    def test_returns_empty_set_on_api_error(self, mock_memberships_api):
-        """Test returns empty set when API call fails."""
+    def test_returns_none_on_api_error(self, mock_memberships_api):
+        """Test returns None (could-not-determine) when the API call fails."""
         app = MagicMock()
         mock_api_instance = MagicMock()
         mock_memberships_api.return_value = mock_api_instance
@@ -922,7 +922,19 @@ class TestGetDeactivatedUserGids(unittest.TestCase):
 
         result = _get_deactivated_user_gids(app, "workspace123")
 
-        self.assertEqual(result, set())
+        self.assertIsNone(result)
+
+    @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
+    def test_returns_none_on_unexpected_error(self, mock_memberships_api):
+        """Test returns None when an unexpected error is raised."""
+        app = MagicMock()
+        mock_api_instance = MagicMock()
+        mock_memberships_api.return_value = mock_api_instance
+        mock_api_instance.get_workspace_memberships_for_workspace.side_effect = RuntimeError("boom")
+
+        result = _get_deactivated_user_gids(app, "workspace123")
+
+        self.assertIsNone(result)
 
     @patch("ado_asana_sync.sync.sync.asana.WorkspaceMembershipsApi")
     def test_returns_empty_set_when_all_active(self, mock_memberships_api):
@@ -1009,12 +1021,32 @@ class TestGetAsanaUsers(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["name"], "Active User")
 
+    @patch("ado_asana_sync.sync.sync._LOGGER")
+    @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
+    @patch("ado_asana_sync.sync.sync.asana.UsersApi")
+    def test_get_asana_users_logs_error_when_filtering_unavailable(self, mock_users_api, mock_get_deactivated, mock_logger):
+        """When deactivated-user filtering is unavailable, return all users and log an error."""
+        app = MagicMock()
+        mock_get_deactivated.return_value = None
+
+        mock_api_instance = MagicMock()
+        mock_users_api.return_value = mock_api_instance
+        mock_api_instance.get_users.return_value = [
+            {"gid": "user1", "name": "User 1", "email": "user1@example.com"},
+            {"gid": "user2", "name": "User 2", "email": "user2@example.com"},
+        ]
+
+        result = get_asana_users(app, "workspace123")
+
+        self.assertEqual(len(result), 2)
+        mock_logger.error.assert_called()
+
     @patch("ado_asana_sync.sync.sync._get_deactivated_user_gids")
     @patch("ado_asana_sync.sync.sync.asana.UsersApi")
     def test_get_asana_users_includes_all_when_memberships_fail(self, mock_users_api, mock_get_deactivated):
         """Test that all users are returned when membership lookup fails."""
         app = MagicMock()
-        mock_get_deactivated.return_value = set()
+        mock_get_deactivated.return_value = None
 
         mock_api_instance = MagicMock()
         mock_users_api.return_value = mock_api_instance
