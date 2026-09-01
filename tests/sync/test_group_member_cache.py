@@ -109,3 +109,43 @@ class TestGroupMemberCachePersistence(unittest.TestCase):
             fh.write("not valid json {{")
         cache = GroupMemberCache(cache_file=self.cache_file)
         self.assertIsNone(cache.get("any-id"))
+
+    def test_save_is_atomic_and_leaves_no_temp_file(self):
+        cache = GroupMemberCache(cache_file=self.cache_file)
+        cache.set("group-1", [_alice()])
+        siblings = os.listdir(self.tmp_dir)
+        self.assertIn(os.path.basename(self.cache_file), siblings)
+        self.assertFalse([f for f in siblings if f.endswith(".tmp")])
+
+    def test_failed_save_preserves_previous_cache_file(self):
+        from unittest.mock import patch
+
+        cache = GroupMemberCache(cache_file=self.cache_file)
+        cache.set("group-1", [_alice()])
+
+        with patch("ado_asana_sync.sync.group_member_cache.json.dump", side_effect=OSError("disk full")):
+            cache.set("group-2", [_bob()])
+
+        # The good first write must still be intact and reloadable.
+        reloaded = GroupMemberCache(cache_file=self.cache_file)
+        self.assertIsNotNone(reloaded.get("group-1"))
+        self.assertFalse([f for f in os.listdir(self.tmp_dir) if f.endswith(".tmp")])
+
+    def test_concurrent_sets_do_not_corrupt_cache(self):
+        import threading
+
+        cache = GroupMemberCache(cache_file=self.cache_file)
+
+        def worker(n: int) -> None:
+            for i in range(20):
+                cache.set(f"group-{n}-{i}", [_alice(), _bob()])
+
+        threads = [threading.Thread(target=worker, args=(n,)) for n in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        with open(self.cache_file, encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual(len(data), 100)

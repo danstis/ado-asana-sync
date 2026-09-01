@@ -879,6 +879,30 @@ class TestHandleGroupReviewerExpand(unittest.TestCase):
         self.assertIsNotNone(saved)
         self.assertEqual(saved.source_group_reviewer_id, "group-guid-expand")
 
+    def test_new_member_task_does_not_inherit_group_aggregate_vote(self):
+        """A group's rolled-up 'approved' vote must not mark a brand-new member task
+        as approved/completed — the member never voted themselves.
+        """
+        from ado_asana_sync.sync.sync import ADOAssignedUser
+
+        app = self._app()
+        approved_group = RealObjectBuilder.create_real_ado_group_reviewer(
+            display_name="[Corp]\\Reviewers", id="group-guid-expand", vote=10
+        )
+        with (
+            patch(
+                "ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado",
+                return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
+            ),
+            patch("ado_asana_sync.sync.pr_processor.get_asana_task_by_name", return_value=None),
+            patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
+        ):
+            _handle_group_reviewer(app, self.pr, self.repo, approved_group, EXPAND_ASANA_USERS, [], "proj-gid")
+
+        mock_create.assert_called_once()
+        created_item = mock_create.call_args[0][2]
+        self.assertEqual(created_item.review_status, "noVote")
+
 
 # ---------------------------------------------------------------------------
 # 10. process_pull_request — expand_group_members adds member GIDs
@@ -1195,6 +1219,43 @@ class TestExpandFailureSafety(unittest.TestCase):
         self.assertIn("gid-group-member", current_gids)
         # Bob's stale direct-reviewer task is NOT preserved — he was legitimately removed
         self.assertNotIn("gid-bob-direct", current_gids)
+
+    @patch("ado_asana_sync.sync.pr_processor.handle_removed_reviewers")
+    @patch("ado_asana_sync.sync.pr_processor._handle_group_reviewer")
+    def test_cold_cache_db_fallback_preserves_member_tagged_by_a_different_group(self, mock_handle_group, mock_handle_removed):
+        """A member can belong to several reviewer groups but the task only records the
+        first group that expanded it. If that group is later removed while THIS group's
+        expansion fails transiently, the member's task must still be preserved.
+        """
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+        from ado_asana_sync.sync.pull_request_item import PullRequestItem
+        from ado_asana_sync.sync.pull_request_sync import process_pull_request
+
+        app = self._app()  # only group-guid-99 is a current reviewer
+        pr_url = f"https://dev.azure.com/testorg/x/_git/r/pullrequest/{self.pr.pull_request_id}"
+
+        # Task was first created when a now-removed group ("group-guid-other") expanded it.
+        shared_member_task = PullRequestItem(
+            ado_pr_id=self.pr.pull_request_id,
+            ado_repository_id=self.repo.id,
+            title=self.pr.title,
+            status=self.pr.status,
+            url=pr_url,
+            reviewer_gid="gid-shared-member",
+            reviewer_name="Shared Member",
+            asana_gid="task-shared-member",
+            source_group_reviewer_id="group-guid-other",
+        )
+        shared_member_task.save(app)
+
+        empty_cache = GroupMemberCache()
+
+        with patch("ado_asana_sync.sync.pr_processor._resolve_group_members_from_ado", return_value=None):
+            process_pull_request(app, self.pr, self.repo, [], [], "proj-gid", group_member_cache=empty_cache)
+
+        mock_handle_removed.assert_called_once()
+        _, _, current_gids, _ = mock_handle_removed.call_args[0]
+        self.assertIn("gid-shared-member", current_gids)
 
 
 # ---------------------------------------------------------------------------

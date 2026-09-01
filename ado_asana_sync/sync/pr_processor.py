@@ -178,18 +178,26 @@ def _get_existing_pr_item_gids(app: App, pr) -> set[str]:
     return {str(task["reviewer_gid"]) for task in app.pr_matches.search(query_fn) if task.get("reviewer_gid")}
 
 
-def _get_db_group_gids(app: App, pr, reviewer_id: str) -> set[str]:
-    """Query pr_matches for tasks previously created from a specific group reviewer expansion.
+def _get_db_group_gids(app: App, pr) -> set[str]:
+    """Query pr_matches for tasks previously created from group reviewer expansion.
 
     Used as a cold-cache fallback: even if the GroupMemberCache entry has expired
     or been deleted, tasks tagged with source_group_reviewer_id can still be recovered
     from the database so they are not incorrectly closed during a transient API failure.
+
+    Matches this group *or* any other group-sourced task on the PR: a member can
+    belong to several reviewer groups but a task only records the first one that
+    expanded it. If that group is later removed while this group's expansion is
+    failing transiently, a strict ``== reviewer_id`` match would miss the task and
+    let ``handle_removed_reviewers`` close a still-required review. Preserving every
+    group-sourced task on the PR during the failure is the safe degradation — a
+    member who genuinely left every group is cleaned up on the next healthy sync.
     """
     if app.pr_matches is None:
         return set()
 
     def query_fn(record):
-        return record.get("ado_pr_id") == pr.pull_request_id and record.get("source_group_reviewer_id") == reviewer_id
+        return record.get("ado_pr_id") == pr.pull_request_id and record.get("source_group_reviewer_id") is not None
 
     return {str(t["reviewer_gid"]) for t in app.pr_matches.search(query_fn) if t.get("reviewer_gid")}
 
@@ -224,7 +232,7 @@ def _get_group_preservation_gids(
 
     # 2. Fall back to DB records from prior successful expansions.
     if reviewer_id:
-        return _get_db_group_gids(app, pr, reviewer_id)
+        return _get_db_group_gids(app, pr)
 
     return set()
 
@@ -370,6 +378,16 @@ def _make_vote_preserving_reviewer(reviewer, existing_match: PullRequestItem):
     return types.SimpleNamespace(vote=preserved_vote)
 
 
+def _make_novote_reviewer():
+    """Return a reviewer proxy with no vote.
+
+    A group's rolled-up vote belongs to whoever actually voted, not to every
+    member. New expanded-member tasks therefore start from ``noVote`` rather
+    than inheriting the group's aggregate vote.
+    """
+    return types.SimpleNamespace(vote=0)
+
+
 def _handle_expand_group_reviewer(
     app: App,
     pr,
@@ -406,7 +424,7 @@ def _handle_expand_group_reviewer(
                 app,
                 pr,
                 repository,
-                reviewer,
+                _make_novote_reviewer(),
                 asana_matched_user,
                 asana_project_tasks,
                 asana_project,
