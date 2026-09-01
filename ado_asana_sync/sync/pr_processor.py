@@ -388,6 +388,67 @@ def _make_novote_reviewer():
     return types.SimpleNamespace(vote=0)
 
 
+def _update_expanded_member_task(
+    app: App,
+    pr,
+    repository,
+    reviewer,
+    existing_match: PullRequestItem,
+    asana_matched_user: dict,
+    asana_project: str,
+    reviewer_id: str | None,
+) -> None:
+    """Update an existing Asana task for an already-tracked expanded group member."""
+    # Lazy backfill: tag tasks created before source_group_reviewer_id existed so
+    # the DB fallback can protect them on future cold-cache expansion failures.
+    if existing_match.source_group_reviewer_id is None and reviewer_id:
+        existing_match.source_group_reviewer_id = reviewer_id
+        if getattr(app, "dry_run", False) is not True:
+            existing_match.save(app)
+    # Use a vote-preserving proxy so the group's aggregate vote cannot overwrite
+    # an individual reviewer's vote (e.g. when a user is both a direct reviewer
+    # and a member of the expanded group).
+    vote_proxy = _make_vote_preserving_reviewer(reviewer, existing_match)
+    update_existing_pr_reviewer_task(app, pr, repository, vote_proxy, existing_match, asana_matched_user, asana_project)
+
+
+def _sync_expanded_member(
+    app: App,
+    pr,
+    repository,
+    reviewer,
+    member,
+    asana_users: List[dict],
+    asana_project_tasks: List[dict],
+    asana_project: str,
+    reviewer_id: str | None,
+) -> None:
+    """Create or update the individual Asana reviewer task for one resolved group member."""
+    asana_matched_user = matching_user(asana_users, member)
+    if not asana_matched_user:
+        _LOGGER.debug(
+            "PR %s: group member %s <%s> not found in Asana",
+            pr.pull_request_id,
+            member.display_name,
+            member.email,
+        )
+        return
+    existing_match = PullRequestItem.search(app, ado_pr_id=pr.pull_request_id, reviewer_gid=asana_matched_user["gid"])
+    if existing_match is None:
+        create_new_pr_reviewer_task(
+            app,
+            pr,
+            repository,
+            _make_novote_reviewer(),
+            asana_matched_user,
+            asana_project_tasks,
+            asana_project,
+            source_group_reviewer_id=reviewer_id,
+        )
+        return
+    _update_expanded_member_task(app, pr, repository, reviewer, existing_match, asana_matched_user, asana_project, reviewer_id)
+
+
 def _handle_expand_group_reviewer(
     app: App,
     pr,
@@ -409,41 +470,9 @@ def _handle_expand_group_reviewer(
         _LOGGER.info("PR %s: group '%s' resolved to no members, skipping", pr.pull_request_id, display_name)
         return
     for member in members:
-        asana_matched_user = matching_user(asana_users, member)
-        if not asana_matched_user:
-            _LOGGER.debug(
-                "PR %s: group member %s <%s> not found in Asana",
-                pr.pull_request_id,
-                member.display_name,
-                member.email,
-            )
-            continue
-        existing_match = PullRequestItem.search(app, ado_pr_id=pr.pull_request_id, reviewer_gid=asana_matched_user["gid"])
-        if existing_match is None:
-            create_new_pr_reviewer_task(
-                app,
-                pr,
-                repository,
-                _make_novote_reviewer(),
-                asana_matched_user,
-                asana_project_tasks,
-                asana_project,
-                source_group_reviewer_id=reviewer_id,
-            )
-        else:
-            # Lazy backfill: tag tasks created before source_group_reviewer_id existed so
-            # the DB fallback can protect them on future cold-cache expansion failures.
-            if existing_match.source_group_reviewer_id is None and reviewer_id:
-                existing_match.source_group_reviewer_id = reviewer_id
-                if getattr(app, "dry_run", False) is not True:
-                    existing_match.save(app)
-            # Use a vote-preserving proxy so the group's aggregate vote cannot overwrite
-            # an individual reviewer's vote (e.g. when a user is both a direct reviewer
-            # and a member of the expanded group).
-            vote_proxy = _make_vote_preserving_reviewer(reviewer, existing_match)
-            update_existing_pr_reviewer_task(
-                app, pr, repository, vote_proxy, existing_match, asana_matched_user, asana_project
-            )
+        _sync_expanded_member(
+            app, pr, repository, reviewer, member, asana_users, asana_project_tasks, asana_project, reviewer_id
+        )
 
 
 def _handle_group_reviewer(
