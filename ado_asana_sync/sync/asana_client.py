@@ -102,8 +102,13 @@ def get_tag_by_name(app: App, workspace: str, tag: str) -> dict | None:
             return None
 
 
-def _get_deactivated_user_gids(app: App, asana_workspace_gid: str) -> set[str]:
-    """Return a set of user GIDs that are deactivated in the given workspace."""
+def _get_deactivated_user_gids(app: App, asana_workspace_gid: str) -> set[str] | None:
+    """Return a set of user GIDs that are deactivated in the given workspace.
+
+    Returns ``None`` when workspace memberships cannot be fetched (e.g. the token is
+    not a workspace admin). ``None`` means "could not determine" and is distinct from
+    an empty set, which means "nobody is deactivated".
+    """
     memberships_api = asana.WorkspaceMembershipsApi(app.asana_client)
     opts = {
         "opt_fields": "is_active,user.gid",
@@ -119,11 +124,16 @@ def _get_deactivated_user_gids(app: App, asana_workspace_gid: str) -> set[str]:
                     deactivated.add(user_gid)
         return deactivated
     except ApiException as exception:
-        _LOGGER.warning(
-            "Failed to fetch workspace memberships, cannot filter deactivated users: %s",
+        _LOGGER.error(
+            "Failed to fetch workspace memberships; cannot filter deactivated Asana users, "
+            "so stale/deactivated accounts may be matched: %s",
             exception,
         )
-        return set()
+        return None
     except Exception as e:  # pylint: disable=broad-exception-caught
-        _LOGGER.warning("Unexpected error fetching workspace memberships: %s", e)
-        return set()
+        _LOGGER.error(
+            "Unexpected error fetching workspace memberships; cannot filter deactivated Asana users, "
+            "so stale/deactivated accounts may be matched: %s",
+            e,
+        )
+        return None

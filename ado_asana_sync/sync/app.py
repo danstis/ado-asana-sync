@@ -21,6 +21,7 @@ from ado_asana_sync.database import Database, DatabaseTable
 from ado_asana_sync.utils.logging_tracing import attach_filter_to_telemetry_handlers
 
 from .dry_run import DryRunReport
+from .matching import DEFAULT_USER_MATCH_STRATEGY, resolve_strategy
 
 # _LOGGER is the logging instance for this file.
 _LOGGER = logging.getLogger(__name__)
@@ -120,6 +121,12 @@ class App:
                 "GROUP_REVIEWER_STRATEGY=default_user requires GROUP_REVIEWER_DEFAULT_USER to be set; falling back to 'ignore'"
             )
             self.group_reviewer_strategy = "ignore"
+
+        # ADO -> Asana user matching strategy (exact | prefix | name). The matching
+        # module reads USER_MATCH_STRATEGY itself; this is stored purely so the
+        # effective value is visible in startup logs.
+        self.user_match_strategy = resolve_strategy(os.environ.get("USER_MATCH_STRATEGY", DEFAULT_USER_MATCH_STRATEGY))
+        _LOGGER.info("ADO/Asana user match strategy: %s", self.user_match_strategy)
 
         if not self.ado_pat:
             _LOGGER.fatal("ADO_PAT must be provided")
