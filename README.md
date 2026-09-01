@@ -45,6 +45,7 @@ cp .env.example .env
 
 - `CLOSED_STATES`: Comma-separated ADO states considered closed (default: `Closed,Removed,Done`).
 - `THREAD_COUNT`: Number of projects to sync in parallel (default: `8`).
+- `MAX_DEPTH`: Maximum depth of nested subtasks to synchronize (default: `3`).
 - `SLEEP_TIME`: Seconds to sleep between sync runs (default: `300`).
 - `RUN_ONCE`: Run a single sync cycle and exit with a normal process status (default: `false`).
 - `DRY_RUN`: Compute and log planned create/update/close actions without writing to Asana or the local sync database. The log summary includes separate create/update/close counts and ADO/PR IDs for both work items and PR reviewer tasks. Because no local mappings are persisted, repeated dry runs re-evaluate the same items from scratch (default: `false`).
