@@ -737,6 +737,82 @@ class TestResolveGroupMembersFromAdo(unittest.TestCase):
         result = _resolve_group_members_from_ado(app, reviewer)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].display_name, "Bob")
+        # A group descriptor is recognised by prefix — get_user is never called for it.
+        mock_graph.get_user.assert_called_once_with("aad.user2")
+
+    def test_service_principal_descriptor_is_skipped(self):
+        mock_graph = MagicMock()
+        descriptor_result = MagicMock()
+        descriptor_result.value = "vssgp.xxx"
+        mock_graph.get_descriptor.return_value = descriptor_result
+
+        sp_membership = MagicMock()
+        sp_membership.member_descriptor = "aadsp.service-principal"
+        user_membership = MagicMock()
+        user_membership.member_descriptor = "aad.user2"
+        mock_graph.list_memberships.return_value = [sp_membership, user_membership]
+
+        valid_user = MagicMock()
+        valid_user.mail_address = "bob@corp.com"
+        valid_user.display_name = "Bob"
+        mock_graph.get_user.return_value = valid_user
+
+        app = self._make_app_with_graph_client(mock_graph)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+        result = _resolve_group_members_from_ado(app, reviewer)
+        self.assertEqual([m.display_name for m in result], ["Bob"])
+
+    def test_transient_get_user_failure_returns_none_not_partial_list(self):
+        """A transient get_user error (rate limit / network) must fail the whole
+        expansion — returning a partial list would let handle_removed_reviewers
+        close the omitted member's still-valid task."""
+        mock_graph = MagicMock()
+        descriptor_result = MagicMock()
+        descriptor_result.value = "vssgp.xxx"
+        mock_graph.get_descriptor.return_value = descriptor_result
+
+        m1 = MagicMock()
+        m1.member_descriptor = "aad.user1"
+        m2 = MagicMock()
+        m2.member_descriptor = "aad.user2"
+        mock_graph.list_memberships.return_value = [m1, m2]
+
+        good_user = MagicMock()
+        good_user.mail_address = "ok@corp.com"
+        good_user.display_name = "OK"
+
+        def side_effect(descriptor):
+            if descriptor == "aad.user1":
+                raise Exception("429 Too Many Requests")
+            return good_user
+
+        mock_graph.get_user.side_effect = side_effect
+
+        app = self._make_app_with_graph_client(mock_graph)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+        result = _resolve_group_members_from_ado(app, reviewer)
+        self.assertIsNone(result)
+
+    def test_transient_get_user_failure_does_not_poison_cache(self):
+        from ado_asana_sync.sync.group_member_cache import GroupMemberCache
+
+        mock_graph = MagicMock()
+        descriptor_result = MagicMock()
+        descriptor_result.value = "vssgp.xxx"
+        mock_graph.get_descriptor.return_value = descriptor_result
+
+        membership = MagicMock()
+        membership.member_descriptor = "aad.user1"
+        mock_graph.list_memberships.return_value = [membership]
+        mock_graph.get_user.side_effect = Exception("network error")
+
+        app = self._make_app_with_graph_client(mock_graph)
+        reviewer = RealObjectBuilder.create_real_ado_group_reviewer(id="group-guid-123")
+        cache = GroupMemberCache()
+
+        result = _resolve_group_members_from_ado(app, reviewer, cache)
+        self.assertIsNone(result)
+        self.assertIsNone(cache.get("group-guid-123"))
 
 
 # ---------------------------------------------------------------------------
@@ -836,6 +912,7 @@ class TestHandleGroupReviewerExpand(unittest.TestCase):
                 return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
             ),
             patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pull_request_item.get_asana_task", return_value=mock_asana_task),
             patch("ado_asana_sync.sync.pr_processor.create_asana_pr_task") as mock_create,
             patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
         ):
@@ -871,6 +948,7 @@ class TestHandleGroupReviewerExpand(unittest.TestCase):
                 return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
             ),
             patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pull_request_item.get_asana_task", return_value=mock_asana_task),
             patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task"),
         ):
             _handle_group_reviewer(app, self.pr, self.repo, self.reviewer, EXPAND_ASANA_USERS, [], "proj-gid")
@@ -1316,6 +1394,7 @@ class TestExpandVotePreservation(unittest.TestCase):
                 return_value=[ADOAssignedUser("Alice Smith", "alice@corp.com")],
             ),
             patch("ado_asana_sync.sync.pr_processor._get_cached_asana_task", return_value=mock_asana_task),
+            patch("ado_asana_sync.sync.pull_request_item.get_asana_task", return_value=mock_asana_task),
             patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task") as mock_update,
         ):
             _handle_group_reviewer(app, self.pr, self.repo, self.group_reviewer, asana_users, [], "proj-gid")

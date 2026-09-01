@@ -85,18 +85,30 @@ def _resolve_group_reviewer_default_user(asana_users: List[dict], user_ref: str)
     return None
 
 
+# Graph subject-descriptor prefixes that never identify an individual user:
+# nested groups (vssgp./aadgp.) and non-human identities (service principals).
+_NON_USER_GRAPH_PREFIXES = ("vssgp.", "aadgp.", "aadsp.", "svc.")
+
+
 def _resolve_single_member(graph_client, member_descriptor: str) -> ADOAssignedUser | None:
-    """Resolve one graph descriptor to an ADOAssignedUser; returns None for nested groups."""
-    try:
-        user = graph_client.get_user(member_descriptor)
-        email = user.mail_address or getattr(user, "principal_name", None)
-        display_name = user.display_name
-        if email and display_name:
-            return ADOAssignedUser(display_name, email)
+    """Resolve one graph member descriptor to an ADOAssignedUser.
+
+    Returns None for descriptors that are not individual users (nested groups,
+    service principals) — those are skipped, never expanded recursively. A failed
+    ``get_user`` call for a genuine user descriptor is deliberately left to
+    propagate: the caller must fall back to task preservation rather than cache a
+    partial member list that would close the omitted members' still-valid tasks.
+    """
+    if member_descriptor.startswith(_NON_USER_GRAPH_PREFIXES):
+        _LOGGER.debug("Skipping non-user group member descriptor '%s'", member_descriptor)
         return None
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        _LOGGER.debug("Skipping member descriptor '%s' (may be a nested group): %s", member_descriptor, e)
-        return None
+    user = graph_client.get_user(member_descriptor)
+    email = user.mail_address or getattr(user, "principal_name", None)
+    display_name = user.display_name
+    if email and display_name:
+        return ADOAssignedUser(display_name, email)
+    _LOGGER.debug("Graph member '%s' has no usable email/display name; skipping", member_descriptor)
+    return None
 
 
 def _resolve_group_members_from_ado(
