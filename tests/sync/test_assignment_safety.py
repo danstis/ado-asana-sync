@@ -211,13 +211,15 @@ class TestUpdateExistingTaskAssigneeDrift(_AssignmentSafetyBase):
         }
         asana_helper = AsanaApiMockHelper()
         mock_tasks_api = asana_helper.create_tasks_api_mock(tasks=[mock_asana_task], updated_task=mock_asana_task)
+        # Let the real get_asana_task() run and exercise its opt_fields/assignee plumbing;
+        # only the TasksApi boundary is mocked.
+        mock_tasks_api.get_task.return_value = mock_asana_task
 
         body = {}
         try:
             with ExitStack() as stack:
                 for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
                     stack.enter_context(patch_ctx)
-                stack.enter_context(patch("ado_asana_sync.sync.sync.get_asana_task", return_value=mock_asana_task))
                 update_existing_task(app, ado_work_item, existing_match, matched_user, "AsanaProject")
             if mock_tasks_api.update_task.call_args is not None:
                 body = mock_tasks_api.update_task.call_args[0][0]
@@ -226,6 +228,13 @@ class TestUpdateExistingTaskAssigneeDrift(_AssignmentSafetyBase):
         return existing_match, mock_tasks_api, body
 
     _MATCHED = {"gid": "user-123", "email": "real.user@asana.com", "name": "Real User"}
+
+    def test_failed_match_does_not_unassign_on_live_drift(self):
+        # ADO assignee present but unmatchable (matched_user=None), stored assignee stale/missing,
+        # live Asana task has a real assignee: must NOT push a null/stale assignee.
+        existing_match, tasks_api, _ = self._run(None, {"gid": "manual-user", "name": "Manually Assigned"}, None)
+        tasks_api.update_task.assert_not_called()
+        self.assertIsNone(existing_match.assigned_to)
 
     def test_assigns_when_stored_assignee_missing_and_task_is_current(self):
         existing_match, tasks_api, body = self._run(None, None, self._MATCHED)

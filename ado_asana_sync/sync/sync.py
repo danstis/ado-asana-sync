@@ -569,7 +569,13 @@ def _assignee_out_of_sync(
     ``TaskItem.is_current`` only compares the ADO revision and Asana ``modified_at``, so an
     assignee that only became resolvable later (or drifted in Asana) without an ADO revision
     bump would otherwise never be pushed. This forces an update in that case.
+
+    When ADO has an assignee that cannot be matched to an Asana user there is no
+    authoritative target, so this never forces a write - preserving the failed-match
+    safety behaviour from AAS-138 rather than pushing a stale/None stored value.
     """
+    if asana_matched_user is None and ado_assigned is not None:
+        return False
     target_gid = _target_assigned_to(existing_match, ado_assigned, asana_matched_user)
     if target_gid != existing_match.assigned_to:
         return True
