@@ -275,10 +275,9 @@ def _closure_comment_exists(stories_api_instance: Any, asana_gid: str, comment_t
     """Return True when the Asana task already carries the given closure comment."""
     try:
         stories = stories_api_instance.get_stories_for_task(asana_gid, opts={})
+        for story in stories or []:
+            if story.get("type") == "comment" and comment_text in (story.get("text") or ""):
+                return True
     except ApiException as exception:
         _LOGGER.error("Exception when listing stories for PR task %s: %s\n", asana_gid, exception)
-        return False
-    for story in stories or []:
-        if story.get("type") == "comment" and comment_text in (story.get("text") or ""):
-            return True
     return False

@@ -935,6 +935,31 @@ class TestPullRequestSync(unittest.TestCase):
 
         mock_stories_api.create_story_for_task.assert_not_called()
 
+    @patch("asana.StoriesApi")
+    def test_add_closure_comment_to_pr_task_posts_when_story_listing_fails(self, mock_stories_api_class):
+        """Regression: a lazy story iterator that raises on iteration must not suppress the closure comment."""
+        from asana.rest import ApiException
+
+        from ado_asana_sync.sync.pull_request_sync import add_closure_comment_to_pr_task
+
+        def _raising_iter():
+            raise ApiException("Internal Server Error")
+            yield  # pragma: no cover - generator marker
+
+        mock_stories_api = Mock()
+        mock_stories_api_class.return_value = mock_stories_api
+        mock_stories_api.get_stories_for_task.return_value = _raising_iter()
+
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-500"
+        mock_pr_item.asana_title = "PR 500: Removed reviewer"
+        mock_pr_item.status = "reviewer_removed"
+        mock_pr_item.review_status = "removed"
+
+        add_closure_comment_to_pr_task(self.mock_app, mock_pr_item)
+
+        mock_stories_api.create_story_for_task.assert_called_once()
+
     @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
     def test_handle_removed_reviewers_skips_already_closed_task(self, mock_update_task):
         """Regression: an already-closed reviewer task is not re-closed on subsequent sync runs."""
