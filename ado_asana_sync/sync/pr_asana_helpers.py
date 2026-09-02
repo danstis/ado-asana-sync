@@ -259,9 +259,26 @@ def add_closure_comment_to_pr_task(app: App, pr_item: PullRequestItem) -> None:
         pr_item.status in _PR_CLOSED_STATES or pr_item.status == "reviewer_removed" or pr_item.review_status == "removed"
     ) and pr_item.review_status not in _REVIEWER_APPROVED_STATES:
         stories_api_instance = asana.StoriesApi(app.asana_client)
+        comment_text = f"Task closed automatically: {closure_reason}"
         try:
-            body = {"data": {"text": f"Task closed automatically: {closure_reason}", "type": "comment"}}
+            if _closure_comment_exists(stories_api_instance, pr_item.asana_gid, comment_text):
+                _LOGGER.debug("Closure comment already present on PR task %s, skipping", pr_item.asana_title)
+                return
+            body = {"data": {"text": comment_text, "type": "comment"}}
             stories_api_instance.create_story_for_task(body, pr_item.asana_gid, opts={})
             _LOGGER.debug("Added closure comment to PR task %s: %s", pr_item.asana_title, closure_reason)
         except ApiException as exception:
             _LOGGER.error("Exception when adding closure comment to PR task: %s\n", exception)
+
+
+def _closure_comment_exists(stories_api_instance: Any, asana_gid: str, comment_text: str) -> bool:
+    """Return True when the Asana task already carries the given closure comment."""
+    try:
+        stories = stories_api_instance.get_stories_for_task(asana_gid, opts={})
+    except ApiException as exception:
+        _LOGGER.error("Exception when listing stories for PR task %s: %s\n", asana_gid, exception)
+        return False
+    for story in stories or []:
+        if story.get("type") == "comment" and comment_text in (story.get("text") or ""):
+            return True
+    return False
