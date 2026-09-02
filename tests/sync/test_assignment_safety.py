@@ -169,5 +169,89 @@ class TestUpdateTaskIfNeededAssignmentSafety(_AssignmentSafetyBase):
         self.assertIsNone(existing_match.assigned_to)
 
 
+class TestUpdateExistingTaskAssigneeDrift(_AssignmentSafetyBase):
+    """A stale/missing Asana assignee must be pushed even when is_current() is True.
+
+    is_current() only compares the ADO revision and the Asana modified_at timestamp, so
+    a task whose assignee only became resolvable after AAS-138 (or drifted in Asana)
+    would otherwise never be re-assigned.
+    """
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def _run(self, stored_assigned_to, asana_assignee, matched_user, mock_client, mock_conn, mock_dirname):
+        from ado_asana_sync.sync.sync import update_existing_task
+
+        mock_dirname.return_value = self.temp_dir
+        mock_conn.return_value = MagicMock()
+        mock_client.return_value = MagicMock()
+
+        app = TestDataBuilder.create_real_app(self.temp_dir)
+        app.connect()
+        app.ado_wit_client = MagicMock()
+
+        # rev matches the stored ado_rev (1) -> is_current() is True on the ADO side.
+        ado_work_item = TestDataBuilder.create_ado_work_item(
+            item_id=4001,
+            title="Old Title",
+            work_item_type="Task",
+            assigned_to={"displayName": "Real User", "uniqueName": "real.user@ado.com"},
+        )
+        ado_work_item.rev = 1
+        existing_match = self._make_task_item(assigned_to=stored_assigned_to)
+
+        # modified_at matches the stored asana_updated -> is_current() is True on the Asana side.
+        mock_asana_task = {
+            "gid": "existing_gid",
+            "name": "Task 4001: Old Title",
+            "completed": False,
+            "modified_at": "2025-01-01T10:00:00.000Z",
+            "assignee": asana_assignee,
+        }
+        asana_helper = AsanaApiMockHelper()
+        mock_tasks_api = asana_helper.create_tasks_api_mock(tasks=[mock_asana_task], updated_task=mock_asana_task)
+        # Let the real get_asana_task() run and exercise its opt_fields/assignee plumbing;
+        # only the TasksApi boundary is mocked.
+        mock_tasks_api.get_task.return_value = mock_asana_task
+
+        body = {}
+        try:
+            with ExitStack() as stack:
+                for patch_ctx in self._setup_asana_api_patches(asana_helper, mock_tasks_api):
+                    stack.enter_context(patch_ctx)
+                update_existing_task(app, ado_work_item, existing_match, matched_user, "AsanaProject")
+            if mock_tasks_api.update_task.call_args is not None:
+                body = mock_tasks_api.update_task.call_args[0][0]
+        finally:
+            app.close()
+        return existing_match, mock_tasks_api, body
+
+    _MATCHED = {"gid": "user-123", "email": "real.user@asana.com", "name": "Real User"}
+
+    def test_failed_match_does_not_unassign_on_live_drift(self):
+        # ADO assignee present but unmatchable (matched_user=None), stored assignee stale/missing,
+        # live Asana task has a real assignee: must NOT push a null/stale assignee.
+        existing_match, tasks_api, _ = self._run(None, {"gid": "manual-user", "name": "Manually Assigned"}, None)
+        tasks_api.update_task.assert_not_called()
+        self.assertIsNone(existing_match.assigned_to)
+
+    def test_assigns_when_stored_assignee_missing_and_task_is_current(self):
+        existing_match, tasks_api, body = self._run(None, None, self._MATCHED)
+        self.assertEqual(existing_match.assigned_to, "user-123")
+        tasks_api.update_task.assert_called_once()
+        self.assertEqual(body["data"]["assignee"], "user-123")
+
+    def test_pushes_when_asana_assignee_drifted_but_store_is_correct(self):
+        existing_match, tasks_api, body = self._run("user-123", None, self._MATCHED)
+        self.assertEqual(existing_match.assigned_to, "user-123")
+        tasks_api.update_task.assert_called_once()
+        self.assertEqual(body["data"]["assignee"], "user-123")
+
+    def test_no_update_when_assignee_already_in_sync(self):
+        _, tasks_api, _ = self._run("user-123", {"gid": "user-123", "name": "Real User"}, self._MATCHED)
+        tasks_api.update_task.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
