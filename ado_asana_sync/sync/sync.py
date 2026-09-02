@@ -517,29 +517,63 @@ def extract_due_date_from_ado(ado_work_item) -> str | None:
     return None
 
 
-def _resolve_assigned_to(
+def _target_assigned_to(
     existing_match: TaskItem,
     ado_assigned: ADOAssignedUser | None,
     asana_matched_user: dict | None,
 ) -> str | None:
-    """Return the Asana gid to store, preserving the existing assignee on a failed match.
+    """Return the Asana gid that should be stored, without logging.
 
-    Only clear the assignee when the ADO work item genuinely has no assignee. When ADO
+    Clear the assignee only when the ADO work item genuinely has no assignee. When ADO
     has an assignee that cannot be resolved to a current Asana user, keep whatever is
-    already stored and log a warning rather than un-assigning the task.
+    already stored rather than un-assigning the task.
     """
     if asana_matched_user is not None:
         return asana_matched_user.get("gid", None)
     if ado_assigned is None:
         return None
-    _LOGGER.warning(
-        "%s:ADO assignee %s <%s> could not be matched to an Asana user; keeping existing assignee %s",
-        existing_match.asana_title,
-        ado_assigned.display_name,
-        ado_assigned.email,
-        existing_match.assigned_to,
-    )
     return existing_match.assigned_to
+
+
+def _resolve_assigned_to(
+    existing_match: TaskItem,
+    ado_assigned: ADOAssignedUser | None,
+    asana_matched_user: dict | None,
+) -> str | None:
+    """Like :func:`_target_assigned_to`, but warns when a present ADO assignee is unmatched."""
+    if asana_matched_user is None and ado_assigned is not None:
+        _LOGGER.warning(
+            "%s:ADO assignee %s <%s> could not be matched to an Asana user; keeping existing assignee %s",
+            existing_match.asana_title,
+            ado_assigned.display_name,
+            ado_assigned.email,
+            existing_match.assigned_to,
+        )
+    return _target_assigned_to(existing_match, ado_assigned, asana_matched_user)
+
+
+def _asana_assignee_gid(asana_task: dict | None) -> str | None:
+    """Return the gid of the Asana task's current assignee, or None."""
+    assignee = asana_task.get("assignee") if asana_task else None
+    return assignee.get("gid") if isinstance(assignee, dict) else None
+
+
+def _assignee_out_of_sync(
+    existing_match: TaskItem,
+    asana_task: dict | None,
+    ado_assigned: ADOAssignedUser | None,
+    asana_matched_user: dict | None,
+) -> bool:
+    """True when the resolved assignee differs from the stored value or the live Asana task.
+
+    ``TaskItem.is_current`` only compares the ADO revision and Asana ``modified_at``, so an
+    assignee that only became resolvable later (or drifted in Asana) without an ADO revision
+    bump would otherwise never be pushed. This forces an update in that case.
+    """
+    target_gid = _target_assigned_to(existing_match, ado_assigned, asana_matched_user)
+    if target_gid != existing_match.assigned_to:
+        return True
+    return asana_task is not None and target_gid != _asana_assignee_gid(asana_task)
 
 
 def _should_skip_unassigned_item(
@@ -704,7 +738,10 @@ def create_new_task_mapping(app, ado_task, asana_matched_user, asana_project_tas
 def update_existing_task(app, ado_task, existing_match, asana_matched_user, asana_project, parent_gid=None):
     """Updates an existing Asana task based on ADO changes."""
     asana_task = get_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
-    if existing_match.is_current(app, ado_task=ado_task, asana_task=asana_task):
+    ado_assigned = get_task_user(ado_task)
+    if existing_match.is_current(app, ado_task=ado_task, asana_task=asana_task) and not _assignee_out_of_sync(
+        existing_match, asana_task, ado_assigned, asana_matched_user
+    ):
         _LOGGER.info("%s:task is already up to date", existing_match.asana_title)
         return
 
@@ -718,7 +755,7 @@ def update_existing_task(app, ado_task, existing_match, asana_matched_user, asan
     existing_match.state = ado_task.fields[ADO_STATE]
     existing_match.updated_date = iso8601_utc(datetime.now(timezone.utc))
     existing_match.url = safe_get(ado_task, "_links", "additional_properties", "html", "href")
-    existing_match.assigned_to = _resolve_assigned_to(existing_match, get_task_user(ado_task), asana_matched_user)
+    existing_match.assigned_to = _resolve_assigned_to(existing_match, ado_assigned, asana_matched_user)
     existing_match.asana_updated = asana_task["modified_at"]
     existing_match.due_date = extract_due_date_from_ado(ado_task)
     update_asana_task(
@@ -764,7 +801,11 @@ def process_closed_items(app, all_tasks, processed_item_ids, asana_users, asana_
                 _LOGGER.warning("Failed to fetch work item %s: %s", existing_match.ado_id, e)
                 continue
             asana_task = get_asana_task(app, existing_match.asana_gid) if existing_match.asana_gid else None
-            if existing_match.is_current(app, ado_task=ado_task, asana_task=asana_task):
+            ado_assigned = get_task_user(ado_task)
+            asana_matched_user = matching_user(asana_users, ado_assigned)
+            if existing_match.is_current(app, ado_task=ado_task, asana_task=asana_task) and not _assignee_out_of_sync(
+                existing_match, asana_task, ado_assigned, asana_matched_user
+            ):
                 _LOGGER.info(
                     "%s:Task is up to date",
                     existing_match.asana_title,
