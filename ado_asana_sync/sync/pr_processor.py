@@ -726,6 +726,13 @@ def handle_removed_reviewers(app: App, pr, current_reviewer_gids: set, asana_pro
             continue
 
         if pr_item.reviewer_gid not in current_reviewer_gids:
+            if pr_item.processing_state == "closed":
+                _LOGGER.debug(
+                    "Reviewer %s already removed from PR %s and task already closed, skipping",
+                    pr_item.reviewer_name or pr_item.reviewer_gid,
+                    pr.pull_request_id,
+                )
+                continue
             _LOGGER.info(
                 "Reviewer %s removed from PR %s, closing task: %s",
                 pr_item.reviewer_name or pr_item.reviewer_gid,

@@ -137,6 +137,52 @@ class TestE2ESyncPullRequests(E2EBase):
     @patch("ado_asana_sync.sync.app.os.path.dirname")
     @patch("ado_asana_sync.sync.app.Connection")
     @patch("ado_asana_sync.sync.app.asana.ApiClient")
+    def test_pr_reviewer_removed_posts_closure_comment_only_once(self, mock_asana_client, mock_ado_conn, mock_dirname):
+        """E2E: A reviewer removed from a still-open PR gets a single closure comment across repeated sync runs."""
+        app = TestDataBuilder.create_real_app(self.temp_dir)
+        self._connect_app_for_pr(app, mock_dirname, mock_ado_conn, mock_asana_client)
+
+        app.pr_matches.insert(make_pr_db_record(104, status="active", processing_state="open"))
+
+        repo = RealObjectBuilder.create_real_ado_repository(repo_id="repo-abc", name="test-repo")
+        active_pr = RealObjectBuilder.create_real_ado_pull_request(pr_id=104, title="Feature PR 104", status="active")
+        # The seeded reviewer (user-789) is no longer on the PR.
+        self._setup_git_client(app, repos=[repo], active_prs=[active_pr], reviewers=[], pr_by_id=active_pr)
+
+        asana_task = {"gid": "pr_task_gid_104", "modified_at": _OLD_ASANA_DATE, "completed": False}
+        tasks_api = self.asana_helper.create_tasks_api_mock(tasks=[])
+        tasks_api.get_task.return_value = asana_task
+
+        stories_api = MagicMock()
+        stories_api.get_stories_for_task.return_value = []
+
+        try:
+            with ExitStack() as stack:
+                for patch_ctx in self.asana_patches(tasks_api):
+                    stack.enter_context(patch_ctx)
+                stack.enter_context(patch("ado_asana_sync.sync.pr_asana_helpers.asana.StoriesApi", return_value=stories_api))
+                from ado_asana_sync.sync.pr_sync_core import sync_pull_requests  # noqa: PLC0415
+
+                sync_pull_requests(app, self.ado_project, self.asana_workspace_id, self.asana_project)
+                # Reviewer stays removed; a second sync run must not re-post the closure comment.
+                stories_api.get_stories_for_task.return_value = [
+                    {
+                        "type": "comment",
+                        "text": "Task closed automatically: You have been removed as a reviewer from this pull request",
+                    }
+                ]
+                sync_pull_requests(app, self.ado_project, self.asana_workspace_id, self.asana_project)
+
+            self.assertEqual(stories_api.create_story_for_task.call_count, 1)
+
+            pr_record = app.pr_matches.search(lambda x: x["ado_pr_id"] == 104)[0]
+            self.assertEqual(pr_record["processing_state"], "closed")
+        finally:
+            app.close()
+
+    @patch("ado_asana_sync.sync.app.os.path.dirname")
+    @patch("ado_asana_sync.sync.app.Connection")
+    @patch("ado_asana_sync.sync.app.asana.ApiClient")
     def test_pr_reviewer_status_update_syncs_vote_change(self, mock_asana_client, mock_ado_conn, mock_dirname):
         """E2E: A reviewer changing their vote on a PR updates the linked Asana task."""
         app = TestDataBuilder.create_real_app(self.temp_dir)

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Duplicate "reviewer removed" closure comments**: while a PR stayed open in Azure DevOps and a
+  reviewer remained removed, every sync run re-closed the already-closed Asana task and appended
+  another "Task closed automatically: You have been removed as a reviewer from this pull request"
+  comment. `handle_removed_reviewers` now skips tasks already marked closed, and
+  `add_closure_comment_to_pr_task` checks for an existing closure comment before posting.
 - **Host-local timestamps leaking into `updated_date`**: several call sites stamped `datetime.now()`
   (host-local wall clock) as if it were UTC, skewing the closed-item unmap window by the host's UTC
   offset. All now use `datetime.now(timezone.utc)`.

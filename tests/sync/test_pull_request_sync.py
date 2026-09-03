@@ -873,6 +873,7 @@ class TestPullRequestSync(unittest.TestCase):
         # Setup mocks
         mock_stories_api = Mock()
         mock_stories_api_class.return_value = mock_stories_api
+        mock_stories_api.get_stories_for_task.return_value = []
 
         mock_pr_item = Mock()
         mock_pr_item.asana_gid = "task-123"
@@ -909,6 +910,82 @@ class TestPullRequestSync(unittest.TestCase):
 
         # Verify no comment was added for approved reviewers
         mock_stories_api.create_story_for_task.assert_not_called()
+
+    @patch("asana.StoriesApi")
+    def test_add_closure_comment_to_pr_task_skips_when_already_present(self, mock_stories_api_class):
+        """Regression: the closure comment is not re-posted when the task already has it."""
+        from ado_asana_sync.sync.pull_request_sync import add_closure_comment_to_pr_task
+
+        mock_stories_api = Mock()
+        mock_stories_api_class.return_value = mock_stories_api
+        mock_stories_api.get_stories_for_task.return_value = [
+            {
+                "type": "comment",
+                "text": "Task closed automatically: You have been removed as a reviewer from this pull request",
+            }
+        ]
+
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-789"
+        mock_pr_item.asana_title = "PR 789: Removed reviewer"
+        mock_pr_item.status = "reviewer_removed"
+        mock_pr_item.review_status = "removed"
+
+        add_closure_comment_to_pr_task(self.mock_app, mock_pr_item)
+
+        mock_stories_api.create_story_for_task.assert_not_called()
+
+    @patch("asana.StoriesApi")
+    def test_add_closure_comment_to_pr_task_posts_when_story_listing_fails(self, mock_stories_api_class):
+        """Regression: a lazy story iterator that raises on iteration must not suppress the closure comment."""
+        from asana.rest import ApiException
+
+        from ado_asana_sync.sync.pull_request_sync import add_closure_comment_to_pr_task
+
+        def _raising_iter():
+            raise ApiException("Internal Server Error")
+            yield  # pragma: no cover - generator marker
+
+        mock_stories_api = Mock()
+        mock_stories_api_class.return_value = mock_stories_api
+        mock_stories_api.get_stories_for_task.return_value = _raising_iter()
+
+        mock_pr_item = Mock()
+        mock_pr_item.asana_gid = "task-500"
+        mock_pr_item.asana_title = "PR 500: Removed reviewer"
+        mock_pr_item.status = "reviewer_removed"
+        mock_pr_item.review_status = "removed"
+
+        add_closure_comment_to_pr_task(self.mock_app, mock_pr_item)
+
+        mock_stories_api.create_story_for_task.assert_called_once()
+
+    @patch("ado_asana_sync.sync.pr_processor.update_asana_pr_task")
+    def test_handle_removed_reviewers_skips_already_closed_task(self, mock_update_task):
+        """Regression: an already-closed reviewer task is not re-closed on subsequent sync runs."""
+        from ado_asana_sync.sync.pull_request_sync import handle_removed_reviewers
+
+        mock_pr = Mock()
+        mock_pr.pull_request_id = 123
+
+        self.mock_app.pr_matches.search_by_json_fields.return_value = [
+            {
+                "ado_pr_id": 123,
+                "ado_repository_id": "repo-456",
+                "title": "Test PR",
+                "status": "reviewer_removed",
+                "url": "http://test.com/pr/123",
+                "reviewer_gid": "removed-user-gid",
+                "reviewer_name": "Removed User",
+                "asana_gid": "asana-task-123",
+                "review_status": "removed",
+                "processing_state": "closed",
+            }
+        ]
+
+        handle_removed_reviewers(self.mock_app, mock_pr, {"current-user-gid"}, "test-project")
+
+        mock_update_task.assert_not_called()
 
     def test_pr_closed_states_includes_draft(self):
         """Test that draft is included in PR closed states."""
